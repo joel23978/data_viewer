@@ -20,8 +20,10 @@ source(here::here("cpi_annual.R"))
 ui <- navbarPage(
   
   "Data Explorer",
+  
+  # Panel 1 ----
   tabPanel(
-    "CPI",
+    "CPI Viewer",
     
     ## inputs ----
     fluidPage(
@@ -60,18 +62,8 @@ ui <- navbarPage(
           )
           , selectInput("splits_region"
                         , label = "Region"
-                        , choices = list("Australia"
-                                         , "Sydney"		
-                                         , "Melbourne"			
-                                         , "Brisbane"		
-                                         , "Adelaide"			
-                                         , "Perth"		
-                                         , "Hobart"			
-                                         , "Darwin"		
-                                         , "Canberra"			
-                                         #, "Weighted average of eight capital cities"
-                        )
-                        , selected = "Australia"
+                        , choices = region_list
+                        , selected = region_list[[1]]
           )
         )
         , selectInput("trnsfrm"
@@ -155,6 +147,149 @@ ui <- navbarPage(
       
     )
   )
+  
+  # Panel 2 ----
+  , tabPanel(
+    "CPI Explorer",
+    
+    ## inputs ----
+    fluidPage(
+      tags$head(
+        tags$style(HTML("hr {border-top: 1px solid #000000;}"))
+      ),
+      
+      sidebarLayout(
+        sidebarPanel(
+          h4("Global")
+          , sliderInput("year1"
+                        , "Date range"
+                        , min = as.numeric(year(min(cpi_data_all$date)))
+                        , max = as.numeric(year(max(cpi_data_all$date)))
+                        , value = c(2014, as.numeric(year(max(cpi_data_all$date)))),
+                        sep = "")
+          , selectInput("trnsfrm1"
+                        , label = "Transformation"
+                        , choices = list("index" 
+                                         , "y.y" 
+                                         , "q.q" 
+                                         , "rebased index"
+                                         #, "Contribution (Proportion)" = 3
+                        )
+                        , selected = 0)
+          , conditionalPanel(
+            condition = "input.trnsfrm1 == `rebased index`"
+            , dateInput("rebase_date"
+                        , label = "Date (rebase)"
+                        , startview = "year"
+                        , value = "2019-12-31"
+              
+            )
+            
+          )
+          , selectInput("viewData1"
+                        , label = "Display Table"
+                        , choices = list("No"=0
+                                         , "Yes"=1
+                        )
+          )
+          , hr()
+          , h4("Series 1")
+          # use regions as option groups
+          , selectizeInput("text_1"
+                           , "Search"
+                           , choices = list(
+            Category_1 = cat1,
+            Category_2 = cat2,
+            Category_3 = cat3,
+            Category_4 = cat4
+          )
+          , multiple = TRUE)
+          , selectInput("region_1"
+                        , label = "Region"
+                        , choices = region_list
+                        , selected = region_list[[1]]
+          )
+          , hr()
+          , h4("Series 2")
+          # use regions as option groups
+          , selectizeInput("text_2"
+                           , "Search"
+                           , choices = list(
+                             Category_1 = cat1,
+                             Category_2 = cat2,
+                             Category_3 = cat3,
+                             Category_4 = cat4
+                           )
+                           , multiple = TRUE)
+          , selectInput("region_2"
+                        , label = "Region"
+                        , choices = region_list
+                        , selected = region_list[[1]]
+          )
+          , hr()
+          , h4("Series 3")
+          # use regions as option groups
+          , selectizeInput("text_3"
+                           , "Search"
+                           , choices = list(
+                             Category_1 = cat1,
+                             Category_2 = cat2,
+                             Category_3 = cat3,
+                             Category_4 = cat4
+                           )
+                           , multiple = TRUE)
+          , selectInput("region_3"
+                        , label = "Region"
+                        , choices = region_list
+                        , selected = region_list[[1]]
+          )
+          , hr()
+          , h4("Series 4")
+          # use regions as option groups
+          , selectizeInput("text_4"
+                           , "Search"
+                           , choices = list(
+                             Category_1 = cat1,
+                             Category_2 = cat2,
+                             Category_3 = cat3,
+                             Category_4 = cat4
+                           )
+                           , multiple = TRUE)
+          , selectInput("region_4"
+                        , label = "Region"
+                        , choices = region_list
+                        , selected = region_list[[1]]
+          )
+          
+          
+        )
+        
+        # # Button
+        # , downloadButton("downloadData", "Download")
+        
+        
+        
+        
+        ## outputs ----
+        , mainPanel(
+          
+          ## Chart
+          h3("CPI")
+          , plotlyOutput("p_cust")
+          , helpText("Data:")
+          , tableOutput("p_table_cust")                  
+          
+          
+        )
+        
+      )
+
+
+  
+      
+      
+    )
+  )
   , collapsible = TRUE
 )
 
@@ -204,6 +339,25 @@ server <- function(input, output, session) {
     )
   })
   
+  p_data_cust <- reactive({
+    cpi_data <- cpi_splits_cust(cpi_data = cpi_data_all
+               , transformation = input$trnsfrm1
+               , dates = as.numeric(input$year1)
+               
+               , pick_split_1 = unlist(input$text_1)
+               , pick_split_2 = unlist(input$text_2)
+               , pick_split_3 = unlist(input$text_3)
+               , pick_split_4 = unlist(input$text_4)
+               
+               , region_1_split = input$region_1
+               , region_2_split = input$region_2
+               , region_3_split = input$region_3
+               , region_4_split = input$region_4
+               , rebase_date = as.Date(input$rebase_date)
+    ) 
+    
+    return(cpi_data)
+  })
   
 
   
@@ -233,6 +387,16 @@ server <- function(input, output, session) {
   # Plot (sub-sub) ---------------
   output$p_sub_sub_plot <- renderPlotly({ggplotly(
     p_data_sub_sub() %>%
+      ggplot() +
+      geom_line(aes(x=date, y=value, colour = name)) +
+      theme_minimal() +
+      xlab("Date") +
+      ylab("Percent")
+  )})
+  
+  # Plot (custom) ---------------
+  output$p_cust <- renderPlotly({ggplotly(
+    p_data_cust() %>%
       ggplot() +
       geom_line(aes(x=date, y=value, colour = name)) +
       theme_minimal() +
@@ -277,6 +441,19 @@ server <- function(input, output, session) {
       cat("Change selection to display table.")
     }
    
+    
+  })
+  
+  
+  output$p_table_cust <- renderTable({
+    if(input$viewData1 == 1){
+      p_data_cust()  %>%
+        select(c("name", "value", "date")) %>%
+        pivot_wider(names_from = date, values_from = value)
+    } else{
+      cat("Change selection to display table.")
+    }
+    
     
   })
 

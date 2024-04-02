@@ -1,3 +1,8 @@
+## contribution in a new tab
+## months/quarters as bars
+## change since xyz date
+## need interactive DATATABLES
+
 ## setup ----
 
 library(tidyverse)
@@ -239,8 +244,23 @@ for ( i in 1: length(tmp)) {
 }
 names(name_list) <- tmp
 
+region_list <- list("Australia"
+                    , "Sydney"		
+                    , "Melbourne"			
+                    , "Brisbane"		
+                    , "Adelaide"			
+                    , "Perth"		
+                    , "Hobart"			
+                    , "Darwin"		
+                    , "Canberra"			
+                    #, "Weighted average of eight capital cities"
+)
 
 
+cat1 <- sort(unique(cpi_data_all$class_1_name[cpi_data_all$class_0==1]))
+cat2 <- sort(unique(cpi_data_all$class_1_name[cpi_data_all$class_1==1]))
+cat3 <- sort(unique(cpi_data_all$class_2_name[cpi_data_all$class_2==1]))
+cat4 <- sort(unique(cpi_data_all$class_3_name[cpi_data_all$class_3==1]))
 
 
 ## functions ----
@@ -346,6 +366,55 @@ cpi_sub_sub_splits <- function(
     
     return(cpi_data)
   
+}
+
+
+cpi_splits_cust <- function(
+    cpi_data = cpi_data_all
+    , transformation = "y.y" #input$trnsfrm1
+    , dates = c(2020, 2024) #as.numeric(input$year1)
+    
+    , pick_split_1 = "Beer" #input$text_1
+    , pick_split_2 = "Non-tradables" #input$text_2
+    , pick_split_3 = "Tradables" #input$text_3
+    , pick_split_4 = "Tradables" #input$text_4
+    
+    , region_1_split = "Australia" #input$region_1
+    , region_2_split = "Sydney" #input$region_2
+    , region_3_split = "Melbourne" #input$region_3
+    , region_4_split = "Canberra" #input$region_4
+    
+    , rebase_date = as.Date("2019-12-31")
+){
+  
+  # Data selection
+  cpi_data <- cpi_data %>%
+    # dates and region split
+    filter(date > lubridate::ymd(dates[1]-1, truncated = 2L)
+           , date < lubridate::ymd(dates[2]+1, truncated = 2L)
+           , (class_3_name %in% pick_split_1 & region == region_1_split)
+           | (class_3_name %in% pick_split_2 & region == region_2_split)
+           | (class_3_name %in% pick_split_3 & region == region_3_split)
+           | (class_3_name %in% pick_split_4 & region == region_4_split)
+    ) %>%
+    mutate(name = paste0(class_3_name,", ", region)) %>%
+    select(name, region, series, date, value) %>%
+    drop_na() %>%
+    ungroup() %>%
+    filter(date > lubridate::ymd(dates[1], truncated = 2L))
+  
+  if(transformation == "rebased index"){
+    cpi_data <- cpi_data %>%
+      filter(series == "index")%>%
+      group_by(name) %>%
+      mutate(value = value/value[which(abs(date-rebase_date) == min(abs(date - rebase_date)))]*100) %>%
+      ungroup()
+  } else {
+    cpi_data <- cpi_data %>%
+      filter(series == transformation)
+  }
+  
+  return(cpi_data)
 }
 
 
