@@ -22,7 +22,7 @@ Sys.setenv(R_READABS_PATH = here("data"))
 
 # load from disk to reduce run time
 load(file = here("data", "cpi_data_all.R"))
-
+cpi_data <- cpi_data_all
 # 
 # ## data download ----
 # 
@@ -374,7 +374,7 @@ cpi_splits_cust <- function(
     , transformation = "y.y" #input$trnsfrm1
     , dates = c(2020, 2024) #as.numeric(input$year1)
     
-    , pick_split_1 = "Beer" #input$text_1
+    , pick_split_1 = "All Groups CPI" #input$text_1
     , pick_split_2 = "Non-tradables" #input$text_2
     , pick_split_3 = "Tradables" #input$text_3
     , pick_split_4 = "Tradables" #input$text_4
@@ -392,10 +392,10 @@ cpi_splits_cust <- function(
     # dates and region split
     filter(date > lubridate::ymd(dates[1]-1, truncated = 2L)
            , date < lubridate::ymd(dates[2]+1, truncated = 2L)
-           , (class_3_name %in% pick_split_1 & region == region_1_split)
-           | (class_3_name %in% pick_split_2 & region == region_2_split)
-           | (class_3_name %in% pick_split_3 & region == region_3_split)
-           | (class_3_name %in% pick_split_4 & region == region_4_split)
+           , (class_3_name %in% pick_split_1 & region %in% region_1_split)
+           | (class_3_name %in% pick_split_2 & region %in% region_2_split)
+           | (class_3_name %in% pick_split_3 & region %in% region_3_split)
+           | (class_3_name %in% pick_split_4 & region %in% region_4_split)
     ) %>%
     mutate(name = paste0(class_3_name,", ", region)) %>%
     select(name, region, series, date, value) %>%
@@ -417,8 +417,10 @@ cpi_splits_cust <- function(
   return(cpi_data)
 }
 
-
-
+# plot_ly(cpi_data, x = ~date, y = ~value, split = ~name) %>%
+#   add_lines() %>% 
+#   
+#   layout(title="sample figure", xaxis = list(title = 'x'), yaxis = list(title = 'y'), plot_bgcolor = "#c7daec") 
 
 
 
@@ -471,19 +473,8 @@ cpi_splits_cust <- function(
 #     ylab("Percent")
 # )
 # 
-# 
-# for (i in 1:(length(unique(tmp2$parent)))){
-#   ggplotly(
-#   tmp2 %>%
-#     filter(parent == unique(tmp2$parent)[i]) %>%
-#     ggplot() +
-#     geom_line(aes(x=date, y=value, colour = name)) +
-#     theme_minimal() +
-#     xlab("Date") +
-#     ylab("Percent")
-#   )
-# }
-#   
+
+
 
 
 
@@ -773,12 +764,95 @@ cpi_splits_cust <- function(
 # 
 
 
-
-
-
-
-
-
-
-
-
+############ plotting function ----
+# 
+# chart_formatting(cpi_data$date, cpi_data$value, cpi_data$name)
+# 
+# set_chart_defaults(
+#   input_data = cpi_data
+#   , cht_y_min# = min(cpi_data$value)
+#   , cht_y_max# = max(cpi_data$value)
+#   , cht_y_increment# = 2
+#   , cht_y_axes_unit# = "%"
+#   , cht_y_axes_unit_size# = 7
+#   
+#   , cht_start_date# = min(cpi_data$value)
+#   , cht_end_date# = max(cpi_data$value)
+#   , cht_x_date_format# = "%b-%y"
+#   , cht_x_num_labels = pretty_breaks(n = cht_x_num_labels)
+#   
+#   , cht_title# = "cht_title"
+#   , cht_title_size# = 10
+#   , cht_title_x_placement
+#   , cht_title_y_placement 
+#   
+#   , cht_width# = 8
+#   , cht_height# = 5
+#   
+#   , cht_axes_font_size# = 7
+#   , cht_label_size# = 7
+#   
+#   , cht_legend# = F
+#   , cht_colour_palette# = palette.colors()
+#   
+#   , cht_note# = "c. Joel Findlay"
+#   , cht_type# = "simple"
+# )
+# 
+# 
+# cpi_data %>%
+#   ggplot(aes(x=date, y=value, colour = name)) +
+#   geom_line() +
+#   theme_jf() +
+#   scale_colour_manual(values = cht_colour_palette) +
+#   scale_fill_manual(values = cht_colour_palette) +
+#   theme(
+#     legend.position = "below",
+#     text = element_text(size = cht_axes_font_size),
+#     plot.title = element_text(size = cht_y_axes_unit_size),
+#     plot.subtitle = element_text(size = cht_y_axes_unit_size)
+#   ) +
+#   scale_y_continuous(
+#     expand = c(0, 0),
+#     sec.axis = dup_axis(),
+#     breaks = seq(cht_y_min, cht_y_max, by = cht_y_increment),
+#     limits = c(cht_y_min, cht_y_max)
+#   ) +
+#   scale_x_date(
+#     expand = c(0, 0),
+#     date_labels = cht_x_date_format,
+#     breaks = pretty_breaks(n = cht_x_num_labels),
+#     limits = c(cht_start_date, cht_end_date)
+#   ) +
+#   annotate("text"
+#            , x = cht_title_x_placement
+#            , y = cht_title_y_placement
+#            , label = cht_title
+#            , color = "black"
+#            , size = cht_title_size
+#            , fontface = 2
+#   ) +
+#   labs(title = cht_y_axes_unit, subtitle = cht_y_axes_unit)
+# 
+# 
+# chart_formatting(cpi_data$date, cpi_data$value, cpi_data$name)
+# 
+# set_chart_defaults(input_data = cpi_data
+#                    , cht_y_min, cht_y_max, cht_y_increment, cht_y_axes_unit, cht_y_axes_unit_size
+#                    , cht_start_date, cht_end_date, cht_x_date_format, cht_x_num_labels
+#                    , cht_title, cht_title_size, cht_title_x_placement, cht_title_y_placement
+#                    , cht_width, cht_height
+#                    , cht_axes_font_size, cht_label_size, cht_legend, cht_colour_palette
+#                    , cht_note, cht_type)
+# 
+# cpi_data %>%
+#   ggplot(aes(x=date, y=value, colour = name)) +
+#   chart_defaults
+# 
+# 
+# 
+# 
+# 
+# 
+# 
+# 

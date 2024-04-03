@@ -10,8 +10,10 @@ library(ggplot2)
 library(plotly)
 library(lubridate)
 library(stringr)
+library(scales)
 
 source(here::here("cpi_annual.R"))
+source(here::here("plot_functions.R"))
 
 
 
@@ -204,10 +206,11 @@ ui <- navbarPage(
             Category_4 = cat4
           )
           , multiple = TRUE)
-          , selectInput("region_1"
+          , selectizeInput("region_1"
                         , label = "Region"
                         , choices = region_list
                         , selected = region_list[[1]]
+                        , multiple = TRUE
           )
           , hr()
           , h4("Series 2")
@@ -221,10 +224,11 @@ ui <- navbarPage(
                              Category_4 = cat4
                            )
                            , multiple = TRUE)
-          , selectInput("region_2"
+          , selectizeInput("region_2"
                         , label = "Region"
                         , choices = region_list
                         , selected = region_list[[1]]
+                        , multiple = TRUE
           )
           , hr()
           , h4("Series 3")
@@ -238,10 +242,11 @@ ui <- navbarPage(
                              Category_4 = cat4
                            )
                            , multiple = TRUE)
-          , selectInput("region_3"
+          , selectizeInput("region_3"
                         , label = "Region"
                         , choices = region_list
                         , selected = region_list[[1]]
+                        , multiple = TRUE
           )
           , hr()
           , h4("Series 4")
@@ -255,10 +260,11 @@ ui <- navbarPage(
                              Category_4 = cat4
                            )
                            , multiple = TRUE)
-          , selectInput("region_4"
+          , selectizeInput("region_4"
                         , label = "Region"
                         , choices = region_list
                         , selected = region_list[[1]]
+                        , multiple = TRUE
           )
           
           
@@ -272,12 +278,57 @@ ui <- navbarPage(
         
         ## outputs ----
         , mainPanel(
+           fluidRow(
+            column(3,
+                   h4("Data Customisation"),
+                   checkboxInput('jitter', 'Jitter'),
+                   checkboxInput('smooth', 'Smooth')
+            ),
+            column(4, offset = 1,
+                   checkboxInput('jitter', 'Jitter'),
+                   checkboxInput('smooth', 'Smooth')
+            ),
+            column(4,
+                   checkboxInput('jitter', 'Jitter'),
+                   checkboxInput('smooth', 'Smooth')
+            )
+          ),
+          hr()
+          
+      
           
           ## Chart
-          h3("CPI")
+          , helpText("Interactive Chart:")
           , plotlyOutput("p_cust")
           , helpText("Data:")
-          , tableOutput("p_table_cust")                  
+          , tableOutput("p_table_cust") 
+          
+          
+          , helpText("Static Chart:")
+          , plotOutput("p_cust_static")
+          , hr()
+          
+          , fluidRow(
+            column(3,
+                   h4("Chart Customisation"),
+                   checkboxInput('jitter', 'Jitter'),
+                   checkboxInput('smooth', 'Smooth')
+            ),
+            column(4, offset = 1,
+                   checkboxInput('jitter', 'Jitter'),
+                   checkboxInput('smooth', 'Smooth')
+            ),
+            column(4,
+                   checkboxInput('jitter', 'Jitter'),
+                   checkboxInput('smooth', 'Smooth')
+            )
+          ),
+          hr()
+
+          
+
+          
+        
           
           
         )
@@ -394,7 +445,7 @@ server <- function(input, output, session) {
       ylab("Percent")
   )})
   
-  # Plot (custom) ---------------
+  # Plot (custom1) ---------------
   output$p_cust <- renderPlotly({ggplotly(
     p_data_cust() %>%
       ggplot() +
@@ -404,6 +455,28 @@ server <- function(input, output, session) {
       ylab("Percent")
   )})
   
+  # Plot (custom2) ---------------
+  p_plot_settings <- reactive({
+    chart_formatting(p_data_cust())
+    
+    set_chart_defaults(input_data = p_data_cust()
+                       , cht_y_min, cht_y_max, cht_y_increment, cht_y_axes_unit, cht_y_axes_unit_size
+                       , cht_start_date, cht_end_date, cht_x_date_format, cht_x_num_labels
+                       , cht_title, cht_title_size, cht_title_x_placement, cht_title_y_placement
+                       , cht_width, cht_height
+                       , cht_axes_font_size, cht_label_size, cht_legend, cht_colour_palette
+                       , cht_note, cht_type)
+
+    return(chart_defaults)
+  })
+
+  output$p_cust_static <- renderPlot(
+    p_data_cust() %>%
+      ggplot(aes(x=date, y=value, colour = name)) +
+      p_plot_settings()
+  )
+  
+  
   
 
   # Table ---------------
@@ -411,6 +484,7 @@ server <- function(input, output, session) {
     if(input$viewData == 1){
       p_data()  %>%
         select(c("name", "value", "date")) %>%
+        arrange(date) %>%
         pivot_wider(names_from = date, values_from = value)
       } else{
       cat("Change selection to display table.")
@@ -424,6 +498,7 @@ server <- function(input, output, session) {
     if(input$viewData == 1){
       p_data_sub()  %>%
         select(c("name", "value", "date")) %>%
+        arrange(date) %>%
         pivot_wider(names_from = date, values_from = value)
     } else{
       cat("Change selection to display table.")
@@ -436,6 +511,7 @@ server <- function(input, output, session) {
     if(input$viewData == 1){
       p_data_sub_sub()  %>%
         select(c("name", "value", "date")) %>%
+        arrange(date) %>%
         pivot_wider(names_from = date, values_from = value)
     } else{
       cat("Change selection to display table.")
@@ -449,6 +525,7 @@ server <- function(input, output, session) {
     if(input$viewData1 == 1){
       p_data_cust()  %>%
         select(c("name", "value", "date")) %>%
+        arrange(date) %>%
         pivot_wider(names_from = date, values_from = value)
     } else{
       cat("Change selection to display table.")
