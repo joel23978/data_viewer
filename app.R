@@ -186,7 +186,7 @@ ui <- navbarPage(
                                          , "y.y" 
                                          , "q.q" 
                                          , "rebased index"
-                                         #, "Contribution (Proportion)" = 3
+                                         #, "Contribution (Proportion)" = 3 
                         )
                         , selected = "y.y")
           , conditionalPanel(
