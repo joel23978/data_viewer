@@ -192,7 +192,6 @@ ui <- navbarPage(
             , textInput("fred_series"
                       , label  = "FRED Series ID"
                       , value = "UNRATE"
-              
             )
           )
           , selectInput("trnsfrm1"
@@ -595,6 +594,7 @@ server <- function(input, output, session) {
       ggplot(aes(x=date, y=value, colour = name)) +
       p_plot_settings() 
   })
+  
   
   output$p_cust_static <- renderPlot({
     req(p_cust_static())

@@ -4,11 +4,11 @@ Sys.getenv("FRED_API_KEY")
 
 fred_data <- function(
     series = input$fred_series
-    , start_date = lubridate::ymd(min(input$year), truncated = 2L)
-    , end_date = lubridate::ymd(max(input$year), truncated = 2L)
+    , start_date = lubridate::ymd(min(input$year1), truncated = 2L)
+    , end_date = lubridate::ymd(max(input$year1), truncated = 2L)
 ){
   tmp <- fredr(
-    series_id = "UNRATE",
+    series_id = series,
     observation_start = start_date,
     observation_end = end_date
   ) %>%
