@@ -79,7 +79,7 @@ ui <- navbarPage(
                                        , "q.q" 
                                        #, "Contribution (Proportion)" = 3
                       )
-                      , selected = 0)
+                      , selected = "y.y")
         , selectInput("viewData"
                       , label = "Display Tables"
                       , choices = list("No"=0
@@ -179,21 +179,7 @@ ui <- navbarPage(
                                          , "Yes"=1
                         )
           )
-                    , selectInput("data_source"
-                        , label = "Data Source"
-                        , choices = list("local" 
-                                         , "FRED"
-                                         #, "Bloomberg" 
-                                         #, "other" 
-                        )
-                        , selected = "local")
-          , conditionalPanel(
-            condition = "input.data_source == `FRED`"
-            , textInput("fred_series"
-                      , label  = "FRED Series ID"
-                      , value = "UNRATE"
-            )
-          )
+          
           , selectInput("trnsfrm1"
                         , label = "Transformation"
                         , choices = list("index" 
@@ -202,99 +188,182 @@ ui <- navbarPage(
                                          , "rebased index"
                                          #, "Contribution (Proportion)" = 3
                         )
-                        , selected = 0)
+                        , selected = "y.y")
           , conditionalPanel(
             condition = "input.trnsfrm1 == `rebased index`"
             , dateInput("rebase_date"
                         , label = "Date (rebase)"
                         , startview = "year"
                         , value = "2019-12-31"
-              
+                        
             )
             
           )
-
+          
           , hr()
           , h4("Series 1")
-          # use regions as option groups
-          , selectizeInput("text_1"
-                           , "Search"
-                           , choices = list(
-            Category_1 = cat1,
-            Category_2 = cat2,
-            Category_3 = cat3,
-            Category_4 = cat4
+          , selectInput("source_1"
+                        , label = "Data Source"
+                        , choices = list("local" 
+                                         , "FRED"
+                                         #, "Bloomberg" 
+                                         #, "other" 
+                        )
+                        , selected = "local")
+          
+          , conditionalPanel(
+            condition = "input.source_1 == `FRED`"
+            , textInput("fred_series_1"
+                        , label  = "FRED Series ID"
+                        , value = "UNRATE"
+            )
           )
-         , selected = cat1[[1]]
-          , multiple = TRUE)
-          , selectizeInput("region_1"
-                        , label = "Region"
-                        , choices = region_list
-                        , selected = region_list[[1]]
-                        , multiple = TRUE
+          
+          
+          , conditionalPanel(
+            condition = "input.source_1 == `local`"
+            , selectizeInput("text_1"
+                             , "Search"
+                             , choices = list(
+                               Category_1 = cat1,
+                               Category_2 = cat2,
+                               Category_3 = cat3,
+                               Category_4 = cat4
+                             )
+                             , selected = cat1[[1]]
+                             , multiple = TRUE)
+            , selectizeInput("region_1"
+                             , label = "Region"
+                             , choices = region_list
+                             , selected = region_list[[1]]
+                             , multiple = TRUE
+            )
           )
-         , selectizeInput("vis_type1", "Series plot:"
-                          , choices = c("line", "bar", "scatter"))
+          
+          , selectizeInput("vis_type1", "Series plot:"
+                           , choices = c("line", "bar", "scatter"))
           , hr()
           , h4("Series 2")
-          # use regions as option groups
-          , selectizeInput("text_2"
-                           , "Search"
-                           , choices = list(
-                             Category_1 = cat1,
-                             Category_2 = cat2,
-                             Category_3 = cat3,
-                             Category_4 = cat4
-                           )
-                           , multiple = TRUE)
-          , selectizeInput("region_2"
-                        , label = "Region"
-                        , choices = region_list
-                        , selected = region_list[[1]]
-                        , multiple = TRUE
+          , selectInput("source_2"
+                        , label = "Data Source"
+                        , choices = list("local" 
+                                         , "FRED"
+                                         #, "Bloomberg" 
+                                         #, "other" 
+                        )
+                        , selected = "local")
+          
+          , conditionalPanel(
+            condition = "input.source_2 == `FRED`"
+            , textInput("fred_series_2"
+                        , label  = "FRED Series ID"
+                        , value = "DFF"
+            )
           )
+          
+          
+          , conditionalPanel(
+            condition = "input.source_2 == `local`"
+            , selectizeInput("text_2"
+                             , "Search"
+                             , choices = list(
+                               Category_1 = cat1,
+                               Category_2 = cat2,
+                               Category_3 = cat3,
+                               Category_4 = cat4
+                             )
+                             , selected = NULL
+                             , multiple = TRUE)
+            , selectizeInput("region_2"
+                             , label = "Region"
+                             , choices = region_list
+                             , selected = region_list[[1]]
+                             , multiple = TRUE
+            )
+          )
+          
+          
           , hr()
           , h4("Series 3")
-          # use regions as option groups
-          , selectizeInput("text_3"
-                           , "Search"
-                           , choices = list(
-                             Category_1 = cat1,
-                             Category_2 = cat2,
-                             Category_3 = cat3,
-                             Category_4 = cat4
-                           )
-                           , multiple = TRUE)
-          , selectizeInput("region_3"
-                        , label = "Region"
-                        , choices = region_list
-                        , selected = region_list[[1]]
-                        , multiple = TRUE
+          , selectInput("source_3"
+                        , label = "Data Source"
+                        , choices = list("local" 
+                                         , "FRED"
+                                         #, "Bloomberg" 
+                                         #, "other" 
+                        )
+                        , selected = "local")
+          
+          , conditionalPanel(
+            condition = "input.source_3 == `FRED`"
+            , textInput("fred_series_3"
+                        , label  = "FRED Series ID"
+                        , value = "PCE"
+            )
           )
+          
+          , conditionalPanel(
+            condition = "input.source_3 == `local`"
+            , selectizeInput("text_3"
+                             , "Search"
+                             , choices = list(
+                               Category_1 = cat1,
+                               Category_2 = cat2,
+                               Category_3 = cat3,
+                               Category_4 = cat4
+                             )
+                             , selected = NULL
+                             , multiple = TRUE)
+            , selectizeInput("region_3"
+                             , label = "Region"
+                             , choices = region_list
+                             , selected = region_list[[1]]
+                             , multiple = TRUE
+            )
+          )
+          
+          
           , hr()
           , h4("Series 4")
-          # use regions as option groups
-          , selectizeInput("text_4"
-                           , "Search"
-                           , choices = list(
-                             Category_1 = cat1,
-                             Category_2 = cat2,
-                             Category_3 = cat3,
-                             Category_4 = cat4
-                           )
-                           , multiple = TRUE)
-          , selectizeInput("region_4"
-                        , label = "Region"
-                        , choices = region_list
-                        , selected = region_list[[1]]
-                        , multiple = TRUE
+          , selectInput("source_4"
+                        , label = "Data Source"
+                        , choices = list("local" 
+                                         , "FRED"
+                                         #, "Bloomberg" 
+                                         #, "other" 
+                        )
+                        , selected = "local")
+          
+          , conditionalPanel(
+            condition = "input.source_4 == `FRED`"
+            , textInput("fred_series_4"
+                        , label  = "FRED Series ID"
+                        , value = "GDP"
+            )
+          )
+          
+          , conditionalPanel(
+            condition = "input.source_4 == `local`"
+            , selectizeInput("text_4"
+                             , "Search"
+                             , choices = list(
+                               Category_1 = cat1,
+                               Category_2 = cat2,
+                               Category_3 = cat3,
+                               Category_4 = cat4
+                             )
+                             , selected = NULL
+                             , multiple = TRUE)
+            , selectizeInput("region_4"
+                             , label = "Region"
+                             , choices = region_list
+                             , selected = region_list[[1]]
+                             , multiple = TRUE
+            )
           )
           
           
         )
-      
-        
-        
         ## outputs ----
         , mainPanel(
 
@@ -454,33 +523,114 @@ server <- function(input, output, session) {
   
   
   # Data query ----
+  # p_data_edit <- reactive({
+  #   
+  #   if (input$source_1 == "local"){
+  #     return_data <- cpi_splits_cust(cpi_data = cpi_data_all
+  #                                    , transformation = input$trnsfrm1
+  #                                    , dates = as.numeric(input$year1)
+  #                                    
+  #                                    , pick_split_1 = unlist(input$text_1)
+  #                                    , pick_split_2 = unlist(input$text_2)
+  #                                    , pick_split_3 = unlist(input$text_3)
+  #                                    , pick_split_4 = unlist(input$text_4)
+  #                                    
+  #                                    , region_1_split = input$region_1
+  #                                    , region_2_split = input$region_2
+  #                                    , region_3_split = input$region_3
+  #                                    , region_4_split = input$region_4
+  #                                    , rebase_date = as.Date(input$rebase_date)
+  #     ) 
+  #     
+  #   } else if (input$source_1 == "FRED"){
+  #     
+  #     return_data <- fred_data(series = input$fred_series
+  #                              , start_date = lubridate::ymd(min(input$year1), truncated = 2L)
+  #                              , end_date = lubridate::ymd(max(input$year1), truncated = 2L)
+  #     )
+  #   }
+  #   return(return_data)
+  # })
+  # 
+  # 
+  # 
   p_data_edit <- reactive({
     
-    if (input$data_source == "local"){
-      return_data <- cpi_splits_cust(cpi_data = cpi_data_all
+    if (input$source_1 == "local"){
+      return_data_1 <- cpi_splits_cust(cpi_data = cpi_data_all
                                   , transformation = input$trnsfrm1
                                   , dates = as.numeric(input$year1)
                                   
                                   , pick_split_1 = unlist(input$text_1)
-                                  , pick_split_2 = unlist(input$text_2)
-                                  , pick_split_3 = unlist(input$text_3)
-                                  , pick_split_4 = unlist(input$text_4)
-                                  
                                   , region_1_split = input$region_1
-                                  , region_2_split = input$region_2
-                                  , region_3_split = input$region_3
-                                  , region_4_split = input$region_4
                                   , rebase_date = as.Date(input$rebase_date)
       ) 
-      
-    } else if (input$data_source == "FRED"){
-      
-      return_data <- fred_data(series = input$fred_series
+    } else if (input$source_1 == "FRED"){
+      return_data_1 <- fred_data(series = input$fred_series_1
                                 , start_date = lubridate::ymd(min(input$year1), truncated = 2L)
                                 , end_date = lubridate::ymd(max(input$year1), truncated = 2L)
                                )
     }
-    return(return_data)
+    
+    
+    if (input$source_2 == "local"){
+      return_data_2 <- cpi_splits_cust(cpi_data = cpi_data_all
+                                     , transformation = input$trnsfrm1
+                                     , dates = as.numeric(input$year1)
+                                     
+                                     , pick_split_1 = unlist(input$text_2)
+                                     , region_1_split = input$region_2
+                                     , rebase_date = as.Date(input$rebase_date)
+      ) 
+    } else if (input$source_2 == "FRED"){
+      return_data_2 <- fred_data(series = input$fred_series_2
+                               , start_date = lubridate::ymd(min(input$year1), truncated = 2L)
+                               , end_date = lubridate::ymd(max(input$year1), truncated = 2L)
+      )
+    }
+    
+    
+    if (input$source_3 == "local"){
+      return_data_3 <- cpi_splits_cust(cpi_data = cpi_data_all
+                                       , transformation = input$trnsfrm1
+                                       , dates = as.numeric(input$year1)
+                                       
+                                       , pick_split_1 = unlist(input$text_3)
+                                       , region_1_split = input$region_3
+                                       , rebase_date = as.Date(input$rebase_date)
+      ) 
+    } else if (input$source_3 == "FRED"){
+      return_data_3 <- fred_data(series = input$fred_series_3
+                                 , start_date = lubridate::ymd(min(input$year1), truncated = 2L)
+                                 , end_date = lubridate::ymd(max(input$year1), truncated = 2L)
+      )
+    }
+    
+    
+    if (input$source_4 == "local"){
+      return_data_4 <- cpi_splits_cust(cpi_data = cpi_data_all
+                                       , transformation = input$trnsfrm1
+                                       , dates = as.numeric(input$year1)
+                                       
+                                       , pick_split_1 = unlist(input$text_4)
+                                       , region_1_split = input$region_4
+                                       , rebase_date = as.Date(input$rebase_date)
+      ) 
+      
+    } else if (input$source_4 == "FRED"){
+      
+      return_data_4 <- fred_data(series = input$fred_series_4
+                                 , start_date = lubridate::ymd(min(input$year1), truncated = 2L)
+                                 , end_date = lubridate::ymd(max(input$year1), truncated = 2L)
+      )
+    }
+    
+
+    
+    return(return_data_1 %>%
+             rbind(return_data_2) %>%
+             rbind(return_data_3) %>%
+             rbind(return_data_4))
   })
   
   
