@@ -835,7 +835,7 @@ cpi_splits_cust <- function(
 #   labs(title = cht_y_axes_unit, subtitle = cht_y_axes_unit)
 # 
 # 
-# chart_formatting(cpi_data$date, cpi_data$value, cpi_data$name)
+# chart_formatting(cpi_data)
 # 
 # set_chart_defaults(input_data = cpi_data
 #                    , cht_y_min, cht_y_max, cht_y_increment, cht_y_axes_unit, cht_y_axes_unit_size

@@ -11,10 +11,12 @@ library(plotly)
 library(lubridate)
 library(stringr)
 library(scales)
+library(htmlwidgets)
+library(shinyWidgets)
 
 source(here::here("cpi_annual.R"))
 source(here::here("plot_functions.R"))
-
+set_default_values()
 
 
 
@@ -162,7 +164,14 @@ ui <- navbarPage(
       
       sidebarLayout(
         sidebarPanel(
-          h4("Global")
+          h4("Data Inputs")
+          , selectInput("data_source"
+                        , label = "Data Source"
+                        , choices = list("Bloomberg" 
+                                         , "FRED" 
+                                         , "other" 
+                        )
+                        , selected = 0)
           , sliderInput("year1"
                         , "Date range"
                         , min = as.numeric(year(min(cpi_data_all$date)))
@@ -205,6 +214,7 @@ ui <- navbarPage(
             Category_3 = cat3,
             Category_4 = cat4
           )
+         , selected = cat1[[1]]
           , multiple = TRUE)
           , selectizeInput("region_1"
                         , label = "Region"
@@ -212,6 +222,8 @@ ui <- navbarPage(
                         , selected = region_list[[1]]
                         , multiple = TRUE
           )
+         , selectizeInput("vis_type1", "Series plot:"
+                          , choices = c("line", "bar", "scatter"))
           , hr()
           , h4("Series 2")
           # use regions as option groups
@@ -269,76 +281,101 @@ ui <- navbarPage(
           
           
         )
-        
-        # # Button
-        # , downloadButton("downloadData", "Download")
-        
-        
+      
         
         
         ## outputs ----
         , mainPanel(
-           fluidRow(
-            column(3,
-                   h4("Data Customisation"),
-                   checkboxInput('jitter', 'Jitter'),
-                   checkboxInput('smooth', 'Smooth')
-            ),
-            column(4, offset = 1,
-                   checkboxInput('jitter', 'Jitter'),
-                   checkboxInput('smooth', 'Smooth')
-            ),
-            column(4,
-                   checkboxInput('jitter', 'Jitter'),
-                   checkboxInput('smooth', 'Smooth')
-            )
-          ),
-          hr()
-          
-      
-          
+
           ## Chart
-          , helpText("Interactive Chart:")
+          h4("Interactive Chart:")
           , plotlyOutput("p_cust")
-          , helpText("Data:")
-          , tableOutput("p_table_cust") 
-          
-          
-          , helpText("Static Chart:")
-          , plotOutput("p_cust_static")
           , hr()
           
+          
+          ## Data
+          , h4("Data:")
+          , tableOutput("p_table_cust") 
+          , hr()
+          
+          
+          ## Inputs
           , fluidRow(
             column(3,
-                   h4("Chart Customisation"),
-                   checkboxInput('jitter', 'Jitter'),
-                   checkboxInput('smooth', 'Smooth')
+                   h4("More Inputs:")
+                   , selectizeInput("data_freq", "Data Frequency:", choices = c("Day", "Week", "Month", "Quarter", "Annual"))
+                   , numericInput("moving_avg", "Moving Average (no. obs):", value = 1)
             ),
             column(4, offset = 1,
-                   checkboxInput('jitter', 'Jitter'),
-                   checkboxInput('smooth', 'Smooth')
+                   numericInput("horizontal_1", "Horizontal Line (1)", value = NULL)
+                   , numericInput("horizontal_2", "Horizontal Line (2)", value = NULL)
+                   , numericRangeInput("horizontal_shading", "Horizontal Shading", value = c(NA,NA))
             ),
             column(4,
-                   checkboxInput('jitter', 'Jitter'),
-                   checkboxInput('smooth', 'Smooth')
+                   dateInput("vertical_1", "Vertical Line (1)", value = as.Date(NA))
+                   , dateInput("vertical_2", "Vertical Line (2)", value = as.Date(NA))
+                   , selectizeInput("recession_shading", "Recession Shading:"
+                                    , choices = c("AU", "US", "none"), selected = "none")
             )
           ),
           hr()
+          
+          ## Static Chart
+          , h4("Static Chart:")
+          , plotOutput("p_cust_static")
+          , hr()
+          , fluidRow(
+            column(width = 3,
+                   h4("Chart Inputs")
+                   , selectizeInput("cht_type", "Chart Type:", choices =  "simple") #list()
+                   , selectizeInput("cht_legend", "Legend:", choices = c("none", "bottom"), selected = "none")
+                   , selectizeInput("cht_colour_palette", "Colour palette:", choices = palette.pals()) #list()
+                   
+                   , textInput("cht_title",  "Chart title:", value = "please_add_title")
+                   , textInput("cht_y_axes_unit",  "y-axes (unit-label):", value = "%")
+                   , textInput("cht_note",  "Note/Source:", value = "c. Joel Findlay")
+                   
+            ),
+            column(width = 3, offset = 1
+                   , h4("Manual Override")
+                   , numericInput("cht_title_y_placement", "Title placement:", value = 17)
+                   , numericInput("cht_y_min", "y-axes (min):", value = 17)
+                   , numericInput("cht_y_max", "y-axes (max):", value = 5)
+                   , numericInput("cht_y_increment", "y-axes (increment):", value = 2)
+                   , selectInput("cht_y_invert", "y-axes (invert):", choices =c(F, T), selected = F) 
+                  
+                   , selectizeInput("cht_x_date_format", "x-axis (date format)", choices = c("%d-%b", "%b-%y", "%b-%Y", "%m-%Y", "%d-%m-%Y", "%Y")
+                                    , options = list(create = TRUE), selected = "%b-%y") #list()
+                   , numericInput("cht_x_num_labels", "x-axis (no. labels):", value = 6)
+            ),
+            column(width = 3, offset = 1
+                   , h4("Font Size")
+                   , numericInput("cht_title_size", "Title:", value = 8)
+                   , numericInput("cht_axes_font_size", "Axes:", value = 15)
+                   , numericInput("cht_label_size", "Series labels:", value = 7)
+                   , numericInput("cht_height", "Height:", value = 5) #list()
+                   , numericInput("cht_width", "Width:", value = 7) #list()
+                   
+            )
+          )
+          , hr()
+          
+          
+          
+          ## More inputs
+          , fluidRow(
+            h4("Exports:")
+            , downloadButton("exportData", "Data (.csv)")
+            , downloadButton("exportHTML", "Chart (.html)")
+            , downloadButton("exportPNG", "Chart (.png)")
+            , downloadButton("exportPPTX", "Chart (.pptx)")
+            , downloadButton("exportR", "Chart (.R)")
+            
+          )
+         , hr()
 
-          
-
-          
-        
-          
-          
         )
-        
       )
-
-
-  
-      
-      
     )
   )
   , collapsible = TRUE
@@ -356,11 +393,27 @@ ui <- navbarPage(
 server <- function(input, output, session) {
 
   observe({
+    if(input$cht_y_invert == F){
+      y_vals <- pretty(c(min(p_data_cust()$value), max(p_data_cust()$value)+(max(p_data_cust()$value) - min(p_data_cust()$value))/10)
+                       , n = n_ticks) 
+      title_placement <- max(y_vals) -1/20*(max(y_vals)-min(y_vals))
+    } else {
+      y_vals <- pretty(c(min(p_data_cust()$value) - (max(p_data_cust()$value) - min(p_data_cust()$value))/10, max(p_data_cust()$value))
+                       , n = n_ticks) 
+      title_placement <- min(y_vals) +1/20*(max(y_vals)-min(y_vals))
+    }
+    
     updateSelectInput(session, "sub_sub_split", choices = name_list[[input$sub_split]])
+    updateNumericInput(session, "cht_y_min", value = min(y_vals))
+    updateNumericInput(session, "cht_y_max", value = max(y_vals))
+    updateNumericInput(session, "cht_y_increment", value = y_vals[2] - y_vals[1])
+    updateNumericInput(session, "cht_title_y_placement", value = title_placement)
+    
   })
   
+  session_store <- reactiveValues()
   
-  
+
   
   p_data <- reactive({
     cpi_splits(cpi_data = cpi_data_all
@@ -390,7 +443,7 @@ server <- function(input, output, session) {
     )
   })
   
-  p_data_cust <- reactive({
+  p_data_edit <- reactive({
     cpi_data <- cpi_splits_cust(cpi_data = cpi_data_all
                , transformation = input$trnsfrm1
                , dates = as.numeric(input$year1)
@@ -408,6 +461,20 @@ server <- function(input, output, session) {
     ) 
     
     return(cpi_data)
+  })
+  
+  
+  p_data_cust <- reactive({
+    
+    return_data <- p_data_edit()
+    
+    if(is.integer(input$moving_avg) == T){
+      return_data <- calc_moving_avg(input_data = p_data_edit()
+                                  , moving_avg = input$moving_avg) 
+
+    } 
+
+    return(return_data)
   })
   
 
@@ -445,39 +512,94 @@ server <- function(input, output, session) {
       ylab("Percent")
   )})
   
-  # Plot (custom1) ---------------
-  output$p_cust <- renderPlotly({ggplotly(
-    p_data_cust() %>%
+  
+  
+
+  # Plot (interactive) ---------------
+  output$p_cust <- renderPlotly({
+    session_store$plt <- ggplotly(
+      p_data_cust() %>%
       ggplot() +
       geom_line(aes(x=date, y=value, colour = name)) +
       theme_minimal() +
       xlab("Date") +
       ylab("Percent")
-  )})
+    )
+    
+    session_store$plt
+  })
   
-  # Plot (custom2) ---------------
+  # Plot (static) ---------------
   p_plot_settings <- reactive({
     chart_formatting(p_data_cust())
     
     set_chart_defaults(input_data = p_data_cust()
-                       , cht_y_min, cht_y_max, cht_y_increment, cht_y_axes_unit, cht_y_axes_unit_size
-                       , cht_start_date, cht_end_date, cht_x_date_format, cht_x_num_labels
-                       , cht_title, cht_title_size, cht_title_x_placement, cht_title_y_placement
-                       , cht_width, cht_height
-                       , cht_axes_font_size, cht_label_size, cht_legend, cht_colour_palette
-                       , cht_note, cht_type)
+                       , cht_y_min = input$cht_y_min
+                       , cht_y_max = input$cht_y_max
+                       , cht_y_increment = input$cht_y_increment
+                       , cht_y_invert = input$cht_y_invert
+                       , cht_y_axes_unit = input$cht_y_axes_unit
+                       , cht_y_axes_unit_size = input$cht_y_axes_unit_size
+                       , cht_start_date# = input$cht_start_date
+                       , cht_end_date# = input$cht_end_date
+                       , cht_x_date_format = input$cht_x_date_format
+                       , cht_x_num_labels = pretty_breaks(input$cht_x_num_labels)
+                       , cht_title = input$cht_title
+                       , cht_title_size = input$cht_title_size
+                       , cht_title_x_placement #= input$cht_title_x_placement
+                       , cht_title_y_placement = input$cht_title_y_placement
+                       , cht_width = input$cht_width
+                       , cht_height = input$cht_height
+                       , cht_axes_font_size = input$cht_axes_font_size
+                       , cht_label_size = input$cht_label_size
+                       , cht_legend = input$cht_legend
+                       , cht_colour_palette = palette.colors(palette = input$cht_colour_palette)
+                       , cht_note = input$cht_note
+                       , cht_type# = input$cht_type
+                       , horizontal_1 = input$horizontal_1
+                       , horizontal_2 = input$horizontal_2
+                       , horizontal_shading = as.numeric(input$horizontal_shading)
+                       , vertical_1 = as.Date(input$vertical_1)
+                       , vertical_2 = as.Date(input$vertical_2)
+                       )
 
     return(chart_defaults)
   })
 
-  output$p_cust_static <- renderPlot(
+  p_cust_static <- reactive({
     p_data_cust() %>%
       ggplot(aes(x=date, y=value, colour = name)) +
-      p_plot_settings()
+      p_plot_settings() 
+  })
+  
+  output$p_cust_static <- renderPlot({
+    req(p_cust_static())
+    p_cust_static()
+  })
+  
+  # png download ----
+  output$exportPNG <-  downloadHandler(
+    filename = function(){paste0(input$cht_title, ".png")}, 
+    content = function(file){
+      req(p_cust_static())
+      ggsave(file
+             ,plot=p_cust_static()
+             , width = input$cht_width
+             , height = input$cht_height)}
   )
   
   
-  
+  # html download ----
+  output$exportHTML <- downloadHandler(
+    filename = function() {
+      paste("data-", Sys.Date(), ".html", sep = "")
+    },
+    content = function(file) {
+      # export plotly html widget as a temp file to download.
+      saveWidget(as_widget(session_store$plt), file, selfcontained = TRUE)
+    }
+  )
+
 
   # Table ---------------
   output$p_table <- renderTable({
@@ -634,7 +756,6 @@ server <- function(input, output, session) {
 
 # CREATE APP ----
 shinyApp(ui, server)
-
 
 
 
