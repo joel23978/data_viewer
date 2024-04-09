@@ -16,6 +16,8 @@ library(shinyWidgets)
 
 source(here::here("cpi_annual.R"))
 source(here::here("plot_functions.R"))
+source(here::here("fred.R"))
+
 set_default_values()
 
 
@@ -165,19 +167,34 @@ ui <- navbarPage(
       sidebarLayout(
         sidebarPanel(
           h4("Data Inputs")
-          , selectInput("data_source"
-                        , label = "Data Source"
-                        , choices = list("Bloomberg" 
-                                         , "FRED" 
-                                         , "other" 
-                        )
-                        , selected = 0)
           , sliderInput("year1"
                         , "Date range"
                         , min = as.numeric(year(min(cpi_data_all$date)))
                         , max = as.numeric(year(max(cpi_data_all$date)))
                         , value = c(2014, as.numeric(year(max(cpi_data_all$date)))),
                         sep = "")
+          , selectInput("viewData1"
+                        , label = "Display Table"
+                        , choices = list("No"=0
+                                         , "Yes"=1
+                        )
+          )
+                    , selectInput("data_source"
+                        , label = "Data Source"
+                        , choices = list("local" 
+                                         , "FRED"
+                                         #, "Bloomberg" 
+                                         #, "other" 
+                        )
+                        , selected = "local")
+          , conditionalPanel(
+            condition = "input.data_source == `FRED`"
+            , textInput("fred_series"
+                      , label  = "FRED Series ID"
+                      , value = "UNRATE"
+              
+            )
+          )
           , selectInput("trnsfrm1"
                         , label = "Transformation"
                         , choices = list("index" 
@@ -197,12 +214,7 @@ ui <- navbarPage(
             )
             
           )
-          , selectInput("viewData1"
-                        , label = "Display Table"
-                        , choices = list("No"=0
-                                         , "Yes"=1
-                        )
-          )
+
           , hr()
           , h4("Series 1")
           # use regions as option groups
@@ -413,8 +425,6 @@ server <- function(input, output, session) {
   
   session_store <- reactiveValues()
   
-
-  
   p_data <- reactive({
     cpi_splits(cpi_data = cpi_data_all
                , pick_split = input$splits
@@ -443,27 +453,40 @@ server <- function(input, output, session) {
     )
   })
   
+  
+  # Data query ----
   p_data_edit <- reactive({
-    cpi_data <- cpi_splits_cust(cpi_data = cpi_data_all
-               , transformation = input$trnsfrm1
-               , dates = as.numeric(input$year1)
-               
-               , pick_split_1 = unlist(input$text_1)
-               , pick_split_2 = unlist(input$text_2)
-               , pick_split_3 = unlist(input$text_3)
-               , pick_split_4 = unlist(input$text_4)
-               
-               , region_1_split = input$region_1
-               , region_2_split = input$region_2
-               , region_3_split = input$region_3
-               , region_4_split = input$region_4
-               , rebase_date = as.Date(input$rebase_date)
-    ) 
     
-    return(cpi_data)
+    if (input$data_source == "local"){
+      return_data <- cpi_splits_cust(cpi_data = cpi_data_all
+                                  , transformation = input$trnsfrm1
+                                  , dates = as.numeric(input$year1)
+                                  
+                                  , pick_split_1 = unlist(input$text_1)
+                                  , pick_split_2 = unlist(input$text_2)
+                                  , pick_split_3 = unlist(input$text_3)
+                                  , pick_split_4 = unlist(input$text_4)
+                                  
+                                  , region_1_split = input$region_1
+                                  , region_2_split = input$region_2
+                                  , region_3_split = input$region_3
+                                  , region_4_split = input$region_4
+                                  , rebase_date = as.Date(input$rebase_date)
+      ) 
+      
+    } else if (input$data_source == "FRED"){
+      
+      return_data <- fred_data(series = input$fred_series
+                                , start_date = lubridate::ymd(min(input$year1), truncated = 2L)
+                                , end_date = lubridate::ymd(max(input$year1), truncated = 2L)
+                               )
+    }
+    return(return_data)
   })
   
   
+  
+  # Data transformation ----
   p_data_cust <- reactive({
     
     return_data <- p_data_edit()
@@ -561,6 +584,7 @@ server <- function(input, output, session) {
                        , horizontal_shading = as.numeric(input$horizontal_shading)
                        , vertical_1 = as.Date(input$vertical_1)
                        , vertical_2 = as.Date(input$vertical_2)
+                       #, recession_shading = input$recession_shading
                        )
 
     return(chart_defaults)
