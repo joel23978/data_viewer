@@ -1,3 +1,11 @@
+data_sources <- list("local" 
+                    , "FRED"
+                    , "dbnomics"
+)
+
+
+
+
 
 theme_jf <- function() {
   ggplot2::theme_bw() +
@@ -167,6 +175,7 @@ set_chart_defaults <- function(
     labs(title = cht_y_axes_unit
          , subtitle = cht_y_axes_unit
          , caption = cht_note)
+    , guides(colour=guide_legend(title="Series"))
   )
   
   if (cht_y_invert == T){

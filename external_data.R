@@ -19,7 +19,44 @@ fred_data <- function(
 }
 
 
-# 
+
+
+
+library(rdbnomics)
+
+
+db_data <- function(
+    series = input$db_series
+    , start_date = lubridate::ymd(min(input$year1), truncated = 2L)
+    , end_date = lubridate::ymd(max(input$year1), truncated = 2L)
+){
+  tmp <- rdb(
+    ids = series
+  ) %>%
+    select(c(period, value, dataset_name)) %>%
+    rename(name = dataset_name
+           , date = period) %>%
+    mutate(date = as.Date(date)) %>%
+    filter(date <= end_date
+           , date >= start_date) %>%
+    drop_na()
+  
+  return(tmp)
+}
+
+# rdb(ids = "AMECO/ZUTN/EA19.1.0.0.0.ZUTN") %>%
+#   select(c(period, value, dataset_name)) %>%
+#   rename(name = dataset_name
+#          , date = period) %>%
+#   mutate(date = as.Date(date)) %>%
+#   filter(date <= end_date
+#          , date >= start_date) %>%
+#   drop_na()
+
+
+
+
+
 # fredr(
 #   series_id = "UNRATE",
 #   observation_start = as.Date("1990-01-01"),

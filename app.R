@@ -13,10 +13,11 @@ library(stringr)
 library(scales)
 library(htmlwidgets)
 library(shinyWidgets)
+library(DT)
 
 source(here::here("cpi_annual.R"))
 source(here::here("plot_functions.R"))
-source(here::here("fred.R"))
+source(here::here("external_data.R"))
 
 set_default_values()
 
@@ -204,11 +205,7 @@ ui <- navbarPage(
           , h4("Series 1")
           , selectInput("source_1"
                         , label = "Data Source"
-                        , choices = list("local" 
-                                         , "FRED"
-                                         #, "Bloomberg" 
-                                         #, "other" 
-                        )
+                        , choices = data_sources
                         , selected = "local")
           
           , conditionalPanel(
@@ -218,10 +215,21 @@ ui <- navbarPage(
                         , value = "UNRATE"
             )
           )
+          , conditionalPanel(
+            condition = "input.source_1 == `dbnomics`"
+            , textInput("dbnomics_series_1"
+                        , label  = "dbnomics Series ID"
+                        , value = "AMECO/ZUTN/EA19.1.0.0.0.ZUTN"
+            )
+          )
           
           
           , conditionalPanel(
             condition = "input.source_1 == `local`"
+            # , selectizeInput("local_1"
+            #                  , "Local Series"
+            #                  , choices = list("CPI")
+            #                  , selected = "CPI")
             , selectizeInput("text_1"
                              , "Search"
                              , choices = list(
@@ -246,11 +254,7 @@ ui <- navbarPage(
           , h4("Series 2")
           , selectInput("source_2"
                         , label = "Data Source"
-                        , choices = list("local" 
-                                         , "FRED"
-                                         #, "Bloomberg" 
-                                         #, "other" 
-                        )
+                        , choices = data_sources
                         , selected = "local")
           
           , conditionalPanel(
@@ -258,6 +262,13 @@ ui <- navbarPage(
             , textInput("fred_series_2"
                         , label  = "FRED Series ID"
                         , value = "DFF"
+            )
+          )
+          , conditionalPanel(
+            condition = "input.source_2 == `dbnomics`"
+            , textInput("dbnomics_series_2"
+                        , label  = "dbnomics Series ID"
+                        , value = "AMECO/ZUTN/EA19.1.0.0.0.ZUTN"
             )
           )
           
@@ -287,11 +298,7 @@ ui <- navbarPage(
           , h4("Series 3")
           , selectInput("source_3"
                         , label = "Data Source"
-                        , choices = list("local" 
-                                         , "FRED"
-                                         #, "Bloomberg" 
-                                         #, "other" 
-                        )
+                        , choices = data_sources
                         , selected = "local")
           
           , conditionalPanel(
@@ -299,6 +306,13 @@ ui <- navbarPage(
             , textInput("fred_series_3"
                         , label  = "FRED Series ID"
                         , value = "PCE"
+            )
+          )
+          , conditionalPanel(
+            condition = "input.source_3 == `dbnomics`"
+            , textInput("dbnomics_series_3"
+                        , label  = "dbnomics Series ID"
+                        , value = "AMECO/ZUTN/EA19.1.0.0.0.ZUTN"
             )
           )
           
@@ -327,11 +341,7 @@ ui <- navbarPage(
           , h4("Series 4")
           , selectInput("source_4"
                         , label = "Data Source"
-                        , choices = list("local" 
-                                         , "FRED"
-                                         #, "Bloomberg" 
-                                         #, "other" 
-                        )
+                        , choices = data_sources
                         , selected = "local")
           
           , conditionalPanel(
@@ -339,6 +349,13 @@ ui <- navbarPage(
             , textInput("fred_series_4"
                         , label  = "FRED Series ID"
                         , value = "GDP"
+            )
+          )
+          , conditionalPanel(
+            condition = "input.source_4 == `dbnomics`"
+            , textInput("dbnomics_series_4"
+                        , label  = "dbnomics Series ID"
+                        , value = "AMECO/ZUTN/EA19.1.0.0.0.ZUTN"
             )
           )
           
@@ -375,7 +392,7 @@ ui <- navbarPage(
           
           ## Data
           , h4("Data:")
-          , tableOutput("p_table_cust") 
+          , DT::dataTableOutput("p_table_cust") 
           , hr()
           
           
@@ -408,7 +425,7 @@ ui <- navbarPage(
             column(width = 3,
                    h4("Chart Inputs")
                    , selectizeInput("cht_type", "Chart Type:", choices =  "simple") #list()
-                   , selectizeInput("cht_legend", "Legend:", choices = c("none", "bottom"), selected = "none")
+                   , selectizeInput("cht_legend", "Legend:", choices = c("none", "bottom"), selected = "bottom")
                    , selectizeInput("cht_colour_palette", "Colour palette:", choices = palette.pals()) #list()
                    
                    , textInput("cht_title",  "Chart title:", value = "please_add_title")
@@ -570,6 +587,11 @@ server <- function(input, output, session) {
                                 , start_date = lubridate::ymd(min(input$year1), truncated = 2L)
                                 , end_date = lubridate::ymd(max(input$year1), truncated = 2L)
                                )
+    } else if (input$source_1 == "dbnomics"){
+      return_data_1 <- db_data(series = input$dbnomics_series_1
+                                 , start_date = lubridate::ymd(min(input$year1), truncated = 2L)
+                                 , end_date = lubridate::ymd(max(input$year1), truncated = 2L)
+      )
     }
     
     
@@ -586,6 +608,11 @@ server <- function(input, output, session) {
       return_data_2 <- fred_data(series = input$fred_series_2
                                , start_date = lubridate::ymd(min(input$year1), truncated = 2L)
                                , end_date = lubridate::ymd(max(input$year1), truncated = 2L)
+      )
+    } else if (input$source_2 == "dbnomics"){
+      return_data_2 <- db_data(series = input$dbnomics_series_2
+                                 , start_date = lubridate::ymd(min(input$year1), truncated = 2L)
+                                 , end_date = lubridate::ymd(max(input$year1), truncated = 2L)
       )
     }
     
@@ -604,7 +631,13 @@ server <- function(input, output, session) {
                                  , start_date = lubridate::ymd(min(input$year1), truncated = 2L)
                                  , end_date = lubridate::ymd(max(input$year1), truncated = 2L)
       )
+    } else if (input$source_3 == "dbnomics"){
+      return_data_3 <- db_data(series = input$dbnomics_series_3
+                                 , start_date = lubridate::ymd(min(input$year1), truncated = 2L)
+                                 , end_date = lubridate::ymd(max(input$year1), truncated = 2L)
+      )
     }
+    
     
     
     if (input$source_4 == "local"){
@@ -623,7 +656,13 @@ server <- function(input, output, session) {
                                  , start_date = lubridate::ymd(min(input$year1), truncated = 2L)
                                  , end_date = lubridate::ymd(max(input$year1), truncated = 2L)
       )
+    } else if (input$source_4 == "dbnomics"){
+      return_data_4 <- db_data(series = input$dbnomics_series_4
+                                 , start_date = lubridate::ymd(min(input$year1), truncated = 2L)
+                                 , end_date = lubridate::ymd(max(input$year1), truncated = 2L)
+      )
     }
+  
     
 
     
@@ -650,40 +689,6 @@ server <- function(input, output, session) {
   })
   
 
-  
-  
-  # Plot (main) ---------------
-  output$p_plot <- renderPlotly({ggplotly(
-    p_data() %>%
-      ggplot() +
-      geom_line(aes(x=date, y=value, colour = name)) +
-      theme_minimal() +
-      xlab("Date") +
-      ylab("Percent")
-  )})
-
-
-  # Plot (sub) ---------------
-  output$p_sub_plot <- renderPlotly({ggplotly(
-    p_data_sub() %>%
-      ggplot() +
-      geom_line(aes(x=date, y=value, colour = name)) +
-      theme_minimal() +
-      xlab("Date") +
-      ylab("Percent")
-  )})
-
-  
-  # Plot (sub-sub) ---------------
-  output$p_sub_sub_plot <- renderPlotly({ggplotly(
-    p_data_sub_sub() %>%
-      ggplot() +
-      geom_line(aes(x=date, y=value, colour = name)) +
-      theme_minimal() +
-      xlab("Date") +
-      ylab("Percent")
-  )})
-  
   
   
 
@@ -775,6 +780,63 @@ server <- function(input, output, session) {
   )
 
 
+  
+  # Custom table ----
+  output$p_table_cust <- DT::renderDataTable(
+    
+    if(input$viewData1 == 1){
+      tmp <- p_data_cust()  %>%
+        select(c("name", "value", "date")) %>%
+        arrange(date) %>%
+        pivot_wider(names_from = name, values_from = value)
+      
+      DT::datatable(tmp, options = list(pageLength = 10))
+      
+    } else{
+      cat("Change selection to display table.")
+    }
+
+  )
+
+
+
+
+  
+  
+  
+  # Plot (main) ---------------
+  output$p_plot <- renderPlotly({ggplotly(
+    p_data() %>%
+      ggplot() +
+      geom_line(aes(x=date, y=value, colour = name)) +
+      theme_minimal() +
+      xlab("Date") +
+      ylab("Percent")
+  )})
+  
+  
+  # Plot (sub) ---------------
+  output$p_sub_plot <- renderPlotly({ggplotly(
+    p_data_sub() %>%
+      ggplot() +
+      geom_line(aes(x=date, y=value, colour = name)) +
+      theme_minimal() +
+      xlab("Date") +
+      ylab("Percent")
+  )})
+  
+  
+  # Plot (sub-sub) ---------------
+  output$p_sub_sub_plot <- renderPlotly({ggplotly(
+    p_data_sub_sub() %>%
+      ggplot() +
+      geom_line(aes(x=date, y=value, colour = name)) +
+      theme_minimal() +
+      xlab("Date") +
+      ylab("Percent")
+  )})
+  
+  
   # Table ---------------
   output$p_table <- renderTable({
     if(input$viewData == 1){
@@ -782,12 +844,12 @@ server <- function(input, output, session) {
         select(c("name", "value", "date")) %>%
         arrange(date) %>%
         pivot_wider(names_from = date, values_from = value)
-      } else{
+    } else{
       cat("Change selection to display table.")
     }
     
-
-
+    
+    
   })
   
   output$p_table_sub <- renderTable({
@@ -799,7 +861,7 @@ server <- function(input, output, session) {
     } else{
       cat("Change selection to display table.")
     }
-
+    
   })
   
   
@@ -812,26 +874,10 @@ server <- function(input, output, session) {
     } else{
       cat("Change selection to display table.")
     }
-   
-    
-  })
-  
-  
-  output$p_table_cust <- renderTable({
-    if(input$viewData1 == 1){
-      p_data_cust()  %>%
-        select(c("name", "value", "date")) %>%
-        arrange(date) %>%
-        pivot_wider(names_from = date, values_from = value)
-    } else{
-      cat("Change selection to display table.")
-    }
     
     
   })
-
-
-
+  
 
 #   p_data_0 <- reactive({
 #     cpi_splits(cpi_data = cpi_long
