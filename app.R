@@ -256,7 +256,7 @@ ui <- navbarPage(
             , selectInput("rba_desc_1"
                              , label = "RBA Series"
                              , choices = rba_series[["A1"]]
-                             , selected = rba_series[["A1"]][1]
+                             , selected = "" #rba_series[["A1"]][1]
             )
           )
           
@@ -427,9 +427,11 @@ ui <- navbarPage(
         )
         ## outputs ----
         , mainPanel(
+          uiOutput("tab")
+          
 
           ## Chart
-          h4("Interactive Chart:")
+          , h4("Interactive Chart:")
           , plotlyOutput("p_cust")
           , hr()
           
@@ -533,10 +535,18 @@ ui <- navbarPage(
 # SERVER ----
 server <- function(input, output, session) {
 
+  #weblinks
+  
+  fred_link <- a("FRED", href="https://fred.stlouisfed.org/tags/series")
+  dbnomics_link <- a("dbnomics", href="https://db.nomics.world")
+  rba_link <- a("RBA Statistical Tables", href="https://www.rba.gov.au/statistics/tables/")
+  
+  output$tab <- renderUI({
+    tagList("Data Sources:", fred_link, dbnomics_link, rba_link)
+  })
+  
+  
   observe({
-    
-    
-    
     ## chart formatting
     if(input$cht_y_invert == F){
       y_vals <- pretty(c(min(p_data_cust()$value), max(p_data_cust()$value)+(max(p_data_cust()$value) - min(p_data_cust()$value))/10)
@@ -558,7 +568,7 @@ server <- function(input, output, session) {
   })
   
 
-  #------ Whenever any of the inputs are changed, it only modifies the memory----
+  # Whenever any of the inputs are changed, it only modifies the memory
   observe({
     req(input$rba_table_1
         , input$rba_table_2
@@ -575,7 +585,7 @@ server <- function(input, output, session) {
     session_store$rba_desc_4 <-  rba_series[[input$rba_table_4]]
   })
 
-  #------ Update all UI elements using the values stored in memory ------
+  #------ Update all UI elements using the values stored in memory 
   observe({
     updateSelectInput(session, "rba_desc_1", choices = session_store$rba_desc_1, selected = session_store$rba_desc_1[1])
     updateSelectInput(session, "rba_desc_2", choices = session_store$rba_desc_2, selected = session_store$rba_desc_2[1])
@@ -584,8 +594,6 @@ server <- function(input, output, session) {
 
   })
 
-
-  
   session_store <- reactiveValues()
   
   p_data <- reactive({

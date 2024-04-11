@@ -9,7 +9,8 @@ fred_data <- function(
     , start_date = lubridate::ymd(min(input$year1), truncated = 2L)
     , end_date = lubridate::ymd(max(input$year1), truncated = 2L)
 ){
-  tmp <- fredr(
+  shinyCatch(return(
+    fredr(
     series_id = series,
     observation_start = start_date,
     observation_end = end_date
@@ -17,7 +18,7 @@ fred_data <- function(
     select(c(date, value, series_id)) %>%
     rename(name = series_id)
   
-  return(tmp)
+  ))
 }
 
 
@@ -33,7 +34,9 @@ db_data <- function(
     , start_date = lubridate::ymd(min(input$year1), truncated = 2L)
     , end_date = lubridate::ymd(max(input$year1), truncated = 2L)
 ){
-  tmp <- rdb(
+  
+  shinyCatch(return(
+    rdb(
     ids = series
   ) %>%
     select(c(period, value, dataset_name)) %>%
@@ -43,8 +46,10 @@ db_data <- function(
     filter(date <= end_date
            , date >= start_date) %>%
     drop_na()
-  
-  return(tmp)
+  ),
+  position = "bottom-right",
+  blocking_level = "error"
+  )
 }
 
 
@@ -81,6 +86,7 @@ rba_data <- function(
     , start_date = lubridate::ymd(min(input$year1), truncated = 2L)
     , end_date = lubridate::ymd(max(input$year1), truncated = 2L)
 ){
+  if(series != ""){
   tmp <- rba_desc_id %>%
     filter(table_no == table
              , description == series) %>%
@@ -96,6 +102,7 @@ rba_data <- function(
     
     return(tmp)
 
+  }
   }
   
 

@@ -16,6 +16,7 @@ library(plotly)
 library(writexl)
 library(fuzzyjoin)
 library(lubridate)
+library(spsComps)
 
 '%!in%' <- function(x,y)!('%in%'(x,y))
 Sys.setenv(R_READABS_PATH = here("data"))
