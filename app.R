@@ -222,8 +222,6 @@ ui <- navbarPage(
                         , value = "AMECO/ZUTN/EA19.1.0.0.0.ZUTN"
             )
           )
-          
-          
           , conditionalPanel(
             condition = "input.source_1 == `local`"
             # , selectizeInput("local_1"
@@ -245,6 +243,20 @@ ui <- navbarPage(
                              , choices = region_list
                              , selected = region_list[[1]]
                              , multiple = TRUE
+            )
+          )
+          
+          , conditionalPanel(
+            condition = "input.source_1 == `rba`"
+            , selectInput("rba_table_1"
+                             , "RBA Table"
+                             , choices = names(rba_series)
+                             , selected = "A1"
+                             )
+            , selectInput("rba_desc_1"
+                             , label = "RBA Series"
+                             , choices = rba_series[["A1"]]
+                             , selected = rba_series[["A1"]][1]
             )
           )
           
@@ -292,6 +304,17 @@ ui <- navbarPage(
                              , multiple = TRUE
             )
           )
+          , conditionalPanel(
+            condition = "input.source_2 == `rba`"
+            , selectizeInput("rba_table_2"
+                             , "RBA Table"
+                             , choices = names(rba_series)
+                             , selected = "F16")
+            , selectizeInput("rba_desc_2"
+                             , label = "RBA Series"
+                             , choices = rba_series[[1]]
+            )
+          )
           
           
           , hr()
@@ -335,7 +358,17 @@ ui <- navbarPage(
                              , multiple = TRUE
             )
           )
-          
+          , conditionalPanel(
+            condition = "input.source_3 == `rba`"
+            , selectizeInput("rba_table_3"
+                             , "RBA Table"
+                             , choices = names(rba_series)
+                             , selected = "F16")
+            , selectizeInput("rba_desc_3"
+                             , label = "RBA Series"
+                             , choices = rba_series[[1]]
+            )
+          )
           
           , hr()
           , h4("Series 4")
@@ -378,6 +411,17 @@ ui <- navbarPage(
                              , multiple = TRUE
             )
           )
+          , conditionalPanel(
+            condition = "input.source_4 == `rba`"
+            , selectizeInput("rba_table_4"
+                             , "RBA Table"
+                             , choices = names(rba_series)
+                             , selected = "F16")
+            , selectizeInput("rba_desc_4"
+                             , label = "RBA Series"
+                             , choices = rba_series[[1]]
+            )
+          )
           
           
         )
@@ -400,7 +444,7 @@ ui <- navbarPage(
           , fluidRow(
             column(3,
                    h4("More Inputs:")
-                   , selectizeInput("data_freq", "Data Frequency:", choices = c("Day", "Week", "Month", "Quarter", "Annual"))
+                   , selectizeInput("data_freq", "x Data Frequency:", choices = c("Day", "Week", "Month", "Quarter", "Annual"))
                    , numericInput("moving_avg", "Moving Average (no. obs):", value = 1)
             ),
             column(4, offset = 1,
@@ -411,7 +455,7 @@ ui <- navbarPage(
             column(4,
                    dateInput("vertical_1", "Vertical Line (1)", value = as.Date(NA))
                    , dateInput("vertical_2", "Vertical Line (2)", value = as.Date(NA))
-                   , selectizeInput("recession_shading", "Recession Shading:"
+                   , selectizeInput("recession_shading", "x Recession Shading:"
                                     , choices = c("AU", "US", "none"), selected = "none")
             )
           ),
@@ -490,6 +534,10 @@ ui <- navbarPage(
 server <- function(input, output, session) {
 
   observe({
+    
+    
+    
+    ## chart formatting
     if(input$cht_y_invert == F){
       y_vals <- pretty(c(min(p_data_cust()$value), max(p_data_cust()$value)+(max(p_data_cust()$value) - min(p_data_cust()$value))/10)
                        , n = n_ticks) 
@@ -499,14 +547,44 @@ server <- function(input, output, session) {
                        , n = n_ticks) 
       title_placement <- min(y_vals) +1/20*(max(y_vals)-min(y_vals))
     }
-    
-    updateSelectInput(session, "sub_sub_split", choices = name_list[[input$sub_split]])
     updateNumericInput(session, "cht_y_min", value = min(y_vals))
     updateNumericInput(session, "cht_y_max", value = max(y_vals))
     updateNumericInput(session, "cht_y_increment", value = y_vals[2] - y_vals[1])
     updateNumericInput(session, "cht_title_y_placement", value = title_placement)
     
+    # data choices 
+    updateSelectInput(session, "sub_sub_split", choices = name_list[[input$sub_split]])
+    
   })
+  
+
+  #------ Whenever any of the inputs are changed, it only modifies the memory----
+  observe({
+    req(input$rba_table_1
+        , input$rba_table_2
+        , input$rba_table_3
+        , input$rba_table_4
+        , input$rba_desc_1
+        , input$rba_desc_2
+        , input$rba_desc_3
+        , input$rba_desc_4)
+
+    session_store$rba_desc_1 <-  rba_series[[input$rba_table_1]]
+    session_store$rba_desc_2 <-  rba_series[[input$rba_table_2]]
+    session_store$rba_desc_3 <-  rba_series[[input$rba_table_3]]
+    session_store$rba_desc_4 <-  rba_series[[input$rba_table_4]]
+  })
+
+  #------ Update all UI elements using the values stored in memory ------
+  observe({
+    updateSelectInput(session, "rba_desc_1", choices = session_store$rba_desc_1, selected = session_store$rba_desc_1[1])
+    updateSelectInput(session, "rba_desc_2", choices = session_store$rba_desc_2, selected = session_store$rba_desc_2[1])
+    updateSelectInput(session, "rba_desc_3", choices = session_store$rba_desc_3, selected = session_store$rba_desc_3[1])
+    updateSelectInput(session, "rba_desc_4", choices = session_store$rba_desc_4, selected = session_store$rba_desc_4[1])
+
+  })
+
+
   
   session_store <- reactiveValues()
   
@@ -571,8 +649,7 @@ server <- function(input, output, session) {
   # 
   # 
   # 
-  p_data_edit <- reactive({
-    
+  p_data_edit_1 <- reactive({
     if (input$source_1 == "local"){
       return_data_1 <- cpi_splits_cust(cpi_data = cpi_data_all
                                   , transformation = input$trnsfrm1
@@ -592,9 +669,16 @@ server <- function(input, output, session) {
                                  , start_date = lubridate::ymd(min(input$year1), truncated = 2L)
                                  , end_date = lubridate::ymd(max(input$year1), truncated = 2L)
       )
+    } else if (input$source_1 == "rba"){
+      return_data_1 <- rba_data(table = input$rba_table_1
+                                , series = input$rba_desc_1
+                               , start_date = lubridate::ymd(min(input$year1), truncated = 2L)
+                               , end_date = lubridate::ymd(max(input$year1), truncated = 2L)
+      )
     }
-    
-    
+  })
+  
+  p_data_edit_2 <- reactive({
     if (input$source_2 == "local"){
       return_data_2 <- cpi_splits_cust(cpi_data = cpi_data_all
                                      , transformation = input$trnsfrm1
@@ -614,9 +698,17 @@ server <- function(input, output, session) {
                                  , start_date = lubridate::ymd(min(input$year1), truncated = 2L)
                                  , end_date = lubridate::ymd(max(input$year1), truncated = 2L)
       )
+    } else if (input$source_2 == "rba"){
+      return_data_2 <- rba_data(table = input$rba_table_2
+                                , series = input$rba_desc_2
+                               , start_date = lubridate::ymd(min(input$year1), truncated = 2L)
+                               , end_date = lubridate::ymd(max(input$year1), truncated = 2L)
+      )
     }
+  })
     
     
+  p_data_edit_3 <- reactive({
     if (input$source_3 == "local"){
       return_data_3 <- cpi_splits_cust(cpi_data = cpi_data_all
                                        , transformation = input$trnsfrm1
@@ -636,10 +728,17 @@ server <- function(input, output, session) {
                                  , start_date = lubridate::ymd(min(input$year1), truncated = 2L)
                                  , end_date = lubridate::ymd(max(input$year1), truncated = 2L)
       )
+    }  else if (input$source_3 == "rba"){
+      return_data_3 <- rba_data(table = input$rba_table_3
+                                , series = input$rba_desc_3
+                               , start_date = lubridate::ymd(min(input$year1), truncated = 2L)
+                               , end_date = lubridate::ymd(max(input$year1), truncated = 2L)
+      )
     }
+  })
     
     
-    
+  p_data_edit_4 <- reactive({
     if (input$source_4 == "local"){
       return_data_4 <- cpi_splits_cust(cpi_data = cpi_data_all
                                        , transformation = input$trnsfrm1
@@ -661,15 +760,21 @@ server <- function(input, output, session) {
                                  , start_date = lubridate::ymd(min(input$year1), truncated = 2L)
                                  , end_date = lubridate::ymd(max(input$year1), truncated = 2L)
       )
+    } else if (input$source_4 == "rba"){
+      return_data_4 <- rba_data(table = input$rba_table_4
+                                , series = input$rba_desc_4
+                               , start_date = lubridate::ymd(min(input$year1), truncated = 2L)
+                               , end_date = lubridate::ymd(max(input$year1), truncated = 2L)
+      )
     }
-  
+  })
     
-
-    
-    return(return_data_1 %>%
-             rbind(return_data_2) %>%
-             rbind(return_data_3) %>%
-             rbind(return_data_4))
+  p_data_edit <- reactive({
+    return(p_data_edit_1() %>%
+             rbind(p_data_edit_2()) %>%
+             rbind(p_data_edit_3()) %>%
+             rbind(p_data_edit_4())
+    )
   })
   
   

@@ -1,6 +1,7 @@
 data_sources <- list("local" 
                     , "FRED"
                     , "dbnomics"
+                    , "rba"
 )
 
 
