@@ -1,4 +1,67 @@
-#### fredr integration
+# bloomberg  ----
+
+library(Rblpapi)
+
+# path_input_excel <- "//romulus/ecd_h$/Reuters/FMU/fmuRcharts/input_excel.xlsm"
+# bbg_ref <- read_excel(path = path_input_excel
+#            , sheet = "Queries"
+#            , skip = 1)  %>%
+#   select(c(9:11)) %>%
+#   drop_na()
+#
+# save(bbg_ref, file = here("data", "bbg_ref.Rda"))
+
+load(here("data", "bbg_ref.Rda"))
+
+bbg_ref <- bbg_ref %>%
+  arrange(Category, Security)
+
+bbg_categories <- unique(bbg_ref$Category)
+
+bbg_series <- list()
+for (i in 1:length(bbg_categories)){
+  bbg_series[[i]] <- bbg_ref %>%
+    filter(Category == bbg_categories[i]) %>%
+    pull(Description)
+}
+names(bbg_series) <- bbg_categories
+
+bbg_tickers <- list()
+for (i in 1:length(bbg_categories)){
+  bbg_tickers[[i]] <- bbg_ref %>%
+    filter(Category == bbg_categories[i]) %>%
+    pull(Security)
+}
+names(bbg_tickers) <- bbg_categories
+
+# blpConnect()
+
+bbg_data <- function(
+    series = input$bloomberg_ticker_1
+    # , desc = input$bloomberg_desc_1
+    , start_date = lubridate::ymd(min(input$year1), truncated = 2L)
+    , end_date = lubridate::ymd(max(input$year1), truncated = 2L)
+){
+  shinyCatch(return(
+    bdh(securities = series,
+              fields = c("PX_LAST"),
+              start.date=start_date
+  ) %>%
+    mutate(security = series) %>%
+    select(c(3,1,2)) %>%
+    `colnames<-`(c("name", "date", "value"))
+  
+))
+}
+
+
+
+
+
+
+
+
+# fredr ----
 
 library(fredr)
 Sys.getenv("FRED_API_KEY")
@@ -25,7 +88,7 @@ fred_data <- function(
 
 
 
-#### dbnomics integration
+# dbnomics ----
 
 library(rdbnomics)
 
@@ -57,7 +120,7 @@ db_data <- function(
 
 
 
-#### read_rba integration
+# read_rba ----
 
 library(readrba)
 
@@ -86,6 +149,7 @@ rba_data <- function(
     , start_date = lubridate::ymd(min(input$year1), truncated = 2L)
     , end_date = lubridate::ymd(max(input$year1), truncated = 2L)
 ){
+  
   if(series != ""){
   tmp <- rba_desc_id %>%
     filter(table_no == table

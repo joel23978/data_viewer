@@ -14,6 +14,8 @@ library(scales)
 library(htmlwidgets)
 library(shinyWidgets)
 library(DT)
+library(shinyToastify)
+
 
 source(here::here("cpi_annual.R"))
 source(here::here("plot_functions.R"))
@@ -22,15 +24,469 @@ source(here::here("external_data.R"))
 set_default_values()
 
 
+js <- '
+async function getImageBlobFromUrl(url) {
+  const fetchedImageData = await fetch(url);
+  const blob = await fetchedImageData.blob();
+  return blob;
+}
+$(document).ready(function () {
+  $("#copybtn").on("click", async () => {
+    const src = $("#p_cust_static>img").attr("src");
+    try {
+      const blob = await getImageBlobFromUrl(src);
+      await navigator.clipboard.write([
+        new ClipboardItem({
+          [blob.type]: blob
+        })
+      ]);
+      Shiny.setInputValue("success", true, {priority: "event"});
+    } catch (err) {
+      console.error(err.name, err.message);
+      Shiny.setInputValue("failure", true, {priority: "event"});
+    }
+  });
+});
+'
+
 
 # UI ----
 ui <- navbarPage(
+  
   
   "Data Explorer",
   
   # Panel 1 ----
   tabPanel(
-    "CPI Viewer",
+    "External",
+    
+    ## inputs ----
+    fluidPage(
+      tags$head(
+        tags$style(HTML("hr {border-top: 1px solid #000000;}")),
+        tags$script(HTML(js))
+      ),
+      
+      sidebarLayout(
+        sidebarPanel(
+          h4("Data Inputs")
+          , sliderInput("year1"
+                        , "Date range"
+                        , min = as.numeric(year(min(cpi_data_all$date)))
+                        , max = as.numeric(year(max(cpi_data_all$date)))
+                        , value = c(2014, as.numeric(year(max(cpi_data_all$date)))),
+                        sep = "")
+          , selectInput("viewData1"
+                        , label = "Display Table"
+                        , choices = list("No"=0
+                                         , "Yes"=1
+                        )
+          )
+          
+          , selectInput("trnsfrm1"
+                        , label = "Transformation"
+                        , choices = list("index" 
+                                         , "y.y" 
+                                         , "q.q" 
+                                         , "rebased index"
+                                         #, "Contribution (Proportion)" = 3 
+                        )
+                        , selected = "y.y")
+          , conditionalPanel(
+            condition = "input.trnsfrm1 == `rebased index`"
+            , dateInput("rebase_date"
+                        , label = "Date (rebase)"
+                        , startview = "year"
+                        , value = "2019-12-31"
+                        
+            )
+            
+          )
+          
+          ## Series 1 ----
+          , hr()
+          , h4("Series 1")
+          , selectInput("source_1"
+                        , label = "Data Source"
+                        , choices = data_sources
+                        , selected = "local")
+          
+          , conditionalPanel(
+            condition = "input.source_1 == `FRED`"
+            , textInput("fred_series_1"
+                        , label  = "FRED Series ID"
+                        , value = "UNRATE"
+            )
+          )
+          , conditionalPanel(
+            condition = "input.source_1 == `dbnomics`"
+            , textInput("dbnomics_series_1"
+                        , label  = "dbnomics Series ID"
+                        , value = "AMECO/ZUTN/EA19.1.0.0.0.ZUTN"
+            )
+          )
+          , conditionalPanel(
+            condition = "input.source_1 == `local`"
+            # , selectizeInput("local_1"
+            #                  , "Local Series"
+            #                  , choices = list("CPI")
+            #                  , selected = "CPI")
+            , selectizeInput("text_1"
+                             , "Search"
+                             , choices = list(
+                               Category_1 = cat1,
+                               Category_2 = cat2,
+                               Category_3 = cat3,
+                               Category_4 = cat4
+                             )
+                             , selected = cat1[[1]]
+                             , multiple = TRUE)
+            , selectizeInput("region_1"
+                             , label = "Region"
+                             , choices = region_list
+                             , selected = region_list[[1]]
+                             , multiple = TRUE
+            )
+          )
+          
+          , conditionalPanel(
+            condition = "input.source_1 == `rba`"
+            , selectInput("rba_table_1"
+                          , "RBA Table"
+                          , choices = names(rba_series)
+                          , selected = "A1"
+            )
+            , selectInput("rba_desc_1"
+                          , label = "RBA Series"
+                          , choices = rba_series[["A1"]]
+                          , selected = "" #rba_series[["A1"]][1]
+            )
+          )
+          
+          , conditionalPanel(
+            condition = "input.source_1 == `bloomberg`"
+            , selectInput("bloomberg_category_1"
+                          , "Category"
+                          , choices = bbg_categories
+                          , selected = bbg_categories[1]
+            )
+            , selectizeInput("bloomberg_desc_1"
+                          , label = "Series"
+                          , choices = bbg_series[[1]]
+                          , selected = "" 
+                          , multiple = T
+            )
+            , selectizeInput("bloomberg_ticker_1"
+                          , label = "Ticker (for query)"
+                          , choices = bbg_tickers[[1]]
+                          , selected = "" 
+                          , options = list(create = TRUE)
+                          , multiple = T
+            )
+          )
+          
+          , selectizeInput("vis_type1", "Series plot:"
+                           , choices = c("line", "bar", "scatter"))
+          
+          
+          
+      
+          
+          ## Series 2 ----
+        
+          , hr()
+          , h4("Series 2")
+          , selectInput("source_2"
+                        , label = "Data Source"
+                        , choices = data_sources
+                        , selected = "local")
+          
+          , conditionalPanel(
+            condition = "input.source_2 == `FRED`"
+            , textInput("fred_series_2"
+                        , label  = "FRED Series ID"
+                        , value = "DFF"
+            )
+          )
+          , conditionalPanel(
+            condition = "input.source_2 == `dbnomics`"
+            , textInput("dbnomics_series_2"
+                        , label  = "dbnomics Series ID"
+                        , value = "AMECO/ZUTN/EA19.1.0.0.0.ZUTN"
+            )
+          )
+          
+          
+          , conditionalPanel(
+            condition = "input.source_2 == `local`"
+            , selectizeInput("text_2"
+                             , "Search"
+                             , choices = list(
+                               Category_1 = cat1,
+                               Category_2 = cat2,
+                               Category_3 = cat3,
+                               Category_4 = cat4
+                             )
+                             , selected = NULL
+                             , multiple = TRUE)
+            , selectizeInput("region_2"
+                             , label = "Region"
+                             , choices = region_list
+                             , selected = region_list[[1]]
+                             , multiple = TRUE
+            )
+          )
+          , conditionalPanel(
+            condition = "input.source_2 == `rba`"
+            , selectizeInput("rba_table_2"
+                             , "RBA Table"
+                             , choices = names(rba_series)
+                             , selected = "F16")
+            , selectizeInput("rba_desc_2"
+                             , label = "RBA Series"
+                             , choices = rba_series[[1]]
+            )
+          )
+          
+          
+          
+          
+          
+          
+          
+          
+          
+          ## Series 3 ----
+        
+          , hr()
+          , h4("Series 3")
+          , selectInput("source_3"
+                        , label = "Data Source"
+                        , choices = data_sources
+                        , selected = "local")
+          
+          , conditionalPanel(
+            condition = "input.source_3 == `FRED`"
+            , textInput("fred_series_3"
+                        , label  = "FRED Series ID"
+                        , value = "PCE"
+            )
+          )
+          , conditionalPanel(
+            condition = "input.source_3 == `dbnomics`"
+            , textInput("dbnomics_series_3"
+                        , label  = "dbnomics Series ID"
+                        , value = "AMECO/ZUTN/EA19.1.0.0.0.ZUTN"
+            )
+          )
+          
+          , conditionalPanel(
+            condition = "input.source_3 == `local`"
+            , selectizeInput("text_3"
+                             , "Search"
+                             , choices = list(
+                               Category_1 = cat1,
+                               Category_2 = cat2,
+                               Category_3 = cat3,
+                               Category_4 = cat4
+                             )
+                             , selected = NULL
+                             , multiple = TRUE)
+            , selectizeInput("region_3"
+                             , label = "Region"
+                             , choices = region_list
+                             , selected = region_list[[1]]
+                             , multiple = TRUE
+            )
+          )
+          , conditionalPanel(
+            condition = "input.source_3 == `rba`"
+            , selectizeInput("rba_table_3"
+                             , "RBA Table"
+                             , choices = names(rba_series)
+                             , selected = "F16")
+            , selectizeInput("rba_desc_3"
+                             , label = "RBA Series"
+                             , choices = rba_series[[1]]
+            )
+          )
+          
+          
+          
+          
+          
+          
+          
+          
+          
+          ## Series 4 ----
+        
+          , hr()
+          , h4("Series 4")
+          , selectInput("source_4"
+                        , label = "Data Source"
+                        , choices = data_sources
+                        , selected = "local")
+          
+          , conditionalPanel(
+            condition = "input.source_4 == `FRED`"
+            , textInput("fred_series_4"
+                        , label  = "FRED Series ID"
+                        , value = "GDP"
+            )
+          )
+          , conditionalPanel(
+            condition = "input.source_4 == `dbnomics`"
+            , textInput("dbnomics_series_4"
+                        , label  = "dbnomics Series ID"
+                        , value = "AMECO/ZUTN/EA19.1.0.0.0.ZUTN"
+            )
+          )
+          
+          , conditionalPanel(
+            condition = "input.source_4 == `local`"
+            , selectizeInput("text_4"
+                             , "Search"
+                             , choices = list(
+                               Category_1 = cat1,
+                               Category_2 = cat2,
+                               Category_3 = cat3,
+                               Category_4 = cat4
+                             )
+                             , selected = NULL
+                             , multiple = TRUE)
+            , selectizeInput("region_4"
+                             , label = "Region"
+                             , choices = region_list
+                             , selected = region_list[[1]]
+                             , multiple = TRUE
+            )
+          )
+          , conditionalPanel(
+            condition = "input.source_4 == `rba`"
+            , selectizeInput("rba_table_4"
+                             , "RBA Table"
+                             , choices = names(rba_series)
+                             , selected = "F16")
+            , selectizeInput("rba_desc_4"
+                             , label = "RBA Series"
+                             , choices = rba_series[[1]]
+            )
+          )
+          
+          
+        )
+        ## outputs ----
+        , mainPanel(
+          uiOutput("tab")
+          
+          
+          ## Chart
+          , h4("Interactive Chart:")
+          , plotlyOutput("p_cust")
+          , hr()
+          
+          
+          ## Data
+          , h4("Data:")
+          , DT::dataTableOutput("p_table_cust") 
+          , hr()
+          
+          
+          ## Inputs
+          , fluidRow(
+            column(3,
+                   h4("More Inputs:")
+                   , selectizeInput("data_freq", "x Data Frequency:", choices = c("Day", "Week", "Month", "Quarter", "Annual"))
+                   , numericInput("moving_avg", "Moving Average (no. obs):", value = 1)
+            ),
+            column(4, offset = 1,
+                   numericInput("horizontal_1", "Horizontal Line (1)", value = NULL)
+                   , numericInput("horizontal_2", "Horizontal Line (2)", value = NULL)
+                   , numericRangeInput("horizontal_shading", "Horizontal Shading", value = c(NA,NA))
+            ),
+            column(4,
+                   dateInput("vertical_1", "Vertical Line (1)", value = as.Date(NA))
+                   , dateInput("vertical_2", "Vertical Line (2)", value = as.Date(NA))
+                   , selectizeInput("recession_shading", "x Recession Shading:"
+                                    , choices = c("AU", "US", "none"), selected = "none")
+            )
+          ),
+          hr()
+          
+          ## Static Chart
+          , h4("Static Chart:")
+          , plotOutput("p_cust_static")
+          , fluidRow(
+            useShinyToastify()
+            , actionButton("copybtn", "Copy", icon = icon("copy"), class = "btn-primary")        
+            
+          )
+          
+          
+          
+          
+          , hr()
+          , fluidRow(
+            column(width = 3,
+                   h4("Chart Inputs")
+                   , selectizeInput("cht_type", "Chart Type:", choices =  "simple") #list()
+                   , selectizeInput("cht_legend", "Legend:", choices = c("none", "bottom"), selected = "bottom")
+                   , selectizeInput("cht_colour_palette", "Colour palette:", choices = palette.pals()) #list()
+                   
+                   , textInput("cht_title",  "Chart title:", value = "please_add_title")
+                   , textInput("cht_y_axes_unit",  "y-axes (unit-label):", value = "%")
+                   , textInput("cht_note",  "Note/Source:", value = "c. Joel Findlay")
+                   
+            ),
+            column(width = 3, offset = 1
+                   , h4("Manual Override")
+                   , numericInput("cht_title_y_placement", "Title placement:", value = 17)
+                   , numericInput("cht_y_min", "y-axes (min):", value = 17)
+                   , numericInput("cht_y_max", "y-axes (max):", value = 5)
+                   , numericInput("cht_y_increment", "y-axes (increment):", value = 2)
+                   , selectInput("cht_y_invert", "y-axes (invert):", choices =c(F, T), selected = F) 
+                   
+                   , selectizeInput("cht_x_date_format", "x-axis (date format)", choices = c("%d-%b", "%b-%y", "%b-%Y", "%m-%Y", "%d-%m-%Y", "%Y")
+                                    , options = list(create = TRUE), selected = "%b-%y") #list()
+                   , numericInput("cht_x_num_labels", "x-axis (no. labels):", value = 6)
+            ),
+            column(width = 3, offset = 1
+                   , h4("Font Size")
+                   , numericInput("cht_title_size", "Title:", value = 8)
+                   , numericInput("cht_axes_font_size", "Axes:", value = 15)
+                   , numericInput("cht_label_size", "Series labels:", value = 7)
+                   , numericInput("cht_height", "Height:", value = 5) #list()
+                   , numericInput("cht_width", "Width:", value = 7) #list()
+                   
+            )
+          )
+          , hr()
+          
+          
+          
+          ## More inputs
+          , fluidRow(
+            h4("Exports:")
+            , downloadButton("exportData", "Data (.csv)")
+            , downloadButton("exportHTML", "Chart (.html)")
+            , downloadButton("exportPNG", "Chart (.png)")
+            , downloadButton("exportPPTX", "x Chart (.pptx)")
+            , downloadButton("exportR", "x Chart (.R)")
+
+          )
+          , hr()
+          
+        )
+      )
+    )
+  )
+  
+  
+  
+  # Panel 2 ----
+  , tabPanel(
+    "CPI",
     
     ## inputs ----
     fluidPage(
@@ -155,372 +611,7 @@ ui <- navbarPage(
     )
   )
   
-  # Panel 2 ----
-  , tabPanel(
-    "CPI Explorer",
-    
-    ## inputs ----
-    fluidPage(
-      tags$head(
-        tags$style(HTML("hr {border-top: 1px solid #000000;}"))
-      ),
-      
-      sidebarLayout(
-        sidebarPanel(
-          h4("Data Inputs")
-          , sliderInput("year1"
-                        , "Date range"
-                        , min = as.numeric(year(min(cpi_data_all$date)))
-                        , max = as.numeric(year(max(cpi_data_all$date)))
-                        , value = c(2014, as.numeric(year(max(cpi_data_all$date)))),
-                        sep = "")
-          , selectInput("viewData1"
-                        , label = "Display Table"
-                        , choices = list("No"=0
-                                         , "Yes"=1
-                        )
-          )
-          
-          , selectInput("trnsfrm1"
-                        , label = "Transformation"
-                        , choices = list("index" 
-                                         , "y.y" 
-                                         , "q.q" 
-                                         , "rebased index"
-                                         #, "Contribution (Proportion)" = 3 
-                        )
-                        , selected = "y.y")
-          , conditionalPanel(
-            condition = "input.trnsfrm1 == `rebased index`"
-            , dateInput("rebase_date"
-                        , label = "Date (rebase)"
-                        , startview = "year"
-                        , value = "2019-12-31"
-                        
-            )
-            
-          )
-          
-          , hr()
-          , h4("Series 1")
-          , selectInput("source_1"
-                        , label = "Data Source"
-                        , choices = data_sources
-                        , selected = "local")
-          
-          , conditionalPanel(
-            condition = "input.source_1 == `FRED`"
-            , textInput("fred_series_1"
-                        , label  = "FRED Series ID"
-                        , value = "UNRATE"
-            )
-          )
-          , conditionalPanel(
-            condition = "input.source_1 == `dbnomics`"
-            , textInput("dbnomics_series_1"
-                        , label  = "dbnomics Series ID"
-                        , value = "AMECO/ZUTN/EA19.1.0.0.0.ZUTN"
-            )
-          )
-          , conditionalPanel(
-            condition = "input.source_1 == `local`"
-            # , selectizeInput("local_1"
-            #                  , "Local Series"
-            #                  , choices = list("CPI")
-            #                  , selected = "CPI")
-            , selectizeInput("text_1"
-                             , "Search"
-                             , choices = list(
-                               Category_1 = cat1,
-                               Category_2 = cat2,
-                               Category_3 = cat3,
-                               Category_4 = cat4
-                             )
-                             , selected = cat1[[1]]
-                             , multiple = TRUE)
-            , selectizeInput("region_1"
-                             , label = "Region"
-                             , choices = region_list
-                             , selected = region_list[[1]]
-                             , multiple = TRUE
-            )
-          )
-          
-          , conditionalPanel(
-            condition = "input.source_1 == `rba`"
-            , selectInput("rba_table_1"
-                             , "RBA Table"
-                             , choices = names(rba_series)
-                             , selected = "A1"
-                             )
-            , selectInput("rba_desc_1"
-                             , label = "RBA Series"
-                             , choices = rba_series[["A1"]]
-                             , selected = "" #rba_series[["A1"]][1]
-            )
-          )
-          
-          , selectizeInput("vis_type1", "Series plot:"
-                           , choices = c("line", "bar", "scatter"))
-          , hr()
-          , h4("Series 2")
-          , selectInput("source_2"
-                        , label = "Data Source"
-                        , choices = data_sources
-                        , selected = "local")
-          
-          , conditionalPanel(
-            condition = "input.source_2 == `FRED`"
-            , textInput("fred_series_2"
-                        , label  = "FRED Series ID"
-                        , value = "DFF"
-            )
-          )
-          , conditionalPanel(
-            condition = "input.source_2 == `dbnomics`"
-            , textInput("dbnomics_series_2"
-                        , label  = "dbnomics Series ID"
-                        , value = "AMECO/ZUTN/EA19.1.0.0.0.ZUTN"
-            )
-          )
-          
-          
-          , conditionalPanel(
-            condition = "input.source_2 == `local`"
-            , selectizeInput("text_2"
-                             , "Search"
-                             , choices = list(
-                               Category_1 = cat1,
-                               Category_2 = cat2,
-                               Category_3 = cat3,
-                               Category_4 = cat4
-                             )
-                             , selected = NULL
-                             , multiple = TRUE)
-            , selectizeInput("region_2"
-                             , label = "Region"
-                             , choices = region_list
-                             , selected = region_list[[1]]
-                             , multiple = TRUE
-            )
-          )
-          , conditionalPanel(
-            condition = "input.source_2 == `rba`"
-            , selectizeInput("rba_table_2"
-                             , "RBA Table"
-                             , choices = names(rba_series)
-                             , selected = "F16")
-            , selectizeInput("rba_desc_2"
-                             , label = "RBA Series"
-                             , choices = rba_series[[1]]
-            )
-          )
-          
-          
-          , hr()
-          , h4("Series 3")
-          , selectInput("source_3"
-                        , label = "Data Source"
-                        , choices = data_sources
-                        , selected = "local")
-          
-          , conditionalPanel(
-            condition = "input.source_3 == `FRED`"
-            , textInput("fred_series_3"
-                        , label  = "FRED Series ID"
-                        , value = "PCE"
-            )
-          )
-          , conditionalPanel(
-            condition = "input.source_3 == `dbnomics`"
-            , textInput("dbnomics_series_3"
-                        , label  = "dbnomics Series ID"
-                        , value = "AMECO/ZUTN/EA19.1.0.0.0.ZUTN"
-            )
-          )
-          
-          , conditionalPanel(
-            condition = "input.source_3 == `local`"
-            , selectizeInput("text_3"
-                             , "Search"
-                             , choices = list(
-                               Category_1 = cat1,
-                               Category_2 = cat2,
-                               Category_3 = cat3,
-                               Category_4 = cat4
-                             )
-                             , selected = NULL
-                             , multiple = TRUE)
-            , selectizeInput("region_3"
-                             , label = "Region"
-                             , choices = region_list
-                             , selected = region_list[[1]]
-                             , multiple = TRUE
-            )
-          )
-          , conditionalPanel(
-            condition = "input.source_3 == `rba`"
-            , selectizeInput("rba_table_3"
-                             , "RBA Table"
-                             , choices = names(rba_series)
-                             , selected = "F16")
-            , selectizeInput("rba_desc_3"
-                             , label = "RBA Series"
-                             , choices = rba_series[[1]]
-            )
-          )
-          
-          , hr()
-          , h4("Series 4")
-          , selectInput("source_4"
-                        , label = "Data Source"
-                        , choices = data_sources
-                        , selected = "local")
-          
-          , conditionalPanel(
-            condition = "input.source_4 == `FRED`"
-            , textInput("fred_series_4"
-                        , label  = "FRED Series ID"
-                        , value = "GDP"
-            )
-          )
-          , conditionalPanel(
-            condition = "input.source_4 == `dbnomics`"
-            , textInput("dbnomics_series_4"
-                        , label  = "dbnomics Series ID"
-                        , value = "AMECO/ZUTN/EA19.1.0.0.0.ZUTN"
-            )
-          )
-          
-          , conditionalPanel(
-            condition = "input.source_4 == `local`"
-            , selectizeInput("text_4"
-                             , "Search"
-                             , choices = list(
-                               Category_1 = cat1,
-                               Category_2 = cat2,
-                               Category_3 = cat3,
-                               Category_4 = cat4
-                             )
-                             , selected = NULL
-                             , multiple = TRUE)
-            , selectizeInput("region_4"
-                             , label = "Region"
-                             , choices = region_list
-                             , selected = region_list[[1]]
-                             , multiple = TRUE
-            )
-          )
-          , conditionalPanel(
-            condition = "input.source_4 == `rba`"
-            , selectizeInput("rba_table_4"
-                             , "RBA Table"
-                             , choices = names(rba_series)
-                             , selected = "F16")
-            , selectizeInput("rba_desc_4"
-                             , label = "RBA Series"
-                             , choices = rba_series[[1]]
-            )
-          )
-          
-          
-        )
-        ## outputs ----
-        , mainPanel(
-          uiOutput("tab")
-          
-
-          ## Chart
-          , h4("Interactive Chart:")
-          , plotlyOutput("p_cust")
-          , hr()
-          
-          
-          ## Data
-          , h4("Data:")
-          , DT::dataTableOutput("p_table_cust") 
-          , hr()
-          
-          
-          ## Inputs
-          , fluidRow(
-            column(3,
-                   h4("More Inputs:")
-                   , selectizeInput("data_freq", "x Data Frequency:", choices = c("Day", "Week", "Month", "Quarter", "Annual"))
-                   , numericInput("moving_avg", "Moving Average (no. obs):", value = 1)
-            ),
-            column(4, offset = 1,
-                   numericInput("horizontal_1", "Horizontal Line (1)", value = NULL)
-                   , numericInput("horizontal_2", "Horizontal Line (2)", value = NULL)
-                   , numericRangeInput("horizontal_shading", "Horizontal Shading", value = c(NA,NA))
-            ),
-            column(4,
-                   dateInput("vertical_1", "Vertical Line (1)", value = as.Date(NA))
-                   , dateInput("vertical_2", "Vertical Line (2)", value = as.Date(NA))
-                   , selectizeInput("recession_shading", "x Recession Shading:"
-                                    , choices = c("AU", "US", "none"), selected = "none")
-            )
-          ),
-          hr()
-          
-          ## Static Chart
-          , h4("Static Chart:")
-          , plotOutput("p_cust_static")
-          , hr()
-          , fluidRow(
-            column(width = 3,
-                   h4("Chart Inputs")
-                   , selectizeInput("cht_type", "Chart Type:", choices =  "simple") #list()
-                   , selectizeInput("cht_legend", "Legend:", choices = c("none", "bottom"), selected = "bottom")
-                   , selectizeInput("cht_colour_palette", "Colour palette:", choices = palette.pals()) #list()
-                   
-                   , textInput("cht_title",  "Chart title:", value = "please_add_title")
-                   , textInput("cht_y_axes_unit",  "y-axes (unit-label):", value = "%")
-                   , textInput("cht_note",  "Note/Source:", value = "c. Joel Findlay")
-                   
-            ),
-            column(width = 3, offset = 1
-                   , h4("Manual Override")
-                   , numericInput("cht_title_y_placement", "Title placement:", value = 17)
-                   , numericInput("cht_y_min", "y-axes (min):", value = 17)
-                   , numericInput("cht_y_max", "y-axes (max):", value = 5)
-                   , numericInput("cht_y_increment", "y-axes (increment):", value = 2)
-                   , selectInput("cht_y_invert", "y-axes (invert):", choices =c(F, T), selected = F) 
-                  
-                   , selectizeInput("cht_x_date_format", "x-axis (date format)", choices = c("%d-%b", "%b-%y", "%b-%Y", "%m-%Y", "%d-%m-%Y", "%Y")
-                                    , options = list(create = TRUE), selected = "%b-%y") #list()
-                   , numericInput("cht_x_num_labels", "x-axis (no. labels):", value = 6)
-            ),
-            column(width = 3, offset = 1
-                   , h4("Font Size")
-                   , numericInput("cht_title_size", "Title:", value = 8)
-                   , numericInput("cht_axes_font_size", "Axes:", value = 15)
-                   , numericInput("cht_label_size", "Series labels:", value = 7)
-                   , numericInput("cht_height", "Height:", value = 5) #list()
-                   , numericInput("cht_width", "Width:", value = 7) #list()
-                   
-            )
-          )
-          , hr()
-          
-          
-          
-          ## More inputs
-          , fluidRow(
-            h4("Exports:")
-            , downloadButton("exportData", "Data (.csv)")
-            , downloadButton("exportHTML", "Chart (.html)")
-            , downloadButton("exportPNG", "Chart (.png)")
-            , downloadButton("exportPPTX", "Chart (.pptx)")
-            , downloadButton("exportR", "Chart (.R)")
-            
-          )
-         , hr()
-
-        )
-      )
-    )
-  )
+ 
   , collapsible = TRUE
 )
 
@@ -568,95 +659,98 @@ server <- function(input, output, session) {
   })
   
 
-  # Whenever any of the inputs are changed, it only modifies the memory
-  observe({
-    req(input$rba_table_1
-        , input$rba_table_2
-        , input$rba_table_3
-        , input$rba_table_4
-        , input$rba_desc_1
-        , input$rba_desc_2
-        , input$rba_desc_3
-        , input$rba_desc_4)
-
-    session_store$rba_desc_1 <-  rba_series[[input$rba_table_1]]
-    session_store$rba_desc_2 <-  rba_series[[input$rba_table_2]]
-    session_store$rba_desc_3 <-  rba_series[[input$rba_table_3]]
-    session_store$rba_desc_4 <-  rba_series[[input$rba_table_4]]
+  # Observes for updating session_store independently for each rba_table input
+  lapply(1:4, function(i) {
+    observe({
+      table_input <- input[[paste0("rba_table_", i)]]
+      if (!is.null(table_input)) {
+        session_store[[paste0("rba_desc_", i)]] <- rba_series[[table_input]] %>% na.omit()
+      }
+    })
   })
-
-  #------ Update all UI elements using the values stored in memory 
-  observe({
-    updateSelectInput(session, "rba_desc_1", choices = session_store$rba_desc_1, selected = session_store$rba_desc_1[1])
-    updateSelectInput(session, "rba_desc_2", choices = session_store$rba_desc_2, selected = session_store$rba_desc_2[1])
-    updateSelectInput(session, "rba_desc_3", choices = session_store$rba_desc_3, selected = session_store$rba_desc_3[1])
-    updateSelectInput(session, "rba_desc_4", choices = session_store$rba_desc_4, selected = session_store$rba_desc_4[1])
-
+  
+  # Observes for updating UI elements independently based on session_store
+  lapply(1:4, function(i) {
+    observe({
+      desc_data <- session_store[[paste0("rba_desc_", i)]]
+      if (length(desc_data) > 0) {
+        # Use the first available option as the default selection if it exists
+        default_selection <- ifelse(length(desc_data) >= 1, desc_data[1], NULL)
+        updateSelectInput(session, paste0("rba_desc_", i), choices = desc_data, selected = default_selection)
+      }
+    })
   })
-
+  
   session_store <- reactiveValues()
   
-  p_data <- reactive({
-    cpi_splits(cpi_data = cpi_data_all
-               , pick_split = input$splits
-               , region_split = input$splits_region
-               , transformation = input$trnsfrm
-               , dates = as.numeric(input$year)
-    ) 
+  # Observe changes in each category separately to update series
+  lapply(1:4, function(i) {
+    observe({
+      cat_input <- input[[paste0("bloomberg_category_", i)]]
+      if (!is.null(cat_input)) {
+        series_choices <- bbg_series[[cat_input]] %>% na.omit()  # Ensure no NA values
+        if (length(series_choices) > 0) {
+          updateSelectInput(session, paste0("bloomberg_desc_", i), choices = series_choices, selected = series_choices[1])
+        }
+      }
+    })
   })
   
-  p_data_sub <- reactive({
-    cpi_sub_splits(cpi_data = cpi_data_all
-                   , pick_sub_split = input$sub_split
-                   , region_split = input$splits_region
-                   , transformation = input$trnsfrm
-                   , dates = as.numeric(input$year)
+  # Observe changes in each series separately to update ticker
+  lapply(1:4, function(i) {
+    observe({
+      desc_input <- input[[paste0("bloomberg_desc_", i)]]
+      if (!is.null(desc_input)) {
+        valid_tickers <- bbg_ref %>% filter(Description %in% desc_input) %>% pull(Security) %>% na.omit()
+        if (length(valid_tickers) > 0) {
+          updateSelectInput(session, paste0("bloomberg_ticker_", i), choices = valid_tickers, selected = valid_tickers)
+        }
+      }
+    })
+  })
+  
+  
+  observeEvent(input[["success"]], {
+    showToast(
+      session,
+      input,
+      text = tags$span(
+        style = "color: white; font-size: 20px;", "Image copied!"
+      ),
+      type = "success",
+      position = "top-center",
+      autoClose = 3000,
+      pauseOnFocusLoss = FALSE,
+      draggable = FALSE,
+      style = list(
+        border = "4px solid crimson",
+        boxShadow = "rgba(0, 0, 0, 0.56) 0px 22px 30px 4px"
+      )
     )
   })
   
-  
-  p_data_sub_sub <- reactive({
-    cpi_sub_sub_splits(cpi_data = cpi_data_all
-                       , pick_sub_sub_split = input$sub_sub_split
-                       , region_split = input$splits_region
-                       , transformation = input$trnsfrm
-                       , dates = as.numeric(input$year)
+  observeEvent(input[["failure"]], {
+    showToast(
+      session,
+      input,
+      text = tags$span(
+        style = "color: white; font-size: 20px;", "Failed to copy image!"
+      ),
+      type = "error",
+      position = "top-center",
+      autoClose = 3000,
+      pauseOnFocusLoss = FALSE,
+      draggable = FALSE,
+      style = list(
+        border = "4px solid crimson",
+        boxShadow = "rgba(0, 0, 0, 0.56) 0px 22px 30px 4px"
+      )
     )
   })
   
+  # Data inputs ----
   
-  # Data query ----
-  # p_data_edit <- reactive({
-  #   
-  #   if (input$source_1 == "local"){
-  #     return_data <- cpi_splits_cust(cpi_data = cpi_data_all
-  #                                    , transformation = input$trnsfrm1
-  #                                    , dates = as.numeric(input$year1)
-  #                                    
-  #                                    , pick_split_1 = unlist(input$text_1)
-  #                                    , pick_split_2 = unlist(input$text_2)
-  #                                    , pick_split_3 = unlist(input$text_3)
-  #                                    , pick_split_4 = unlist(input$text_4)
-  #                                    
-  #                                    , region_1_split = input$region_1
-  #                                    , region_2_split = input$region_2
-  #                                    , region_3_split = input$region_3
-  #                                    , region_4_split = input$region_4
-  #                                    , rebase_date = as.Date(input$rebase_date)
-  #     ) 
-  #     
-  #   } else if (input$source_1 == "FRED"){
-  #     
-  #     return_data <- fred_data(series = input$fred_series
-  #                              , start_date = lubridate::ymd(min(input$year1), truncated = 2L)
-  #                              , end_date = lubridate::ymd(max(input$year1), truncated = 2L)
-  #     )
-  #   }
-  #   return(return_data)
-  # })
-  # 
-  # 
-  # 
+  
   p_data_edit_1 <- reactive({
     if (input$source_1 == "local"){
       return_data_1 <- cpi_splits_cust(cpi_data = cpi_data_all
@@ -913,6 +1007,71 @@ server <- function(input, output, session) {
 
 
 
+  
+  #CPI  ----
+  
+  
+  p_data <- reactive({
+    cpi_splits(cpi_data = cpi_data_all
+               , pick_split = input$splits
+               , region_split = input$splits_region
+               , transformation = input$trnsfrm
+               , dates = as.numeric(input$year)
+    ) 
+  })
+  
+  p_data_sub <- reactive({
+    cpi_sub_splits(cpi_data = cpi_data_all
+                   , pick_sub_split = input$sub_split
+                   , region_split = input$splits_region
+                   , transformation = input$trnsfrm
+                   , dates = as.numeric(input$year)
+    )
+  })
+  
+  
+  p_data_sub_sub <- reactive({
+    cpi_sub_sub_splits(cpi_data = cpi_data_all
+                       , pick_sub_sub_split = input$sub_sub_split
+                       , region_split = input$splits_region
+                       , transformation = input$trnsfrm
+                       , dates = as.numeric(input$year)
+    )
+  })
+  
+  
+  # Data query ----
+  # p_data_edit <- reactive({
+  #   
+  #   if (input$source_1 == "local"){
+  #     return_data <- cpi_splits_cust(cpi_data = cpi_data_all
+  #                                    , transformation = input$trnsfrm1
+  #                                    , dates = as.numeric(input$year1)
+  #                                    
+  #                                    , pick_split_1 = unlist(input$text_1)
+  #                                    , pick_split_2 = unlist(input$text_2)
+  #                                    , pick_split_3 = unlist(input$text_3)
+  #                                    , pick_split_4 = unlist(input$text_4)
+  #                                    
+  #                                    , region_1_split = input$region_1
+  #                                    , region_2_split = input$region_2
+  #                                    , region_3_split = input$region_3
+  #                                    , region_4_split = input$region_4
+  #                                    , rebase_date = as.Date(input$rebase_date)
+  #     ) 
+  #     
+  #   } else if (input$source_1 == "FRED"){
+  #     
+  #     return_data <- fred_data(series = input$fred_series
+  #                              , start_date = lubridate::ymd(min(input$year1), truncated = 2L)
+  #                              , end_date = lubridate::ymd(max(input$year1), truncated = 2L)
+  #     )
+  #   }
+  #   return(return_data)
+  # })
+  # 
+  # 
+  # 
 
   
   
