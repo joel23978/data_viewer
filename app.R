@@ -185,6 +185,14 @@ ui <- navbarPage(
             )
           )
           
+          
+          , textInput("label_1",  "Label:", value = "")
+          
+          # Input for the mathematical expression
+          ,textInput("expression_1", "Enter an expression (use 'data' as variable):", value = "data * 2")
+          ,actionButton("calculate_1", "Calculate")
+        
+
           , selectizeInput("vis_type1", "Series plot:"
                            , choices = c("line", "bar", "scatter"))
           
@@ -247,8 +255,9 @@ ui <- navbarPage(
                              , choices = rba_series[[1]]
             )
           )
-          
-          
+          , textInput("label_2",  "Label:", value = "")
+          ,textInput("expression_2", "Enter an expression (use 'data' as variable):", value = "data * 2")
+          ,actionButton("calculate_2", "Calculate")
           
           
           
@@ -310,6 +319,10 @@ ui <- navbarPage(
                              , choices = rba_series[[1]]
             )
           )
+          , textInput("label_3",  "Label:", value = "")
+          ,textInput("expression_3", "Enter an expression (use 'data' as variable):", value = "data * 2")
+          ,actionButton("calculate_3", "Calculate")
+          
           
           
           
@@ -373,6 +386,12 @@ ui <- navbarPage(
                              , choices = rba_series[[1]]
             )
           )
+          , textInput("label_4",  "Label:", value = "")
+          
+          ,textInput("expression_4", "Enter an expression (use 'data' as variable):", value = "data * 2")
+          ,actionButton("calculate_4", "Calculate")
+          
+          
           
           
         )
@@ -626,6 +645,8 @@ ui <- navbarPage(
 # SERVER ----
 server <- function(input, output, session) {
 
+
+  
   #weblinks
   
   fred_link <- a("FRED", href="https://fred.stlouisfed.org/tags/series")
@@ -749,11 +770,9 @@ server <- function(input, output, session) {
   })
   
   # Data inputs ----
-  
-  
-  p_data_edit_1 <- reactive({
+  p_data_1 <- reactive({
     if (input$source_1 == "local"){
-      return_data_1 <- cpi_splits_cust(cpi_data = cpi_data_all
+      tmp <- cpi_splits_cust(cpi_data = cpi_data_all
                                   , transformation = input$trnsfrm1
                                   , dates = as.numeric(input$year1)
                                   
@@ -762,27 +781,39 @@ server <- function(input, output, session) {
                                   , rebase_date = as.Date(input$rebase_date)
       ) 
     } else if (input$source_1 == "FRED"){
-      return_data_1 <- fred_data(series = input$fred_series_1
+      tmp <- fred_data(series = input$fred_series_1
                                 , start_date = lubridate::ymd(min(input$year1), truncated = 2L)
                                 , end_date = lubridate::ymd(max(input$year1), truncated = 2L)
                                )
     } else if (input$source_1 == "dbnomics"){
-      return_data_1 <- db_data(series = input$dbnomics_series_1
+      tmp <- db_data(series = input$dbnomics_series_1
                                  , start_date = lubridate::ymd(min(input$year1), truncated = 2L)
                                  , end_date = lubridate::ymd(max(input$year1), truncated = 2L)
       )
     } else if (input$source_1 == "rba"){
-      return_data_1 <- rba_data(table = input$rba_table_1
+      tmp <- rba_data(table = input$rba_table_1
                                 , series = input$rba_desc_1
                                , start_date = lubridate::ymd(min(input$year1), truncated = 2L)
                                , end_date = lubridate::ymd(max(input$year1), truncated = 2L)
       )
+    } else if (input$source_1 == "bloomberg"){
+      tmp <- bbg_data(series = input$bloomberg_ticker_1
+                                , start_date = lubridate::ymd(min(input$year1), truncated = 2L)
+                                , end_date = lubridate::ymd(max(input$year1), truncated = 2L)
+      )
     }
+  
+    if(nzchar(input$label_1)){
+      tmp <- tmp %>%
+        mutate(name = input$label_1)
+    } 
+        return(tmp)
+
   })
   
-  p_data_edit_2 <- reactive({
+  p_data_2 <- reactive({
     if (input$source_2 == "local"){
-      return_data_2 <- cpi_splits_cust(cpi_data = cpi_data_all
+      tmp <- cpi_splits_cust(cpi_data = cpi_data_all
                                      , transformation = input$trnsfrm1
                                      , dates = as.numeric(input$year1)
                                      
@@ -791,28 +822,38 @@ server <- function(input, output, session) {
                                      , rebase_date = as.Date(input$rebase_date)
       ) 
     } else if (input$source_2 == "FRED"){
-      return_data_2 <- fred_data(series = input$fred_series_2
+      tmp <- fred_data(series = input$fred_series_2
                                , start_date = lubridate::ymd(min(input$year1), truncated = 2L)
                                , end_date = lubridate::ymd(max(input$year1), truncated = 2L)
       )
     } else if (input$source_2 == "dbnomics"){
-      return_data_2 <- db_data(series = input$dbnomics_series_2
+      tmp <- db_data(series = input$dbnomics_series_2
                                  , start_date = lubridate::ymd(min(input$year1), truncated = 2L)
                                  , end_date = lubridate::ymd(max(input$year1), truncated = 2L)
       )
     } else if (input$source_2 == "rba"){
-      return_data_2 <- rba_data(table = input$rba_table_2
+      tmp <- rba_data(table = input$rba_table_2
                                 , series = input$rba_desc_2
                                , start_date = lubridate::ymd(min(input$year1), truncated = 2L)
                                , end_date = lubridate::ymd(max(input$year1), truncated = 2L)
       )
+    } else if (input$source_2 == "bloomberg"){
+      tmp <- bbg_data(series = input$bloomberg_ticker_2
+                                , start_date = lubridate::ymd(min(input$year1), truncated = 2L)
+                                , end_date = lubridate::ymd(max(input$year1), truncated = 2L)
+      )
     }
+    if(nzchar(input$label_2)){
+      tmp <- tmp %>%
+        mutate(name = input$label_2)
+    } 
+    return(tmp)
   })
     
     
-  p_data_edit_3 <- reactive({
+  p_data_3 <- reactive({
     if (input$source_3 == "local"){
-      return_data_3 <- cpi_splits_cust(cpi_data = cpi_data_all
+      tmp <- cpi_splits_cust(cpi_data = cpi_data_all
                                        , transformation = input$trnsfrm1
                                        , dates = as.numeric(input$year1)
                                        
@@ -821,28 +862,38 @@ server <- function(input, output, session) {
                                        , rebase_date = as.Date(input$rebase_date)
       ) 
     } else if (input$source_3 == "FRED"){
-      return_data_3 <- fred_data(series = input$fred_series_3
+      tmp <- fred_data(series = input$fred_series_3
                                  , start_date = lubridate::ymd(min(input$year1), truncated = 2L)
                                  , end_date = lubridate::ymd(max(input$year1), truncated = 2L)
       )
     } else if (input$source_3 == "dbnomics"){
-      return_data_3 <- db_data(series = input$dbnomics_series_3
+      tmp <- db_data(series = input$dbnomics_series_3
                                  , start_date = lubridate::ymd(min(input$year1), truncated = 2L)
                                  , end_date = lubridate::ymd(max(input$year1), truncated = 2L)
       )
     }  else if (input$source_3 == "rba"){
-      return_data_3 <- rba_data(table = input$rba_table_3
+      tmp <- rba_data(table = input$rba_table_3
                                 , series = input$rba_desc_3
                                , start_date = lubridate::ymd(min(input$year1), truncated = 2L)
                                , end_date = lubridate::ymd(max(input$year1), truncated = 2L)
       )
+    } else if (input$source_3 == "bloomberg"){
+      tmp <- bbg_data(series = input$bloomberg_ticker_3
+                                , start_date = lubridate::ymd(min(input$year1), truncated = 2L)
+                                , end_date = lubridate::ymd(max(input$year1), truncated = 2L)
+      )
     }
+    if(nzchar(input$label_3)){
+      tmp <- tmp %>%
+        mutate(name = input$label_3)
+    } 
+    return(tmp)
   })
     
     
-  p_data_edit_4 <- reactive({
+  p_data_4 <- reactive({
     if (input$source_4 == "local"){
-      return_data_4 <- cpi_splits_cust(cpi_data = cpi_data_all
+      tmp <- cpi_splits_cust(cpi_data = cpi_data_all
                                        , transformation = input$trnsfrm1
                                        , dates = as.numeric(input$year1)
                                        
@@ -853,29 +904,95 @@ server <- function(input, output, session) {
       
     } else if (input$source_4 == "FRED"){
       
-      return_data_4 <- fred_data(series = input$fred_series_4
+      tmp <- fred_data(series = input$fred_series_4
                                  , start_date = lubridate::ymd(min(input$year1), truncated = 2L)
                                  , end_date = lubridate::ymd(max(input$year1), truncated = 2L)
       )
     } else if (input$source_4 == "dbnomics"){
-      return_data_4 <- db_data(series = input$dbnomics_series_4
+      tmp <- db_data(series = input$dbnomics_series_4
                                  , start_date = lubridate::ymd(min(input$year1), truncated = 2L)
                                  , end_date = lubridate::ymd(max(input$year1), truncated = 2L)
       )
     } else if (input$source_4 == "rba"){
-      return_data_4 <- rba_data(table = input$rba_table_4
+      tmp <- rba_data(table = input$rba_table_4
                                 , series = input$rba_desc_4
                                , start_date = lubridate::ymd(min(input$year1), truncated = 2L)
                                , end_date = lubridate::ymd(max(input$year1), truncated = 2L)
       )
+    }  else if (input$source_4 == "bloomberg"){
+      tmp <- bbg_data(series = input$bloomberg_ticker_4
+                                , start_date = lubridate::ymd(min(input$year1), truncated = 2L)
+                                , end_date = lubridate::ymd(max(input$year1), truncated = 2L)
+      )
     }
+    if(nzchar(input$label_4)){
+      tmp <- tmp %>%
+        mutate(name = input$label_4)
+    } 
+    return(tmp)
   })
+   
+  # Initialize reactive value to store modified data
+  p_data_1.1 <- reactiveVal()
+  
+  # Initialize p_data_1.1 with p_data_1
+  observe({
+    p_data_1.1(p_data_1())
+  })
+  
+  observeEvent(input$calculate_1, {
+    # Retrieve the user's expression and replace 'data' with 'value'
+    expression_text <- sub("data", "value", input$expression_1)
     
+    # Update the data using the provided expression
+    tmp <- p_data_1.1() %>%  # use the latest stored data
+      mutate(value = eval(parse(text = expression_text)))
+    
+    # Update the reactive value with new data
+    p_data_1.1(tmp)
+  })
+  
+  # 2.1
+  p_data_2.1 <- reactiveVal()
+  observe({
+    p_data_2.1(p_data_2())
+  })
+  observeEvent(input$calculate_2, {
+    expression_text <- sub("data", "value", input$expression_2)
+    tmp <- p_data_2.1() %>%  # use the latest stored data
+      mutate(value = eval(parse(text = expression_text)))
+    p_data_2.1(tmp)
+  })
+  
+  # 3.1
+  p_data_3.1 <- reactiveVal()
+  observe({
+    p_data_3.1(p_data_3())
+  })
+  observeEvent(input$calculate_3, {
+    expression_text <- sub("data", "value", input$expression_3)
+    tmp <- p_data_3.1() %>%  # use the latest stored data
+      mutate(value = eval(parse(text = expression_text)))
+    p_data_3.1(tmp)
+  })
+  
+  # 4.1
+  p_data_4.1 <- reactiveVal()
+  observe({
+    p_data_4.1(p_data_4())
+  })
+  observeEvent(input$calculate_4, {
+    expression_text <- sub("data", "value", input$expression_4)
+    tmp <- p_data_4.1() %>%  # use the latest stored data
+      mutate(value = eval(parse(text = expression_text)))
+    p_data_4.1(tmp)
+  })
+  
   p_data_edit <- reactive({
-    return(p_data_edit_1() %>%
-             rbind(p_data_edit_2()) %>%
-             rbind(p_data_edit_3()) %>%
-             rbind(p_data_edit_4())
+    return(p_data_1.1() %>%
+             rbind(p_data_2.1()) %>%
+             rbind(p_data_3.1()) %>%
+             rbind(p_data_4())
     )
   })
   

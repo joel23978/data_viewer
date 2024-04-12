@@ -6,24 +6,62 @@ data_sources <- list("local"
 )
 
 
-
+# Helper function to create reactive data based on input index
+create_p_data <- function(index) {
+  reactive({
+    source <- input[[paste0("source_", index)]]
+    year <- as.numeric(input[[paste0("year", index)]])
+    label <- input[[paste0("label_", index)]]
+    
+    tmp <- if (source == "local") {
+      cpi_splits_cust(cpi_data = cpi_data_all,
+                      transformation = input[[paste0("trnsfrm", index)]],
+                      dates = year,
+                      pick_split_1 = unlist(input[[paste0("text_", index)]]),
+                      region_1_split = input[[paste0("region_", index)]],
+                      rebase_date = as.Date(input[[paste0("rebase_date")]]))
+    } else if (source == "FRED") {
+      fred_data(series = input[[paste0("fred_series_", index)]],
+                start_date = ymd(min(year), truncated = 2L),
+                end_date = ymd(max(year), truncated = 2L))
+    } else if (source == "dbnomics") {
+      db_data(series = input[[paste0("dbnomics_series_", index)]],
+              start_date = ymd(min(year), truncated = 2L),
+              end_date = ymd(max(year), truncated = 2L))
+    } else if (source == "rba") {
+      rba_data(table = input[[paste0("rba_table_", index)]],
+               series = input[[paste0("rba_desc_", index)]],
+               start_date = ymd(min(year), truncated = 2L),
+               end_date = ymd(max(year), truncated = 2L))
+    } else if (source == "bloomberg") {
+      bbg_data(series = input[[paste0("bloomberg_ticker_", index)]],
+               start_date = ymd(min(year), truncated = 2L),
+               end_date = ymd(max(year), truncated = 2L))
+    }
+    
+    if(nzchar(label)) {
+      tmp <- tmp %>% mutate(name = label)
+    }
+    return(tmp)
+  })
+}
 
 
 theme_jf <- function() {
   ggplot2::theme_bw() +
     ggplot2::theme(panel.border = element_blank(),
                    panel.grid = element_blank(),
-                   axis.line.y.left = element_line(linewidth = 0.5, colour = "grey70"),
-                   axis.line.y.right = element_line(linewidth = 0.5, colour = "grey70"),
+                   axis.line.y.left = element_line(size = 0.5, colour = "grey70"),
+                   axis.line.y.right = element_line(size = 0.5, colour = "grey70"),
                    axis.title = element_blank(),
-                   axis.ticks = element_line(linewidth = 0.5, colour = "grey70"),
+                   axis.ticks = element_line(size = 0.5, colour = "grey70"),
                    axis.ticks.length.x.bottom = unit(-0.15, "cm"),
                    axis.ticks.length.y.left = unit(-0.15, "cm"),
                    axis.ticks.length.y.right = unit(-0.15, "cm"),
                    axis.text.x = element_text(margin=unit(c(0.5,0.5,0.5,0.5), "cm")),
                    axis.text.y.left = element_text(margin=unit(c(0.5,0.5,0.5,0.5), "cm")),
                    axis.text.y.right = element_text(margin=unit(c(0.5,0.5,0.5,0.5), "cm")),
-                   axis.line.x = element_line(linewidth = 0.5, colour = "grey70"),
+                   axis.line.x = element_line(size = 0.5, colour = "grey70"),
                    plot.title = element_text(hjust = 1, size = 10, vjust = -7),
                    strip.background = element_blank(),
                    strip.text = element_text(hjust = 0),
