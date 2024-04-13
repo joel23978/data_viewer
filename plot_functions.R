@@ -215,7 +215,7 @@ set_chart_defaults <- function(
     labs(title = cht_y_axes_unit
          , subtitle = cht_y_axes_unit
          , caption = cht_note)
-    , guides(colour=guide_legend(title="Series"))
+    , guides(colour=guide_legend(title=""))
   )
   
   if (cht_y_invert == T){
