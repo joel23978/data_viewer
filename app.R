@@ -477,7 +477,7 @@ ui <- navbarPage(
           , fluidRow(
             column(width = 3,
                    h4("Chart Inputs")
-                   , selectizeInput("cht_type", "Chart Type:", choices =  "simple") #list()
+                   , selectizeInput("cht_type", "x Chart Type:", choices =  "simple") #list()
                    , selectizeInput("cht_legend", "Legend:", choices = c("none", "bottom"), selected = "bottom")
                    , selectizeInput("cht_colour_palette", "Colour palette:", choices = palette.pals()) #list()
                    
@@ -503,6 +503,7 @@ ui <- navbarPage(
                    , numericInput("cht_title_size", "Title:", value = 8)
                    , numericInput("cht_axes_font_size", "Axes:", value = 15)
                    , numericInput("cht_label_size", "Series labels:", value = 7)
+                   , h4(".png Export")
                    , numericInput("cht_height", "Height:", value = 5) #list()
                    , numericInput("cht_width", "Width:", value = 7) #list()
                    
