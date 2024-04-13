@@ -181,7 +181,9 @@ set_chart_defaults <- function(
     , vertical_2 = NULL
 ) {
   chart_defaults <<- list(
-    geom_line(aes()),
+    geom_col(data = input_data %>% filter(plotting == "bar"), aes()),
+    geom_line(data = input_data %>% filter(plotting == "line"), aes()),
+    geom_point(data = input_data %>% filter(plotting == "scatter"), aes()),
     theme_jf(),
     scale_colour_manual(values = cht_colour_palette),
     scale_fill_manual(values = cht_colour_palette),
@@ -191,12 +193,6 @@ set_chart_defaults <- function(
       plot.title = element_text(size = cht_y_axes_unit_size),
       plot.subtitle = element_text(size = cht_y_axes_unit_size)
     ),
-    # scale_y_continuous(
-    #   expand = c(0, 0),
-    #   sec.axis = dup_axis(),
-    #   breaks = seq(cht_y_min, cht_y_max, by = cht_y_increment),
-    #   limits = c(cht_y_min, cht_y_max)
-    # ),
     scale_x_date(
       expand = c(0, 0),
       date_labels = cht_x_date_format,
@@ -215,7 +211,8 @@ set_chart_defaults <- function(
     labs(title = cht_y_axes_unit
          , subtitle = cht_y_axes_unit
          , caption = cht_note)
-    , guides(colour=guide_legend(title=""))
+    , guides(colour=guide_legend(title="")
+             , fill=guide_legend(title=""))
   )
   
   if (cht_y_invert == T){

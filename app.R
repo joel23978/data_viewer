@@ -193,7 +193,7 @@ ui <- navbarPage(
           ,actionButton("calculate_1", "Calculate")
         
 
-          , selectizeInput("vis_type1", "Series plot:"
+          , selectizeInput("vis_type_1", "Series plot:"
                            , choices = c("line", "bar", "scatter"))
           
           
@@ -258,7 +258,8 @@ ui <- navbarPage(
           , textInput("label_2",  "Label:", value = "")
           ,textInput("expression_2", "Enter an expression (use 'data' as variable):", value = "data * 2")
           ,actionButton("calculate_2", "Calculate")
-          
+          , selectizeInput("vis_type_2", "Series plot:"
+                           , choices = c("line", "bar", "scatter"))
           
           
           
@@ -322,7 +323,8 @@ ui <- navbarPage(
           , textInput("label_3",  "Label:", value = "")
           ,textInput("expression_3", "Enter an expression (use 'data' as variable):", value = "data * 2")
           ,actionButton("calculate_3", "Calculate")
-          
+          , selectizeInput("vis_type_3", "Series plot:"
+                           , choices = c("line", "bar", "scatter"))
           
           
           
@@ -390,7 +392,8 @@ ui <- navbarPage(
           
           ,textInput("expression_4", "Enter an expression (use 'data' as variable):", value = "data * 2")
           ,actionButton("calculate_4", "Calculate")
-          
+          , selectizeInput("vis_type_4", "Series plot:"
+                           , choices = c("line", "bar", "scatter"))
           
           
           
@@ -807,7 +810,9 @@ server <- function(input, output, session) {
       tmp <- tmp %>%
         mutate(name = input$label_1)
     } 
-        return(tmp)
+    tmp <- tmp %>%
+      mutate(plotting = input$vis_type_1)
+    return(tmp)
 
   })
   
@@ -847,6 +852,8 @@ server <- function(input, output, session) {
       tmp <- tmp %>%
         mutate(name = input$label_2)
     } 
+    tmp <- tmp %>%
+      mutate(plotting = input$vis_type_2)
     return(tmp)
   })
     
@@ -887,6 +894,8 @@ server <- function(input, output, session) {
       tmp <- tmp %>%
         mutate(name = input$label_3)
     } 
+    tmp <- tmp %>%
+      mutate(plotting = input$vis_type_3)
     return(tmp)
   })
     
@@ -929,6 +938,9 @@ server <- function(input, output, session) {
       tmp <- tmp %>%
         mutate(name = input$label_4)
     } 
+    
+    tmp <- tmp %>%
+      mutate(plotting = input$vis_type_4)
     return(tmp)
   })
    
@@ -1070,7 +1082,7 @@ server <- function(input, output, session) {
 
   p_cust_static <- reactive({
     p_data_cust() %>%
-      ggplot(aes(x=date, y=value, colour = name)) +
+      ggplot(aes(x=date, y=value, colour = name, fill = name)) +
       p_plot_settings() 
   })
   
