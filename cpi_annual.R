@@ -376,15 +376,7 @@ cpi_splits_cust <- function(
     , dates = c(2020, 2024) #as.numeric(input$year1)
     
     , pick_split_1 = "All Groups CPI" #input$text_1
-    # , pick_split_2 = "Non-tradables" #input$text_2
-    # , pick_split_3 = "Tradables" #input$text_3
-    # , pick_split_4 = "Tradables" #input$text_4
-    
     , region_1_split = "Australia" #input$region_1
-    # , region_2_split = "Sydney" #input$region_2
-    # , region_3_split = "Melbourne" #input$region_3
-    # , region_4_split = "Canberra" #input$region_4
-    
     , rebase_date = as.Date("2019-12-31")
 ){
   
@@ -394,9 +386,6 @@ cpi_splits_cust <- function(
     filter(date > lubridate::ymd(dates[1]-1, truncated = 2L)
            , date < lubridate::ymd(dates[2]+1, truncated = 2L)
            , (class_3_name %in% pick_split_1 & region %in% region_1_split)
-           # | (class_3_name %in% pick_split_2 & region %in% region_2_split)
-           # | (class_3_name %in% pick_split_3 & region %in% region_3_split)
-           # | (class_3_name %in% pick_split_4 & region %in% region_4_split)
     ) %>%
     mutate(name = paste0(class_3_name,", ", region)) %>%
     select(date, value, name, series) %>%
@@ -416,6 +405,7 @@ cpi_splits_cust <- function(
   }
   
   cpi_data <- cpi_data %>%
+    mutate(name = paste0(name, ", ", transformation)) %>%
     select(date, value, name)
   
   return(cpi_data)

@@ -83,25 +83,6 @@ ui <- navbarPage(
                         )
           )
           
-          , selectInput("trnsfrm1"
-                        , label = "Transformation"
-                        , choices = list("index" 
-                                         , "y.y" 
-                                         , "q.q" 
-                                         , "rebased index"
-                                         #, "Contribution (Proportion)" = 3 
-                        )
-                        , selected = "y.y")
-          , conditionalPanel(
-            condition = "input.trnsfrm1 == `rebased index`"
-            , dateInput("rebase_date"
-                        , label = "Date (rebase)"
-                        , startview = "year"
-                        , value = "2019-12-31"
-                        
-            )
-            
-          )
           
           ## Series 1 ----
           , hr()
@@ -147,6 +128,17 @@ ui <- navbarPage(
                              , selected = region_list[[1]]
                              , multiple = TRUE
             )
+            , selectInput("trnsfrm_1"
+                          , label = "Transformation"
+                          , choices = transformation_choices
+                          , selected = "y.y")
+            , conditionalPanel(
+              condition = "input.trnsfrm_1 == `rebased index`"
+              , dateInput("rebase_date_1"
+                          , label = "Date (rebase)"
+                          , startview = "year"
+                          , value = "2019-12-31"
+              ))
           )
           
           , conditionalPanel(
@@ -243,6 +235,17 @@ ui <- navbarPage(
                              , selected = region_list[[1]]
                              , multiple = TRUE
             )
+            , selectInput("trnsfrm_2"
+                          , label = "Transformation"
+                          , choices = transformation_choices
+                          , selected = "y.y")
+            , conditionalPanel(
+              condition = "input.trnsfrm_2 == `rebased index`"
+              , dateInput("rebase_date_2"
+                          , label = "Date (rebase)"
+                          , startview = "year"
+                          , value = "2019-12-31"
+              ))
           )
           , conditionalPanel(
             condition = "input.source_2 == `rba`"
@@ -308,6 +311,17 @@ ui <- navbarPage(
                              , selected = region_list[[1]]
                              , multiple = TRUE
             )
+            , selectInput("trnsfrm_3"
+                          , label = "Transformation"
+                          , choices = transformation_choices
+                          , selected = "y.y")
+            , conditionalPanel(
+              condition = "input.trnsfrm_3 == `rebased index`"
+              , dateInput("rebase_date_3"
+                          , label = "Date (rebase)"
+                          , startview = "year"
+                          , value = "2019-12-31"
+              ))
           )
           , conditionalPanel(
             condition = "input.source_3 == `rba`"
@@ -376,6 +390,17 @@ ui <- navbarPage(
                              , selected = region_list[[1]]
                              , multiple = TRUE
             )
+            , selectInput("trnsfrm_4"
+                          , label = "Transformation"
+                          , choices = transformation_choices
+                          , selected = "y.y")
+            , conditionalPanel(
+              condition = "input.trnsfrm_4 == `rebased index`"
+              , dateInput("rebase_date_4"
+                          , label = "Date (rebase)"
+                          , startview = "year"
+                          , value = "2019-12-31"
+              ))
           )
           , conditionalPanel(
             condition = "input.source_4 == `rba`"
@@ -776,12 +801,12 @@ server <- function(input, output, session) {
   p_data_1 <- reactive({
     if (input$source_1 == "local"){
       tmp <- cpi_splits_cust(cpi_data = cpi_data_all
-                                  , transformation = input$trnsfrm1
+                                  , transformation = input$trnsfrm_1
                                   , dates = as.numeric(input$year1)
                                   
                                   , pick_split_1 = unlist(input$text_1)
                                   , region_1_split = input$region_1
-                                  , rebase_date = as.Date(input$rebase_date)
+                                  , rebase_date = as.Date(input$rebase_date_1)
       ) 
     } else if (input$source_1 == "FRED"){
       tmp <- fred_data(series = input$fred_series_1
@@ -819,12 +844,12 @@ server <- function(input, output, session) {
   p_data_2 <- reactive({
     if (input$source_2 == "local"){
       tmp <- cpi_splits_cust(cpi_data = cpi_data_all
-                                     , transformation = input$trnsfrm1
+                                     , transformation = input$trnsfrm_2
                                      , dates = as.numeric(input$year1)
                                      
                                      , pick_split_1 = unlist(input$text_2)
                                      , region_1_split = input$region_2
-                                     , rebase_date = as.Date(input$rebase_date)
+                                     , rebase_date = as.Date(input$rebase_date_2)
       ) 
     } else if (input$source_2 == "FRED"){
       tmp <- fred_data(series = input$fred_series_2
@@ -861,12 +886,12 @@ server <- function(input, output, session) {
   p_data_3 <- reactive({
     if (input$source_3 == "local"){
       tmp <- cpi_splits_cust(cpi_data = cpi_data_all
-                                       , transformation = input$trnsfrm1
+                                       , transformation = input$trnsfrm_3
                                        , dates = as.numeric(input$year1)
                                        
                                        , pick_split_1 = unlist(input$text_3)
                                        , region_1_split = input$region_3
-                                       , rebase_date = as.Date(input$rebase_date)
+                                       , rebase_date = as.Date(input$rebase_date_3)
       ) 
     } else if (input$source_3 == "FRED"){
       tmp <- fred_data(series = input$fred_series_3
@@ -903,12 +928,12 @@ server <- function(input, output, session) {
   p_data_4 <- reactive({
     if (input$source_4 == "local"){
       tmp <- cpi_splits_cust(cpi_data = cpi_data_all
-                                       , transformation = input$trnsfrm1
+                                       , transformation = input$trnsfrm_4
                                        , dates = as.numeric(input$year1)
                                        
                                        , pick_split_1 = unlist(input$text_4)
                                        , region_1_split = input$region_4
-                                       , rebase_date = as.Date(input$rebase_date)
+                                       , rebase_date = as.Date(input$rebase_date_4)
       ) 
       
     } else if (input$source_4 == "FRED"){
@@ -1174,7 +1199,7 @@ server <- function(input, output, session) {
   #   
   #   if (input$source_1 == "local"){
   #     return_data <- cpi_splits_cust(cpi_data = cpi_data_all
-  #                                    , transformation = input$trnsfrm1
+  #                                    , transformation = input$trnsfrm_1
   #                                    , dates = as.numeric(input$year1)
   #                                    
   #                                    , pick_split_1 = unlist(input$text_1)

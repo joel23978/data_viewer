@@ -5,6 +5,12 @@ data_sources <- list("local"
                     , "bloomberg"
 )
 
+transformation_choices <- list("index" 
+                               , "y.y" 
+                               , "q.q" 
+                               , "rebased index"
+)
+
 
 # Helper function to create reactive data based on input index
 create_p_data <- function(index) {
