@@ -4,10 +4,13 @@
 # data viewer
 
 {data_viewer} is a Shiny App which enable you to view offical data from
-multiple sources, it also provides detiled breakdowns of Australian CPI
+multiple sources, it also provides detailed breakdowns of Australian CPI
 data.
 
 This project is a work in progress.
+
+The app currently allows you to pull data from FRED, dbnomics, the RBA
+(using read_rba) and bloomberg (assuming you have access to a terminal).
 
 <!-- ## Installation -->
 <!-- You can install the development version of readAOFM from [GitHub](https://github.com/) with: -->
