@@ -10,7 +10,8 @@ data.
 This project is a work in progress.
 
 The app currently allows you to pull data from FRED, dbnomics, the RBA
-(using read_rba) and bloomberg (assuming you have access to a terminal).
+(using readrba), the ABS (using readabs) and bloomberg (assuming you
+have access to a terminal).
 
 Note: Ap app works best in chrome (other browsers may not allow for
 copying charts to clipboard).
