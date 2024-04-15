@@ -12,6 +12,9 @@ This project is a work in progress.
 The app currently allows you to pull data from FRED, dbnomics, the RBA
 (using read_rba) and bloomberg (assuming you have access to a terminal).
 
+Note: Ap app works best in chrome (other browsers may not allow for
+copying charts to clipboard).
+
 <!-- ## Installation -->
 <!-- You can install the development version of readAOFM from [GitHub](https://github.com/) with: -->
 <!-- ``` r -->
