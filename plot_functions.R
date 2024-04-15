@@ -291,9 +291,9 @@ set_chart_defaults <- function(
     chart_defaults <<- c(chart_defaults,
                          geom_rect(data=rec_data %>%
                                      filter(region == recession_shading
-                                            ,start_rec >= cht_start_date
-                                            , end_rec <= cht_end_date)
-                                   , aes(xmin=start_rec, xmax=end_rec)
+                                            , peak >= cht_start_date
+                                            , trough <= cht_end_date)
+                                   , aes(xmin=peak, xmax=trough)
                                    , ymin=cht_y_min
                                    , ymax=cht_title_y_placement - (cht_y_max-cht_title_y_placement)*1.5
                                    , inherit.aes = FALSE, fill='grey', alpha=0.2)

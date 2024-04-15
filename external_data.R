@@ -86,14 +86,14 @@ fred_data <- function(
 
 # recession shading ----
 # 
-# # aus recession (extract start_rec and end_rec dates rather than boolean values.
-# rec_au <- fredr(series_id = "AUSRECDM") %>%
+# # aus recession (extract peak and trough dates rather than boolean values.
+# rec_au <- fredr(series_id = "AUSRECD") %>%
 #   select(date, value) %>%
 #   filter(value != lag(value, 1)
 #          | value != lead(value, 1)
 #          | date == min(date)
 #          | date == max(date)) %>%
-#   mutate(dummy = ifelse(value != lag(value) | date == min(date), "start_rec", "end_rec")) %>%
+#   mutate(dummy = ifelse(value != lag(value) | date == min(date), "peak", "trough")) %>%
 #   filter(value == 1) %>%
 #   select(date, dummy)
 # 
@@ -104,35 +104,83 @@ fred_data <- function(
 #          | value != lead(value, 1)
 #          | date == min(date)
 #          | date == max(date)) %>%
-#   mutate(dummy = ifelse(value != lag(value) | date == min(date), "start_rec", "end_rec")) %>%
+#   mutate(dummy = ifelse(value != lag(value) | date == min(date), "peak", "trough")) %>%
 #   filter(value == 1) %>%
 #   select(date, dummy)
 # 
 # 
+# # uk recession
+# rec_uk <- fredr(series_id = "GBRRECD") %>%
+#   select(date, value) %>%
+#   filter(value != lag(value, 1)
+#          | value != lead(value, 1)
+#          | date == min(date)
+#          | date == max(date)) %>%
+#   mutate(dummy = ifelse(value != lag(value) | date == min(date), "peak", "trough")) %>%
+#   filter(value == 1) %>%
+#   select(date, dummy)
+# 
+# # eu recession
+# rec_ez <- fredr(series_id = "EURORECD") %>%
+#   select(date, value) %>%
+#   filter(value != lag(value, 1)
+#          | value != lead(value, 1)
+#          | date == min(date)
+#          | date == max(date)) %>%
+#   mutate(dummy = ifelse(value != lag(value) | date == min(date), "peak", "trough")) %>%
+#   filter(value == 1) %>%
+#   select(date, dummy)
+# 
 # 
 # rec_data <- rec_au %>%
-#   filter(dummy == "start_rec") %>%
+#   filter(dummy == "peak") %>%
 #   select(date) %>%
-#   rename(start_rec = date) %>%
+#   rename(peak = date) %>%
 #   cbind(
 #     rec_au %>%
-#       filter(dummy == "end_rec") %>%
+#       filter(dummy == "trough") %>%
 #       select(date) %>%
-#       rename(end_rec = date)
+#       rename(trough = date)
 #   ) %>%
 #   mutate(region = "AU") %>%
 #   rbind(
 #     rec_us %>%
-#       filter(dummy == "start_rec") %>%
+#       filter(dummy == "peak") %>%
 #       select(date) %>%
-#       rename(start_rec = date) %>%
+#       rename(peak = date) %>%
 #       cbind(
 #         rec_us %>%
-#           filter(dummy == "end_rec") %>%
+#           filter(dummy == "trough") %>%
 #           select(date) %>%
-#           rename(end_rec = date)
+#           rename(trough = date)
 #       ) %>%
 #       mutate(region = "US")
+#   )  %>%
+#   rbind(
+#     rec_uk %>%
+#       filter(dummy == "peak") %>%
+#       select(date) %>%
+#       rename(peak = date) %>%
+#       cbind(
+#         rec_uk %>%
+#           filter(dummy == "trough") %>%
+#           select(date) %>%
+#           rename(trough = date)
+#       ) %>%
+#       mutate(region = "UK")
+#   )  %>%
+#   rbind(
+#     rec_ez %>%
+#       filter(dummy == "peak") %>%
+#       select(date) %>%
+#       rename(peak = date) %>%
+#       cbind(
+#         rec_ez %>%
+#           filter(dummy == "trough") %>%
+#           select(date) %>%
+#           rename(trough = date)
+#       ) %>%
+#       mutate(region = "EZ")
 #   )
 # 
 # 
@@ -198,32 +246,29 @@ rba_desc_id <- tmp
 
 
 rba_data <- function(
-    table = input$rba_table_1
-    , series = input$rba_desc_1
+   # table = input$rba_table_1
+    series = input$rba_desc_1
     , start_date = lubridate::ymd(min(input$year1), truncated = 2L)
     , end_date = lubridate::ymd(max(input$year1), truncated = 2L)
 ){
   
   if(series != ""){
   tmp <- rba_desc_id %>%
-    filter(table_no == table
-             , description == series) %>%
+    filter(#table_no == table,
+           description == series) %>%
     pull(series_id)
   
-  if(length(tmp) !=0){
-    tmp <- read_rba_seriesid(tmp[1]) %>%
+  shinyCatch(
+    return(
+      read_rba_seriesid(tmp[1]) %>%
       select(c(date, value, description)) %>%
       rename(name = description) %>%
       filter(date <= end_date
              , date >= start_date) %>%
       drop_na()
+    ))
     
-    return(tmp)
-
   }
-  }
-  
-
 }
 
 

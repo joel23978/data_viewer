@@ -145,12 +145,12 @@ ui <- navbarPage(
             condition = "input.source_1 == `rba`"
             , selectInput("rba_table_1"
                           , "RBA Table"
-                          , choices = names(rba_series)
-                          , selected = "A1"
+                          , choices = rba_tables
+                          , selected = rba_tables[1]
             )
-            , selectInput("rba_desc_1"
+            , selectizeInput("rba_desc_1"
                           , label = "RBA Series"
-                          , choices = rba_series[["A1"]]
+                          , choices = rba_series[[1]]
                           , selected = "" #rba_series[["A1"]][1]
             )
           )
@@ -456,7 +456,7 @@ ui <- navbarPage(
                    dateInput("vertical_1", "Vertical Line (1)", value = as.Date(NA))
                    , dateInput("vertical_2", "Vertical Line (2)", value = as.Date(NA))
                    , selectInput("recession_shading", "Recession Shading:"
-                                    , choices = c("AU", "US", "none"), selected = "none")
+                                    , choices = c("AU", "US", "UK", "EZ", "none"), selected = "none")
             )
           ),
           hr()
@@ -708,31 +708,23 @@ server <- function(input, output, session) {
     
   })
   
-
-  # Observes for updating session_store independently for each rba_table input
+  session_store <- reactiveValues()
+  
+  
+  # Observe changes in table to update series
   lapply(1:4, function(i) {
     observe({
       table_input <- input[[paste0("rba_table_", i)]]
       if (!is.null(table_input)) {
-        session_store[[paste0("rba_desc_", i)]] <- rba_series[[table_input]] %>% na.omit()
+        series_choices <- rba_series[[table_input]] %>% na.omit()  # Ensure no NA values
+        if (length(series_choices) > 0) {
+          updateSelectInput(session, paste0("rba_desc_", i), choices = series_choices, selected = series_choices[1])
+        }
       }
     })
   })
   
-  # Observes for updating UI elements independently based on session_store
-  lapply(1:4, function(i) {
-    observe({
-      desc_data <- session_store[[paste0("rba_desc_", i)]]
-      if (length(desc_data) > 0) {
-        # Use the first available option as the default selection if it exists
-        default_selection <- ifelse(length(desc_data) >= 1, desc_data[1], NULL)
-        updateSelectInput(session, paste0("rba_desc_", i), choices = desc_data, selected = default_selection)
-      }
-    })
-  })
-  
-  session_store <- reactiveValues()
-  
+
   # Observe changes in each category separately to update series
   lapply(1:4, function(i) {
     observe({
@@ -758,6 +750,8 @@ server <- function(input, output, session) {
       }
     })
   })
+  
+  
   
   
   observeEvent(input[["success"]], {
@@ -820,8 +814,8 @@ server <- function(input, output, session) {
                                  , end_date = lubridate::ymd(max(input$year1), truncated = 2L)
       )
     } else if (input$source_1 == "rba"){
-      tmp <- rba_data(table = input$rba_table_1
-                                , series = input$rba_desc_1
+      tmp <- rba_data(#table = input$rba_table_1,
+                               series = input$rba_desc_1
                                , start_date = lubridate::ymd(min(input$year1), truncated = 2L)
                                , end_date = lubridate::ymd(max(input$year1), truncated = 2L)
       )
@@ -863,8 +857,8 @@ server <- function(input, output, session) {
                                  , end_date = lubridate::ymd(max(input$year1), truncated = 2L)
       )
     } else if (input$source_2 == "rba"){
-      tmp <- rba_data(table = input$rba_table_2
-                                , series = input$rba_desc_2
+      tmp <- rba_data(#table = input$rba_table_2,
+                              series = input$rba_desc_2
                                , start_date = lubridate::ymd(min(input$year1), truncated = 2L)
                                , end_date = lubridate::ymd(max(input$year1), truncated = 2L)
       )
@@ -905,8 +899,8 @@ server <- function(input, output, session) {
                                  , end_date = lubridate::ymd(max(input$year1), truncated = 2L)
       )
     }  else if (input$source_3 == "rba"){
-      tmp <- rba_data(table = input$rba_table_3
-                                , series = input$rba_desc_3
+      tmp <- rba_data(#table = input$rba_table_3,
+                               series = input$rba_desc_3
                                , start_date = lubridate::ymd(min(input$year1), truncated = 2L)
                                , end_date = lubridate::ymd(max(input$year1), truncated = 2L)
       )
@@ -949,8 +943,8 @@ server <- function(input, output, session) {
                                  , end_date = lubridate::ymd(max(input$year1), truncated = 2L)
       )
     } else if (input$source_4 == "rba"){
-      tmp <- rba_data(table = input$rba_table_4
-                                , series = input$rba_desc_4
+      tmp <- rba_data(#table = input$rba_table_4,
+                                series = input$rba_desc_4
                                , start_date = lubridate::ymd(min(input$year1), truncated = 2L)
                                , end_date = lubridate::ymd(max(input$year1), truncated = 2L)
       )

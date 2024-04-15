@@ -34,10 +34,18 @@ knitr::include_graphics(here("doco", "example_1.png"))
 We can (fairly trivially) make charts like the following:
 
 ``` r
-knitr::include_graphics(here("doco", "example_2.png"))
+knitr::include_graphics(here("doco", "Australian CPI.png"))
 ```
 
-<img src="doco/example_2.png" width="100%" />
+<img src="doco/Australian CPI.png" width="100%" />
+
+and like this (using RBA data):
+
+``` r
+knitr::include_graphics(here("doco", "Australian Dollar Exchange Rates.png"))
+```
+
+<img src="doco/Australian Dollar Exchange Rates.png" width="100%" />
 
 And the CPI-specific tab:
 
