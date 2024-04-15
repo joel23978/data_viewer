@@ -84,6 +84,60 @@ fred_data <- function(
   ))
 }
 
+# recession shading ----
+# 
+# # aus recession (extract start_rec and end_rec dates rather than boolean values.
+# rec_au <- fredr(series_id = "AUSRECDM") %>%
+#   select(date, value) %>%
+#   filter(value != lag(value, 1)
+#          | value != lead(value, 1)
+#          | date == min(date)
+#          | date == max(date)) %>%
+#   mutate(dummy = ifelse(value != lag(value) | date == min(date), "start_rec", "end_rec")) %>%
+#   filter(value == 1) %>%
+#   select(date, dummy)
+# 
+# # us recession
+# rec_us <- fredr(series_id = "USRECD") %>%
+#   select(date, value) %>%
+#   filter(value != lag(value, 1)
+#          | value != lead(value, 1)
+#          | date == min(date)
+#          | date == max(date)) %>%
+#   mutate(dummy = ifelse(value != lag(value) | date == min(date), "start_rec", "end_rec")) %>%
+#   filter(value == 1) %>%
+#   select(date, dummy)
+# 
+# 
+# 
+# rec_data <- rec_au %>%
+#   filter(dummy == "start_rec") %>%
+#   select(date) %>%
+#   rename(start_rec = date) %>%
+#   cbind(
+#     rec_au %>%
+#       filter(dummy == "end_rec") %>%
+#       select(date) %>%
+#       rename(end_rec = date)
+#   ) %>%
+#   mutate(region = "AU") %>%
+#   rbind(
+#     rec_us %>%
+#       filter(dummy == "start_rec") %>%
+#       select(date) %>%
+#       rename(start_rec = date) %>%
+#       cbind(
+#         rec_us %>%
+#           filter(dummy == "end_rec") %>%
+#           select(date) %>%
+#           rename(end_rec = date)
+#       ) %>%
+#       mutate(region = "US")
+#   )
+# 
+# 
+# save(rec_data, file = here("data", "rec_data.Rda"))
+load(file = here("data", "rec_data.Rda"))
 
 
 
@@ -184,7 +238,7 @@ rba_data <- function(
 
 
 
-
+# recession shading (from fredr)
 
 
 

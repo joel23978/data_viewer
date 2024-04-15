@@ -132,6 +132,7 @@ set_default_values <- function(
   cht_x_num_labels <<- pretty_breaks(n = 6)
   cht_x_date_format <<- "%b-%y"
   n_ticks <<- 6 
+  recession_shading <<- "none"
   
   cht_y_axes_unit <<- "add unit"
   cht_title <<- "please add a chart title"
@@ -185,6 +186,7 @@ set_chart_defaults <- function(
     , horizontal_shading = NULL
     , vertical_1 = NULL
     , vertical_2 = NULL
+    , recession_shading = "none"
 ) {
   chart_defaults <<- list(
     geom_col(data = input_data %>% filter(plotting == "bar"), aes()),
@@ -277,6 +279,27 @@ set_chart_defaults <- function(
     )
   }
   
+  # if(recession_shading != "none"){
+  #   chart_defaults <<- c(chart_defaults, 
+  #                        annotate("rect", xmin = cht_start_date, xmax = cht_end_date
+  #                                 , ymin = 3, ymax = 5,
+  #                                 alpha = .1,fill = "blue")
+  #   )
+  # }
+  
+  if(recession_shading != "none"){
+    chart_defaults <<- c(chart_defaults,
+                         geom_rect(data=rec_data %>%
+                                     filter(region == recession_shading
+                                            ,start_rec >= cht_start_date
+                                            , end_rec <= cht_end_date)
+                                   , aes(xmin=start_rec, xmax=end_rec)
+                                   , ymin=cht_y_min
+                                   , ymax=cht_title_y_placement - (cht_y_max-cht_title_y_placement)*1.5
+                                   , inherit.aes = FALSE, fill='grey', alpha=0.2)
+    
+    )
+  }
 
 }
 

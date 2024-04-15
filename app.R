@@ -455,7 +455,7 @@ ui <- navbarPage(
             column(4,
                    dateInput("vertical_1", "Vertical Line (1)", value = as.Date(NA))
                    , dateInput("vertical_2", "Vertical Line (2)", value = as.Date(NA))
-                   , selectizeInput("recession_shading", "x Recession Shading:"
+                   , selectInput("recession_shading", "Recession Shading:"
                                     , choices = c("AU", "US", "none"), selected = "none")
             )
           ),
@@ -1100,7 +1100,7 @@ server <- function(input, output, session) {
                        , horizontal_shading = as.numeric(input$horizontal_shading)
                        , vertical_1 = as.Date(input$vertical_1)
                        , vertical_2 = as.Date(input$vertical_2)
-                       #, recession_shading = input$recession_shading
+                       , recession_shading = input$recession_shading
                        )
 
     return(chart_defaults)
