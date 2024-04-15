@@ -272,18 +272,64 @@ rba_data <- function(
 }
 
 
-# get_rba_series <- function(
-#     desc = "Treasury Bond 150 3.00% 21-Mar-2047"){
-#   return(
-#     rba_desc_id %>%
-#       filter(description == desc) %>%
-#       pull(series_id)
-#   )
+
+# readabs
+
+library(readabs)
+# abs_catalogue <- read_csv(here("data", "abs_catalogue.csv")) %>%
+#   filter(`Catalogue Number` %!in% c("3101.0"
+#                                     , "3201.0 (Ceased)"
+#                                     , "5368.0"
+#                                     , "5676.0"
+#                                     , "6416.0 (Ceased)"
+#                                     , "7218.0.55.001 (Ceased)"
+#                                     , "8782.0.65.001 (Ceased)"))
+# 
+# abs_ref <- list()
+# for (i in 1:nrow(abs_catalogue)){
+#   abs_ref[[i]] <- read_abs(abs_catalogue$`Catalogue Number`[i]) %>%
+#     select(c(series, series_type, frequency, series_id)) %>%
+#     unique()
 # }
+# names(abs_ref) <- abs_catalogue$`Catalogue Number` %>% head(39)
+# names(abs_ref) <- paste(abs_catalogue$`Catalogue Number`, abs_catalogue$`Topic`) %>% head(39)
+# 
+# save(abs_ref, file = here("data", "abs_ref.Rda"))
+# abs_cat <- paste(abs_catalogue$`Catalogue Number`, abs_catalogue$`Topic`) %>% head(39)
+# save(abs_cat, file = here("data", "abs_cat.Rda"))
 
 
+load(file = here("data", "abs_ref.Rda"))
+load(file = here("data", "abs_cat.Rda"))
 
-# recession shading (from fredr)
+
+abs_data <- function(
+  series = input$abs_id_1
+  , start_date = lubridate::ymd(min(input$year1), truncated = 2L)
+  , end_date = lubridate::ymd(max(input$year1), truncated = 2L)
+){
+  
+  if(series != ""){
+    shinyCatch(
+      return(
+        read_abs(series_id = series) %>%
+          select(date, value, series) %>%
+          rename(name = series) %>%
+          filter(date <= end_date
+                 , date >= start_date) %>%
+          drop_na()
+      ))
+  }
+}
+# 
+# read_abs(series_id="A84423127L") %>%
+#   select(date, value, series) %>%
+#   rename(name = series) %>%
+#   filter(date <= end_date
+#          , date >= start_date) %>%
+#   drop_na()
+
+
 
 
 

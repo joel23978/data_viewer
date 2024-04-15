@@ -1,6 +1,9 @@
 # app.R
 
 # SETUP ----
+'%!in%' <- function(x,y)!('%in%'(x,y))
+
+
 
 library(shiny)
 library(here)
@@ -177,6 +180,26 @@ ui <- navbarPage(
             )
           )
           
+          , conditionalPanel(
+            condition = "input.source_1 == `abs`"
+            , selectInput("abs_catalogue_1"
+                          , "Catalogue"
+                          , choices = abs_cat
+                          , selected = abs_cat[1]
+            )
+            , selectInput("abs_desc_1"
+                             , label = "Series"
+                             , choices = abs_ref[[1]]$series
+                             , selected = "" 
+            )
+            , selectizeInput("abs_id_1"
+                             , label = "Series ID (for query)"
+                             , choices = abs_ref[[1]]$series_id
+                             , selected = ""
+                             , options = list(create = TRUE)
+            )
+          )
+          
           
           , textInput("label_1",  "Label:", value = "")
           
@@ -258,6 +281,26 @@ ui <- navbarPage(
                              , choices = rba_series[[1]]
             )
           )
+          , conditionalPanel(
+            condition = "input.source_2 == `abs`"
+            , selectInput("abs_catalogue_2"
+                          , "Catalogue"
+                          , choices = abs_cat
+                          , selected = abs_cat[1]
+            )
+            , selectInput("abs_desc_2"
+                          , label = "Series"
+                          , choices = abs_ref[[1]]$series
+                          , selected = "" 
+            )
+            , selectizeInput("abs_id_2"
+                             , label = "Series ID (for query)"
+                             , choices = abs_ref[[1]]$series_id
+                             , selected = ""
+                             , options = list(create = TRUE)
+            )
+          )
+          
           , textInput("label_2",  "Label:", value = "")
           ,textInput("expression_2", "Enter an expression (use 'data' as variable):", value = "data * 2")
           ,actionButton("calculate_2", "Calculate")
@@ -332,6 +375,26 @@ ui <- navbarPage(
             , selectizeInput("rba_desc_3"
                              , label = "RBA Series"
                              , choices = rba_series[[1]]
+            )
+          )
+          
+          , conditionalPanel(
+            condition = "input.source_3 == `abs`"
+            , selectInput("abs_catalogue_3"
+                          , "Catalogue"
+                          , choices = abs_cat
+                          , selected = abs_cat[1]
+            )
+            , selectInput("abs_desc_3"
+                          , label = "Series"
+                          , choices = abs_ref[[1]]$series
+                          , selected = "" 
+            )
+            , selectizeInput("abs_id_3"
+                             , label = "Series ID (for query)"
+                             , choices = abs_ref[[1]]$series_id
+                             , selected = ""
+                             , options = list(create = TRUE)
             )
           )
           , textInput("label_3",  "Label:", value = "")
@@ -413,6 +476,27 @@ ui <- navbarPage(
                              , choices = rba_series[[1]]
             )
           )
+          
+          , conditionalPanel(
+            condition = "input.source_4 == `abs`"
+            , selectInput("abs_catalogue_4"
+                          , "Catalogue"
+                          , choices = abs_cat
+                          , selected = abs_cat[1]
+            )
+            , selectInput("abs_desc_4"
+                          , label = "Series"
+                          , choices = abs_ref[[1]]$series
+                          , selected = "" 
+            )
+            , selectizeInput("abs_id_4"
+                             , label = "Series ID (for query)"
+                             , choices = abs_ref[[1]]$series_id
+                             , selected = ""
+                             , options = list(create = TRUE)
+            )
+          )
+          
           , textInput("label_4",  "Label:", value = "")
           
           ,textInput("expression_4", "Enter an expression (use 'data' as variable):", value = "data * 2")
@@ -724,6 +808,33 @@ server <- function(input, output, session) {
     })
   })
   
+  # Observe changes in catalogue to update series
+  lapply(1:4, function(i) {
+    observe({
+      cat_input <- input[[paste0("abs_catalogue_", i)]]
+      if (!is.null(cat_input)) {
+        series_choices <- abs_ref[[cat_input]] %>% pull(series) %>% na.omit()   # Ensure no NA values
+        if (length(series_choices) > 0) {
+          updateSelectInput(session, paste0("abs_desc_", i), choices = series_choices, selected = series_choices[1])
+        }
+      }
+    })
+  })
+  
+  # Observe changes in series to update id
+  lapply(1:4, function(i) {
+    observe({
+      cat_input <- input[[paste0("abs_catalogue_", i)]]
+      desc_input <- input[[paste0("abs_desc_", i)]]
+      if (!is.null(cat_input)) {
+        series_choices <- abs_ref[[cat_input]] %>% filter(series == desc_input) %>% pull(series_id) %>% na.omit()   # Ensure no NA values
+        if (length(series_choices) > 0) {
+          updateSelectInput(session, paste0("abs_id_", i), choices = series_choices, selected = series_choices[1])
+        }
+      }
+    })
+  })
+  
 
   # Observe changes in each category separately to update series
   lapply(1:4, function(i) {
@@ -824,6 +935,11 @@ server <- function(input, output, session) {
                                 , start_date = lubridate::ymd(min(input$year1), truncated = 2L)
                                 , end_date = lubridate::ymd(max(input$year1), truncated = 2L)
       )
+    } else if (input$source_1 == "abs"){
+      tmp <- abs_data(series = input$abs_id_1
+                      , start_date = lubridate::ymd(min(input$year1), truncated = 2L)
+                      , end_date = lubridate::ymd(max(input$year1), truncated = 2L)
+      )
     }
   
     if(nzchar(input$label_1)){
@@ -867,6 +983,11 @@ server <- function(input, output, session) {
                                 , start_date = lubridate::ymd(min(input$year1), truncated = 2L)
                                 , end_date = lubridate::ymd(max(input$year1), truncated = 2L)
       )
+    } else if (input$source_2 == "abs"){
+      tmp <- abs_data(series = input$abs_id_2
+                      , start_date = lubridate::ymd(min(input$year1), truncated = 2L)
+                      , end_date = lubridate::ymd(max(input$year1), truncated = 2L)
+      )
     }
     if(nzchar(input$label_2)){
       tmp <- tmp %>%
@@ -909,7 +1030,13 @@ server <- function(input, output, session) {
                                 , start_date = lubridate::ymd(min(input$year1), truncated = 2L)
                                 , end_date = lubridate::ymd(max(input$year1), truncated = 2L)
       )
+    } else if (input$source_3 == "abs"){
+      tmp <- abs_data(series = input$abs_id_3
+                      , start_date = lubridate::ymd(min(input$year1), truncated = 2L)
+                      , end_date = lubridate::ymd(max(input$year1), truncated = 2L)
+      )
     }
+    
     if(nzchar(input$label_3)){
       tmp <- tmp %>%
         mutate(name = input$label_3)
@@ -953,7 +1080,13 @@ server <- function(input, output, session) {
                                 , start_date = lubridate::ymd(min(input$year1), truncated = 2L)
                                 , end_date = lubridate::ymd(max(input$year1), truncated = 2L)
       )
+    }else if (input$source_4 == "abs"){
+      tmp <- abs_data(series = input$abs_id_4
+                      , start_date = lubridate::ymd(min(input$year1), truncated = 2L)
+                      , end_date = lubridate::ymd(max(input$year1), truncated = 2L)
+      )
     }
+    
     if(nzchar(input$label_4)){
       tmp <- tmp %>%
         mutate(name = input$label_4)

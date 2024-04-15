@@ -50,6 +50,14 @@ knitr::include_graphics(here("doco", "Australian Dollar Exchange Rates.png"))
 
 <img src="doco/Australian Dollar Exchange Rates.png" width="100%" />
 
+and this (using abs data):
+
+``` r
+knitr::include_graphics(here("doco", "Housing Finance_ New Loan Commitments.png"))
+```
+
+<img src="doco/Housing Finance_ New Loan Commitments.png" width="100%" />
+
 And the CPI-specific tab:
 
 ``` r
