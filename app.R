@@ -77,8 +77,8 @@ ui <- navbarPage(
           , sliderInput("year1"
                         , "Date range"
                         , min = as.numeric(year(min(cpi_data_all$date)))
-                        , max = as.numeric(year(max(cpi_data_all$date)))
-                        , value = c(2014, as.numeric(year(max(cpi_data_all$date)))),
+                        , max = as.numeric(year(max(cpi_data_all$date)))+1
+                        , value = c(2014, as.numeric(year(max(cpi_data_all$date)))+1),
                         sep = "")
           , selectInput("viewData1"
                         , label = "Display Table"
@@ -150,12 +150,13 @@ ui <- navbarPage(
             , selectInput("rba_table_1"
                           , "RBA Table"
                           , choices = rba_tables
-                          , selected = rba_tables[1]
+                          , selected = ""
             )
             , selectizeInput("rba_desc_1"
                           , label = "RBA Series"
                           , choices = rba_series[[1]]
                           , selected = "" #rba_series[["A1"]][1]
+                          , multiple = T
             )
           )
           

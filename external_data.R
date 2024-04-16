@@ -225,6 +225,8 @@ db_data <- function(
 # read_rba ----
 
 library(readrba)
+# tmp <- browse_rba_tables()
+# rba_table_names <- paste(tmp$no, tmp$title)
 
 rba_tables <- unique(browse_rba_series()$table_no)
 
@@ -246,27 +248,36 @@ rba_desc_id <- tmp
 
 
 rba_data <- function(
-   # table = input$rba_table_1
     series = input$rba_desc_1
 ){
-  
-  if(series != ""){
-  tmp <- rba_desc_id %>%
-    filter(#table_no == table,
-           description == series) %>%
-    pull(series_id)
-  
-  shinyCatch(
-    return(
-      read_rba_seriesid(tmp[1]) %>%
-      select(c(date, value, description)) %>%
-      rename(name = description) %>%
-      drop_na()
-    ))
+  if(length(series) != 0){
+    tmp <- rba_desc_id %>%
+      filter(description %in% series) %>%
+      group_by(description) %>%
+      slice_head(n=1) %>%
+      pull(series_id) 
     
+    tmp1 <- data.frame(date=as.Date(character()),
+                       value=as.numeric(character()),
+                       name=character(), 
+                       stringsAsFactors=FALSE)
+    
+    print(length(tmp))
+    for (i in 1:length(tmp)){
+      tmp1 <- tmp1 %>%
+        rbind(
+          read_rba_seriesid(tmp[i]) %>%
+            select(c(date, value, description)) %>%
+            rename(name = description) %>%
+            drop_na()
+        )}
+    return(tmp1)
   }
 }
 
+# tmp7 <- c("Australian Government Deposits", "Australian dollar investments")
+# 
+# rba_data(series = tmp7)
 
 
 # readabs
