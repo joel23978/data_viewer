@@ -112,10 +112,6 @@ ui <- navbarPage(
           )
           , conditionalPanel(
             condition = "input.source_1 == `local`"
-            # , selectizeInput("local_1"
-            #                  , "Local Series"
-            #                  , choices = list("CPI")
-            #                  , selected = "CPI")
             , selectizeInput("text_1"
                              , "Search"
                              , choices = list(
@@ -527,10 +523,6 @@ ui <- navbarPage(
           
           
           ## Inputs
-          # , fluidRow(column(12,
-          #                   textInput("expression_btwn", "Enter an expression (use 'data1', 'data2' etc as variables):", value = "data1 - data2")
-          #          , actionButton("calculate_btwn", "Calculate")))
-          # , hr()
           , fluidRow(
             column(5,
                    h4("More Inputs:")
@@ -574,7 +566,7 @@ ui <- navbarPage(
           , fluidRow(
             column(width = 3,
                    h4("Chart Inputs")
-                   , selectizeInput("cht_type", "x Chart Type:", choices =  "simple") #list()
+                   # , selectizeInput("cht_type", "x Chart Type:", choices =  "simple") #list()
                    , selectizeInput("cht_legend", "Legend:", choices = c("none", "bottom"), selected = "bottom")
                    , selectizeInput("cht_colour_palette", "Colour palette:", choices = palette.pals()) #list()
                    
@@ -616,8 +608,8 @@ ui <- navbarPage(
             , downloadButton("exportData", "Data (.csv)")
             , downloadButton("exportHTML", "Chart (.html)")
             , downloadButton("exportPNG", "Chart (.png)")
-            , downloadButton("exportPPTX", "x Chart (.pptx)")
-            , downloadButton("exportR", "x Chart (.R)")
+            # , downloadButton("exportPPTX", "x Chart (.pptx)")
+            # , downloadButton("exportR", "x Chart (.R)")
 
           )
           , hr()
@@ -688,39 +680,6 @@ ui <- navbarPage(
                                        , "Yes"=1
                       )
         )
-        
-        # , selectInput("trnsfrm"
-        #               , label = "Transformation"
-        #               , choices = list("Index" = 0
-        #                                , "Percent Change" = 1
-        #                                , "Contribution" = 2
-        #                                #, "Contribution (Proportion)" = 3
-        #                                )
-        #               , selected = 0)
-        
-        # , conditionalPanel(
-        #   condition = "input.trnsfrm != 0"
-        #   , selectInput("period"
-        #                 , label = "Period"
-        #                 , choices = list("12-month" = 12
-        #                                  , "9-month" = 9
-        #                                  , "6-month" = 6
-        #                                  , "3-month" = 3
-        #                                  , "1-month" = 1)
-        #                 , selected = 12
-        #   )
-        # )
-        # 
-        # , conditionalPanel(
-        #   condition = "input.period != 0"
-        #   , selectInput("annualise"
-        #                 , label = "Annualised Change"
-        #                 , choices = list("no" = F
-        #                                  , "yes" = T
-        #                 )
-        #                 , selected = 0
-        #   )
-        # )
         # Button
         , downloadButton("downloadData", "Download")
       )
@@ -1066,6 +1025,9 @@ server <- function(input, output, session) {
     return(tmp)
   })
   
+  
+  
+  
   # data transform ----
   
   # Initialize reactive value to store modified data
@@ -1352,7 +1314,7 @@ p_data_4.2 <- reactive({
 
 
   
-  #CPI  ----
+  #CPI TAB  ----
   
   
   p_data <- reactive({
@@ -1382,41 +1344,6 @@ p_data_4.2 <- reactive({
                        , dates = as.numeric(input$year)
     )
   })
-  
-  
-  # Data query ----
-  # p_data_edit <- reactive({
-  #   
-  #   if (input$source_1 == "local"){
-  #     return_data <- cpi_splits_cust(cpi_data = cpi_data_all
-  #                                    , transformation = input$trnsfrm_1
-  #                                    , dates = as.numeric(input$year1)
-  #                                    
-  #                                    , pick_split_1 = unlist(input$text_1)
-  #                                    , pick_split_2 = unlist(input$text_2)
-  #                                    , pick_split_3 = unlist(input$text_3)
-  #                                    , pick_split_4 = unlist(input$text_4)
-  #                                    
-  #                                    , region_1_split = input$region_1
-  #                                    , region_2_split = input$region_2
-  #                                    , region_3_split = input$region_3
-  #                                    , region_4_split = input$region_4
-  #                                    , rebase_date = as.Date(input$rebase_date)
-  #     ) 
-  #     
-  #   } else if (input$source_1 == "FRED"){
-  #     
-  #     return_data <- fred_data(series = input$fred_series
-  #                              , start_date = lubridate::ymd(min(input$year1), truncated = 2L)
-  #                              , end_date = lubridate::ymd(max(input$year1), truncated = 2L)
-  #     )
-  #   }
-  #   return(return_data)
-  # })
-  # 
-  # 
-  # 
-
   
   
   
@@ -1494,65 +1421,7 @@ p_data_4.2 <- reactive({
     
   })
   
-
-#   p_data_0 <- reactive({
-#     cpi_splits(cpi_data = cpi_long
-#                , pick_split = input$splits
-#                , region_split = input$splits_region
-#                #, pick_sub_split = input$sub_split
-#                , dates = as.numeric(input$year)
-#     ) 
-#   })
-#   
-#   p_data <- reactive({
-#     cpi_transformation(cpi_data = p_data_0
-#                      #  , pick_split = input$splits
-#                      #  , transformation = as.numeric(input$trnsfrm)
-#                        , transformation = input$trnsfrm
-#                        , period_change = as.numeric(input$period)
-#                        , annualise = as.numeric(input$annualise)
-#                        , dates = as.numeric(input$year)
-#     )
-#   })
-# 
-# 
-#   
-#   #browser()
-#   
-#   
-#   
-#   # Plot ---------------
-#   output$p_plot <- renderPlotly({ggplotly(
-#     p_data() %>%
-#       ggplot() +
-#       geom_col(aes(x=date, y=change_pct_cont, fill = pick_split1)) +
-#       geom_line(data = p_data() %>%
-#                   group_by(date) %>%
-#                   summarise(change_pct_cont = sum(change_pct_cont))
-#                 , aes(x=date, y=change_pct_cont)) +
-#       theme_minimal() +
-#       xlab("Date") +
-#       ylab("Percent")
-#   )})
-#   
-#   
-#   # Table ---------------
-#   output$p_table_change <- renderTable({
-#     p_data() %>%
-#       select(c("date", "change_pct", "pick_split1")) %>%
-#       pivot_wider(names_from = date, values_from = change_pct) 
-#     
-#   })
-#   
-#   output$p_table_change_cont <- renderTable({
-# 
-#     p_data() #%>%
-#       # select(c("date", "change_pct_cont", "pick_split1")) %>%
-#       # pivot_wider(names_from = date, values_from = change_pct_cont) %>%
-#       # adorn_totals("row")
-#     
-#   })
-#   
+ 
   
   # csv download ---------------
   output$downloadData <- downloadHandler(

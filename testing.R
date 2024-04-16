@@ -5,7 +5,7 @@
 # read_aofm("aggregate", "dealt")
 
 
-library(readabs)
+# library(readabs)
 # abs_catalogue <- read_csv(here("data", "abs_catalogue.csv")) %>%
 #   filter(`Catalogue Number` %!in% c("3101.0"
 #                                     , "3201.0 (Ceased)"
@@ -27,7 +27,3 @@ library(readabs)
 # save(abs_ref, file = here("data", "abs_ref.Rda"))
 # abs_cat <- paste(abs_catalogue$`Catalogue Number`, abs_catalogue$`Topic`) %>% head(39)
 # save(abs_cat, file = here("data", "abs_cat.Rda"))
-
-
-load(file = here("data", "abs_ref.Rda"))
-load(file = here("data", "abs_cat.Rda"))

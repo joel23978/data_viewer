@@ -2,15 +2,6 @@
 
 library(Rblpapi)
 
-# path_input_excel <- "//romulus/ecd_h$/Reuters/FMU/fmuRcharts/input_excel.xlsm"
-# bbg_ref <- read_excel(path = path_input_excel
-#            , sheet = "Queries"
-#            , skip = 1)  %>%
-#   select(c(9:11)) %>%
-#   drop_na()
-#
-# save(bbg_ref, file = here("data", "bbg_ref.Rda"))
-
 load(here("data", "bbg_ref.Rda"))
 
 bbg_ref <- bbg_ref %>%

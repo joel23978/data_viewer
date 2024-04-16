@@ -315,15 +315,7 @@ set_chart_defaults <- function(
                                   alpha = .1,fill = "blue")
     )
   }
-  
-  # if(recession_shading != "none"){
-  #   chart_defaults <<- c(chart_defaults, 
-  #                        annotate("rect", xmin = cht_start_date, xmax = cht_end_date
-  #                                 , ymin = 3, ymax = 5,
-  #                                 alpha = .1,fill = "blue")
-  #   )
-  # }
-  
+
   if(recession_shading != "none"){
     chart_defaults <<- c(chart_defaults,
                          geom_rect(data=rec_data %>%
