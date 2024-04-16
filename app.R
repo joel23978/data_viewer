@@ -528,8 +528,11 @@ ui <- navbarPage(
           , fluidRow(
             column(3,
                    h4("More Inputs:")
-                   , selectizeInput("data_freq", "x Data Frequency:", choices = c("Day", "Week", "Month", "Quarter", "Annual"))
                    , numericInput("moving_avg", "Moving Average (no. obs):", value = 1)
+                   # Input for the mathematical expression
+                   ,textInput("expression", "Enter an expression (use 'data' as variable):", value = "data * 2")
+                   , actionButton("calculate", "Calculate")
+                   # , selectizeInput("data_freq", "x Data Frequency:", choices = c("Day", "Week", "Month", "Quarter", "Annual"))
             ),
             column(4, offset = 1,
                    numericInput("horizontal_1", "Horizontal Line (1)", value = NULL)
@@ -927,8 +930,6 @@ server <- function(input, output, session) {
     } else if (input$source_1 == "rba"){
       tmp <- rba_data(#table = input$rba_table_1,
                                series = input$rba_desc_1
-                               , start_date = lubridate::ymd(min(input$year1), truncated = 2L)
-                               , end_date = lubridate::ymd(max(input$year1), truncated = 2L)
       )
     } else if (input$source_1 == "bloomberg"){
       tmp <- bbg_data(series = input$bloomberg_ticker_1
@@ -937,8 +938,6 @@ server <- function(input, output, session) {
       )
     } else if (input$source_1 == "abs"){
       tmp <- abs_data(series = input$abs_id_1
-                      , start_date = lubridate::ymd(min(input$year1), truncated = 2L)
-                      , end_date = lubridate::ymd(max(input$year1), truncated = 2L)
       )
     }
   
@@ -975,8 +974,6 @@ server <- function(input, output, session) {
     } else if (input$source_2 == "rba"){
       tmp <- rba_data(#table = input$rba_table_2,
                               series = input$rba_desc_2
-                               , start_date = lubridate::ymd(min(input$year1), truncated = 2L)
-                               , end_date = lubridate::ymd(max(input$year1), truncated = 2L)
       )
     } else if (input$source_2 == "bloomberg"){
       tmp <- bbg_data(series = input$bloomberg_ticker_2
@@ -985,8 +982,6 @@ server <- function(input, output, session) {
       )
     } else if (input$source_2 == "abs"){
       tmp <- abs_data(series = input$abs_id_2
-                      , start_date = lubridate::ymd(min(input$year1), truncated = 2L)
-                      , end_date = lubridate::ymd(max(input$year1), truncated = 2L)
       )
     }
     if(nzchar(input$label_2)){
@@ -1022,8 +1017,6 @@ server <- function(input, output, session) {
     }  else if (input$source_3 == "rba"){
       tmp <- rba_data(#table = input$rba_table_3,
                                series = input$rba_desc_3
-                               , start_date = lubridate::ymd(min(input$year1), truncated = 2L)
-                               , end_date = lubridate::ymd(max(input$year1), truncated = 2L)
       )
     } else if (input$source_3 == "bloomberg"){
       tmp <- bbg_data(series = input$bloomberg_ticker_3
@@ -1032,8 +1025,6 @@ server <- function(input, output, session) {
       )
     } else if (input$source_3 == "abs"){
       tmp <- abs_data(series = input$abs_id_3
-                      , start_date = lubridate::ymd(min(input$year1), truncated = 2L)
-                      , end_date = lubridate::ymd(max(input$year1), truncated = 2L)
       )
     }
     
@@ -1072,8 +1063,6 @@ server <- function(input, output, session) {
     } else if (input$source_4 == "rba"){
       tmp <- rba_data(#table = input$rba_table_4,
                                 series = input$rba_desc_4
-                               , start_date = lubridate::ymd(min(input$year1), truncated = 2L)
-                               , end_date = lubridate::ymd(max(input$year1), truncated = 2L)
       )
     }  else if (input$source_4 == "bloomberg"){
       tmp <- bbg_data(series = input$bloomberg_ticker_4
@@ -1082,8 +1071,6 @@ server <- function(input, output, session) {
       )
     }else if (input$source_4 == "abs"){
       tmp <- abs_data(series = input$abs_id_4
-                      , start_date = lubridate::ymd(min(input$year1), truncated = 2L)
-                      , end_date = lubridate::ymd(max(input$year1), truncated = 2L)
       )
     }
     
@@ -1154,28 +1141,35 @@ server <- function(input, output, session) {
   })
   
   p_data_edit <- reactive({
-    return(p_data_1.1() %>%
+    tmp <- p_data_1.1() %>%
              rbind(p_data_2.1()) %>%
              rbind(p_data_3.1()) %>%
-             rbind(p_data_4())
-    )
-  })
-  
-  
-  
-  # Data transformation ----
-  p_data_cust <- reactive({
-    
-    return_data <- p_data_edit()
+             rbind(p_data_4()) %>%
+             filter(date >=  lubridate::ymd(min(input$year1), truncated = 2L)
+                    , date <= lubridate::ymd(max(input$year1), truncated = 2L)
+             )
     
     if(is.integer(input$moving_avg) == T){
-      return_data <- calc_moving_avg(input_data = p_data_edit()
-                                  , moving_avg = input$moving_avg) 
-
+      tmp <- calc_moving_avg(input_data = tmp
+                             , moving_avg = input$moving_avg) 
     } 
-
-    return(return_data)
+    return(tmp)
+    
   })
+  
+  
+  p_data_cust <- reactiveVal()
+  observe({
+    p_data_cust(p_data_edit())
+  })
+  observeEvent(input$calculate, {
+    expression_text <- sub("data", "value", input$expression)
+    tmp <- p_data_cust() %>%  # use the latest stored data
+      mutate(value = eval(parse(text = expression_text)))
+    p_data_cust(tmp)
+  })
+
+
   
 
   
@@ -1205,7 +1199,7 @@ server <- function(input, output, session) {
                        , cht_y_increment = input$cht_y_increment
                        , cht_y_invert = input$cht_y_invert
                        , cht_y_axes_unit = input$cht_y_axes_unit
-                       , cht_y_axes_unit_size = input$cht_y_axes_unit_size
+                       #, cht_y_axes_unit_size = input$cht_y_axes_unit_size
                        , cht_start_date# = input$cht_start_date
                        , cht_end_date# = input$cht_end_date
                        , cht_x_date_format = input$cht_x_date_format

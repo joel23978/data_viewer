@@ -248,8 +248,6 @@ rba_desc_id <- tmp
 rba_data <- function(
    # table = input$rba_table_1
     series = input$rba_desc_1
-    , start_date = lubridate::ymd(min(input$year1), truncated = 2L)
-    , end_date = lubridate::ymd(max(input$year1), truncated = 2L)
 ){
   
   if(series != ""){
@@ -263,8 +261,6 @@ rba_data <- function(
       read_rba_seriesid(tmp[1]) %>%
       select(c(date, value, description)) %>%
       rename(name = description) %>%
-      filter(date <= end_date
-             , date >= start_date) %>%
       drop_na()
     ))
     
@@ -305,8 +301,6 @@ load(file = here("data", "abs_cat.Rda"))
 
 abs_data <- function(
   series = input$abs_id_1
-  , start_date = lubridate::ymd(min(input$year1), truncated = 2L)
-  , end_date = lubridate::ymd(max(input$year1), truncated = 2L)
 ){
   
   if(series != ""){
@@ -315,8 +309,6 @@ abs_data <- function(
         read_abs(series_id = series) %>%
           select(date, value, series) %>%
           rename(name = series) %>%
-          filter(date <= end_date
-                 , date >= start_date) %>%
           drop_na()
       ))
   }

@@ -69,7 +69,7 @@ theme_jf <- function() {
                    axis.text.y.left = element_text(margin=unit(c(0.5,0.5,0.5,0.5), "cm")),
                    axis.text.y.right = element_text(margin=unit(c(0.5,0.5,0.5,0.5), "cm")),
                    axis.line.x = element_line(size = 0.5, colour = "grey70"),
-                   plot.title = element_text(hjust = 1, size = 10, vjust = -7),
+                   plot.title = element_text(hjust = 1, vjust = -6),
                    strip.background = element_blank(),
                    strip.text = element_text(hjust = 0),
     )
@@ -158,7 +158,7 @@ set_chart_defaults <- function(
     , cht_y_increment = 2
     , cht_y_invert = F
     , cht_y_axes_unit = "%"
-    , cht_y_axes_unit_size = 7
+  #  , cht_y_axes_unit_size = 7
     
     , cht_start_date = min(input_data$value)
     , cht_end_date = max(input_data$value)
@@ -199,8 +199,8 @@ set_chart_defaults <- function(
     theme(
       legend.position = cht_legend,
       text = element_text(size = cht_axes_font_size),
-      plot.title = element_text(size = cht_y_axes_unit_size),
-      plot.subtitle = element_text(size = cht_y_axes_unit_size)
+      plot.title = element_text(size = cht_axes_font_size),
+      plot.subtitle = element_text(size = cht_axes_font_size)
     ),
     scale_x_date(
       expand = c(0, 0),
