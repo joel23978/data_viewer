@@ -21,7 +21,8 @@ library(lubridate)
 Sys.setenv(R_READABS_PATH = here("data"))
 
 # load from disk to reduce run time
-load(file = here("data", "cpi_data_all.R"))
+load(file = here("data", "cpi_data_all.Rda"))
+
 cpi_data <- cpi_data_all
 # 
 # ## data download ----
