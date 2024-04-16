@@ -313,13 +313,6 @@ abs_data <- function(
       ))
   }
 }
-# 
-# read_abs(series_id="A84423127L") %>%
-#   select(date, value, series) %>%
-#   rename(name = series) %>%
-#   filter(date <= end_date
-#          , date >= start_date) %>%
-#   drop_na()
 
 
 

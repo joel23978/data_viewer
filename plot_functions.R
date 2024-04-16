@@ -108,16 +108,52 @@ set_x_axis <- function(chart_start_date
 
 
 calc_moving_avg <- function(input_data, moving_avg){
-  input_data <- input_data %>%
+  tmp <- input_data %>%
     group_by(name) %>%
     arrange(date) %>%
     mutate(value = rollmean(value, moving_avg ,fill = NA, align='right')) %>%
     ungroup() %>%
     drop_na()
   
-  return(input_data)
+  return(tmp)
 }
+
+calc_lagged_change_val <- function(input_data, input_lag){
+  tmp <- input_data %>%
+    group_by(name) %>%
+    arrange(date) %>%
+    mutate(value = value - lag(value, input_lag)) %>%
+    ungroup() %>%
+    drop_na()
+  
+  return(tmp)
+}
+
+calc_lagged_change_pct <- function(input_data, input_lag){
+  tmp <- input_data %>%
+    group_by(name) %>%
+    arrange(date) %>%
+    mutate(value = 100*value/lag(value, input_lag)-100) %>%
+    ungroup() %>%
+    drop_na()
+  
+  return(tmp)
+}
+
     
+
+calc_lagged_change_ann <- function(input_data, input_lag){
+  tmp <- input_data %>%
+    group_by(name) %>%
+    arrange(date) %>%
+    mutate(months = round(as.numeric(difftime(date, lag(date, 1)))/365*12)
+           , months = na.locf(months, fromLast=T)) %>%
+    mutate(value = 100*(value/lag(value,input_lag))^((12/months)/input_lag)-100) %>%
+    ungroup() %>%
+    drop_na()
+  
+  return(tmp)
+}
 
 
 set_default_values <- function(

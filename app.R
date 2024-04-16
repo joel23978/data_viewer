@@ -18,6 +18,7 @@ library(htmlwidgets)
 library(shinyWidgets)
 library(DT)
 library(shinyToastify)
+library(spsComps)
 
 
 source(here::here("cpi_annual.R"))
@@ -525,25 +526,33 @@ ui <- navbarPage(
           
           
           ## Inputs
+          # , fluidRow(column(12,
+          #                   textInput("expression_btwn", "Enter an expression (use 'data1', 'data2' etc as variables):", value = "data1 - data2")
+          #          , actionButton("calculate_btwn", "Calculate")))
+          # , hr()
           , fluidRow(
-            column(3,
+            column(5,
                    h4("More Inputs:")
                    , numericInput("moving_avg", "Moving Average (no. obs):", value = 1)
-                   # Input for the mathematical expression
-                   ,textInput("expression", "Enter an expression (use 'data' as variable):", value = "data * 2")
-                   , actionButton("calculate", "Calculate")
+                   , numericInput("lagged_change_val", "Lagged Change - Value (no. obs):", value = 0)
+                   , numericInput("lagged_change_pct", "Lagged Change - % (no. obs):", value = 0)
+                   , numericInput("lagged_change_ann", "Lagged Change - %ann (no. obs):", value = 0)
                    # , selectizeInput("data_freq", "x Data Frequency:", choices = c("Day", "Week", "Month", "Quarter", "Annual"))
             ),
-            column(4, offset = 1,
-                   numericInput("horizontal_1", "Horizontal Line (1)", value = NULL)
-                   , numericInput("horizontal_2", "Horizontal Line (2)", value = NULL)
-                   , numericRangeInput("horizontal_shading", "Horizontal Shading", value = c(NA,NA))
-            ),
-            column(4,
-                   dateInput("vertical_1", "Vertical Line (1)", value = as.Date(NA))
-                   , dateInput("vertical_2", "Vertical Line (2)", value = as.Date(NA))
+            column(4
                    , selectInput("recession_shading", "Recession Shading:"
-                                    , choices = c("AU", "US", "UK", "EZ", "none"), selected = "none")
+                                 , choices = c("AU", "US", "UK", "EZ", "none"), selected = "none")
+                   , numericRangeInput("horizontal_shading", "Horizontal Shading", value = c(NA,NA))
+                   # Input for the mathematical expression
+                   , textInput("expression_num", "Enter an expression (use 'data' as variable):", value = "data * 2")
+                   , actionButton("calculate_num", "Calculate")
+            ),
+            column(3
+                   , numericInput("horizontal_1", "Horizontal Line (1)", value = NULL)
+                   , numericInput("horizontal_2", "Horizontal Line (2)", value = NULL)
+                   , dateInput("vertical_1", "Vertical Line (1)", value = as.Date(NA))
+                   , dateInput("vertical_2", "Vertical Line (2)", value = as.Date(NA))
+                   
             )
           ),
           hr()
@@ -940,16 +949,9 @@ server <- function(input, output, session) {
       tmp <- abs_data(series = input$abs_id_1
       )
     }
-  
-    if(nzchar(input$label_1)){
-      tmp <- tmp %>%
-        mutate(name = input$label_1)
-    } 
-    tmp <- tmp %>%
-      mutate(plotting = input$vis_type_1)
     return(tmp)
-
   })
+  
   
   p_data_2 <- reactive({
     if (input$source_2 == "local"){
@@ -984,12 +986,6 @@ server <- function(input, output, session) {
       tmp <- abs_data(series = input$abs_id_2
       )
     }
-    if(nzchar(input$label_2)){
-      tmp <- tmp %>%
-        mutate(name = input$label_2)
-    } 
-    tmp <- tmp %>%
-      mutate(plotting = input$vis_type_2)
     return(tmp)
   })
     
@@ -1027,13 +1023,6 @@ server <- function(input, output, session) {
       tmp <- abs_data(series = input$abs_id_3
       )
     }
-    
-    if(nzchar(input$label_3)){
-      tmp <- tmp %>%
-        mutate(name = input$label_3)
-    } 
-    tmp <- tmp %>%
-      mutate(plotting = input$vis_type_3)
     return(tmp)
   })
     
@@ -1073,17 +1062,11 @@ server <- function(input, output, session) {
       tmp <- abs_data(series = input$abs_id_4
       )
     }
-    
-    if(nzchar(input$label_4)){
-      tmp <- tmp %>%
-        mutate(name = input$label_4)
-    } 
-    
-    tmp <- tmp %>%
-      mutate(plotting = input$vis_type_4)
     return(tmp)
   })
-   
+  
+  # data transform ----
+  
   # Initialize reactive value to store modified data
   p_data_1.1 <- reactiveVal()
   
@@ -1140,11 +1123,75 @@ server <- function(input, output, session) {
     p_data_4.1(tmp)
   })
   
+  
+
+  
+p_data_1.2 <- reactive({
+  tmp <- p_data_1.1()
+  
+  if(nzchar(input$label_1)){
+    tmp <- tmp %>%
+      mutate(name = input$label_1)
+  } 
+  
+  tmp <- tmp %>%
+    mutate(plotting = input$vis_type_1) %>%
+    mutate(series = 1)
+  return(tmp)
+  
+})
+
+p_data_2.2 <- reactive({
+  tmp <- p_data_2.1()
+  
+  if(nzchar(input$label_2)){
+    tmp <- tmp %>%
+      mutate(name = input$label_2)
+  } 
+  
+  tmp <- tmp %>%
+    mutate(plotting = input$vis_type_2) %>%
+    mutate(series = 2)
+  return(tmp)
+  
+})
+
+  
+p_data_3.2 <- reactive({
+  tmp <- p_data_3.1()
+  
+  if(nzchar(input$label_3)){
+    tmp <- tmp %>%
+      mutate(name = input$label_3)
+  } 
+  
+  tmp <- tmp %>%
+    mutate(plotting = input$vis_type_3)  %>%
+    mutate(series = 3)
+  return(tmp)
+  
+})
+
+p_data_4.2 <- reactive({
+  tmp <- p_data_4.1()
+  
+  if(nzchar(input$label_4)){
+    tmp <- tmp %>%
+      mutate(name = input$label_4)
+  } 
+  tmp <- tmp %>%
+    mutate(plotting = input$vis_type_4) %>%
+    mutate(series = 4)
+  return(tmp)
+  
+})
+  
+  
   p_data_edit <- reactive({
-    tmp <- p_data_1.1() %>%
-             rbind(p_data_2.1()) %>%
-             rbind(p_data_3.1()) %>%
-             rbind(p_data_4()) %>%
+    tmp <- p_data_1.2() %>%
+             rbind(p_data_2.2()) %>%
+             rbind(p_data_3.2()) %>%
+             rbind(p_data_4.2()) %>%
              filter(date >=  lubridate::ymd(min(input$year1), truncated = 2L)
                     , date <= lubridate::ymd(max(input$year1), truncated = 2L)
              )
@@ -1153,17 +1200,37 @@ server <- function(input, output, session) {
       tmp <- calc_moving_avg(input_data = tmp
                              , moving_avg = input$moving_avg) 
     } 
+    
+    if(is.integer(input$lagged_change_val) == T & input$lagged_change_val != 0){
+      tmp <- calc_lagged_change_val(input_data = tmp
+                             , input_lag = input$lagged_change_val) 
+    } 
+    
+    if(is.integer(input$lagged_change_pct) == T & input$lagged_change_pct != 0){
+      tmp <- calc_lagged_change_pct(input_data = tmp
+                                , input_lag = input$lagged_change_pct) 
+    } 
+    
+    if(is.integer(input$lagged_change_ann) == T & input$lagged_change_ann != 0){
+      tmp <- calc_lagged_change_ann(input_data = tmp
+                                , input_lag = input$lagged_change_ann) 
+    }
+    
     return(tmp)
     
   })
+  
+  
+  
+  
   
   
   p_data_cust <- reactiveVal()
   observe({
     p_data_cust(p_data_edit())
   })
-  observeEvent(input$calculate, {
-    expression_text <- sub("data", "value", input$expression)
+  observeEvent(input$calculate_num, {
+    expression_text <- sub("data", "value", input$expression_num)
     tmp <- p_data_cust() %>%  # use the latest stored data
       mutate(value = eval(parse(text = expression_text)))
     p_data_cust(tmp)
