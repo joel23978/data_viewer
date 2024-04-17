@@ -603,9 +603,9 @@ ui <- navbarPage(
            column(width = 11, 
               useShinyToastify(),
               div(style="display:inline-block",actionButton("copybtn", "Copy", icon = icon("copy"), class = "btn-primary")),
-              div(style="display:inline-block",downloadButton("exportPNG", "Chart (.png)")),
+              div(style="display:inline-block",downloadButton("exportPNG", "Static Chart (.png)")),
+              div(style="display:inline-block",downloadButton("exportHTML", "Interactive Chart (.html)")),
               div(style="display:inline-block",downloadButton("exportData", "Data (.csv)")),
-              div(style="display:inline-block",downloadButton("exportHTML", "Chart (.html)"))
             ))
 
           
@@ -1393,9 +1393,7 @@ p_data_4.2 <- reactive({
   
   # html download ----
   output$exportHTML <- downloadHandler(
-    filename = function() {
-      paste("data-", Sys.Date(), ".html", sep = "")
-    },
+    filename = function(){paste0(input$cht_title, ".html")}, 
     content = function(file) {
       # export plotly html widget as a temp file to download.
       saveWidget(as_widget(session_store$plt), file, selfcontained = TRUE)
@@ -1420,6 +1418,25 @@ p_data_4.2 <- reactive({
     }
 
   )
+  
+  # csv download ---------------
+  output$exportData <- downloadHandler(
+    filename = function(){paste0(input$cht_title, ".csv")}, 
+    content = function(file) {
+      write.csv(p_data_cust()  %>%
+                  select(c("name", "value", "date")) %>%
+                  arrange(date) %>%
+                  pivot_wider(names_from = name, values_from = value)
+                , file
+                , row.names = FALSE)
+    }
+  )
+  
+  
+  
+  
+  
+  
 
 
 
