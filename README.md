@@ -13,6 +13,9 @@ The app currently allows you to pull data from FRED, dbnomics, the RBA
 (using readrba), the ABS (using readabs) and bloomberg (assuming you
 have access to a terminal).
 
+The app is also hosted using *shinyapps.io* and can be accessed at the
+following [link](https://joelfindlay.shinyapps.io/cpi_abs/).
+
 Note: The app works best in chrome (other browsers may not allow for
 copying charts to clipboard).
 
