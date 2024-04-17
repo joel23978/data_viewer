@@ -3,7 +3,7 @@ data_sources <- list("local"
                     , "dbnomics"
                     , "rba"
                     , "abs"
-                    , "bloomberg"
+                    #, "bloomberg"
 )
 
 transformation_choices <- list("index" 

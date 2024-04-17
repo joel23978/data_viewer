@@ -548,8 +548,13 @@ ui <- navbarPage(
         ## outputs ----
         , mainPanel(
           uiOutput("tab")
-          
-          
+          # , conditionalPanel(
+          #   condition = "input.source_1 == `FRED` || input.source_2 == `FRED` || input.source_3 == `FRED` || input.source_4 == `FRED`"
+          , actionButton("reset", "Enter FRED API Key (required to query data from FRED)", style="simple", size="sm", color = "warning")
+          , verbatimTextOutput(outputId = "text")
+          #)
+
+
           ## Chart
           , h4("Interactive Chart:")
           , plotlyOutput("p_cust")
@@ -777,10 +782,42 @@ server <- function(input, output, session) {
   fred_link <- a("FRED", href="https://fred.stlouisfed.org/tags/series")
   dbnomics_link <- a("dbnomics", href="https://db.nomics.world")
   rba_link <- a("RBA Statistical Tables", href="https://www.rba.gov.au/statistics/tables/")
+  abs_link <- a("ABS", href="https://www.abs.gov.au")
+  fred_api_link <- a("FRED API Keys", href="https://fred.stlouisfed.org/docs/api/api_key.html")
   
   output$tab <- renderUI({
-    tagList("Data Sources:", fred_link, dbnomics_link, rba_link)
+    tagList("Data Sources:  ", fred_link, "...", dbnomics_link, "...", rba_link, "...", abs_link,  "...",fred_api_link)
   })
+  
+  
+  # ## input FRED API key
+  l <- reactiveValues()
+  observeEvent(input$reset, {
+    # display a modal dialog with a header, textinput and action buttons
+    showModal(modalDialog(
+      tags$h2('Please enter your FRED API key'),
+      textInput('fred_key', 'Key:'),
+      footer=tagList(
+        actionButton('submit', 'Submit'),
+        modalButton('cancel')
+      )
+    ))
+  })
+  
+  # only store the information if the user clicks submit
+  observeEvent(input$submit, {
+    removeModal()
+    l$fred_key <- input$fred_key
+    fredr_set_key(l$fred_key)
+  })
+  
+  # display whatever is listed in l
+  output$text <- renderPrint({
+    if (is.null(l$fred_key)) return(NULL)
+    paste('FRED API Key:', l$fred_key)
+  })
+
+  
   
   
   observe({
