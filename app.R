@@ -177,7 +177,6 @@ ui <- navbarPage(
                           , multiple = T
             )
           )
-          
           , conditionalPanel(
             condition = "input.source_1 == `abs`"
             , selectInput("abs_catalogue_1"
@@ -189,6 +188,16 @@ ui <- navbarPage(
                              , label = "Series"
                              , choices = abs_ref[[1]]$series
                              , selected = "" 
+            )
+            , selectInput("abs_series_type_1"
+                             , label = "Series Type"
+                             , choices = unique(abs_ref[[1]]$series_type)
+                             , selected = ""
+            )
+            , selectInput("abs_table_1"
+                          , label = "Table"
+                          , choices = unique(abs_ref[[1]]$table_title)
+                          , selected = ""
             )
             , selectizeInput("abs_id_1"
                              , label = "Series ID (for query)"
@@ -291,6 +300,16 @@ ui <- navbarPage(
                           , choices = abs_ref[[1]]$series
                           , selected = "" 
             )
+            , selectInput("abs_series_type_2"
+                          , label = "Series Type"
+                          , choices = unique(abs_ref[[1]]$series_type)
+                          , selected = ""
+            )
+            , selectInput("abs_table_2"
+                          , label = "Table"
+                          , choices = unique(abs_ref[[1]]$table_title)
+                          , selected = ""
+            )
             , selectizeInput("abs_id_2"
                              , label = "Series ID (for query)"
                              , choices = abs_ref[[1]]$series_id
@@ -388,6 +407,16 @@ ui <- navbarPage(
                           , choices = abs_ref[[1]]$series
                           , selected = "" 
             )
+            , selectInput("abs_series_type_3"
+                          , label = "Series Type"
+                          , choices = unique(abs_ref[[1]]$series_type)
+                          , selected = ""
+            )
+            , selectInput("abs_table_3"
+                          , label = "Table"
+                          , choices = unique(abs_ref[[1]]$table_title)
+                          , selected = ""
+            )
             , selectizeInput("abs_id_3"
                              , label = "Series ID (for query)"
                              , choices = abs_ref[[1]]$series_id
@@ -395,6 +424,7 @@ ui <- navbarPage(
                              , options = list(create = TRUE)
             )
           )
+          
           , textInput("label_3",  "Label:", value = "")
           ,textInput("expression_3", "Enter an expression (use 'data' as variable):", value = "data * 2")
           ,actionButton("calculate_3", "Calculate")
@@ -486,6 +516,16 @@ ui <- navbarPage(
                           , label = "Series"
                           , choices = abs_ref[[1]]$series
                           , selected = "" 
+            )
+            , selectInput("abs_series_type_4"
+                          , label = "Series Type"
+                          , choices = unique(abs_ref[[1]]$series_type)
+                          , selected = ""
+            )
+            , selectInput("abs_table_4"
+                          , label = "Table"
+                          , choices = unique(abs_ref[[1]]$table_title)
+                          , selected = ""
             )
             , selectizeInput("abs_id_4"
                              , label = "Series ID (for query)"
@@ -780,34 +820,75 @@ server <- function(input, output, session) {
     })
   })
   
-  # Observe changes in catalogue to update series
+    
+  ##### abs  ----
   lapply(1:4, function(i) {
+    
+    #catalogue
+    #observeEvent(input[[paste0("abs_catalogue_", i)]],
+                 observe({
+                   cat_input <- input[[paste0("abs_catalogue_", i)]]
+                   desc_choices <- abs_ref[[cat_input]] %>% pull(series) %>% unique() %>% na.omit()  
+                   if (length(desc_choices) > 0) {
+                     desc_input <- desc_choices[1]
+                     updateSelectInput(session, paste0("abs_desc_", i), choices = desc_choices, selected = desc_choices[1])
+                   }
+                 })
+    
+    #desc
+    #observeEvent(input[[paste0("abs_desc_", i)]],
+                 observe({
+                   cat_input <- input[[paste0("abs_catalogue_", i)]]
+                   desc_input <- input[[paste0("abs_desc_", i)]]
+                   series_type_choices <- abs_ref[[cat_input]] %>% filter(series == desc_input) %>% pull(series_type) %>% unique() %>% na.omit() 
+                   if (length(series_type_choices) > 0) {
+                     series_type_input <- series_type_choices[1]
+                     updateSelectInput(session, paste0("abs_series_type_", i), choices = series_type_choices, selected = series_type_choices[1])
+                   }
+                  # browser()
+                 })
+
+    
+    #series type
+    #observeEvent(input[[paste0("abs_series_type_", i)]],
     observe({
-      cat_input <- input[[paste0("abs_catalogue_", i)]]
-      if (!is.null(cat_input)) {
-        series_choices <- abs_ref[[cat_input]] %>% pull(series) %>% na.omit()   # Ensure no NA values
-        if (length(series_choices) > 0) {
-          updateSelectInput(session, paste0("abs_desc_", i), choices = series_choices, selected = series_choices[1])
-        }
-      }
-    })
+                   cat_input <- input[[paste0("abs_catalogue_", i)]]
+                   desc_input <- input[[paste0("abs_desc_", i)]]
+                   series_type_input <- input[[paste0("abs_series_type_", i)]]
+                   table_choices <- abs_ref[[cat_input]] %>% filter(series == desc_input
+                                                                    , series_type == series_type_input) %>% pull(table_title) %>% na.omit() 
+                   if (length(table_choices) > 0) {
+                     updateSelectInput(session, paste0("abs_table_", i), choices = table_choices, selected = table_choices[1])
+                   }
+                 })
+    
+    #table input
+    #observeEvent(input[[paste0("abs_table_", i)]],
+    observe({
+                   cat_input <- input[[paste0("abs_catalogue_", i)]]
+                   desc_input <- input[[paste0("abs_desc_", i)]]
+                   series_type_input <- input[[paste0("abs_series_type_", i)]]
+                   table_input <- input[[paste0("abs_table_", i)]]
+                   id_choices <- abs_ref[[cat_input]] %>% filter(series == desc_input
+                                                                 , series_type == series_type_input
+                                                                 , table_title == table_input) %>% pull(series_id) %>% na.omit() 
+                   if (length(id_choices) > 0) {
+                     updateSelectInput(session, paste0("abs_id_", i), choices = id_choices, selected = id_choices[1])
+                   }
+                 })
+
   })
   
-  # Observe changes in series to update id
-  lapply(1:4, function(i) {
-    observe({
-      cat_input <- input[[paste0("abs_catalogue_", i)]]
-      desc_input <- input[[paste0("abs_desc_", i)]]
-      if (!is.null(cat_input)) {
-        series_choices <- abs_ref[[cat_input]] %>% filter(series == desc_input) %>% pull(series_id) %>% na.omit()   # Ensure no NA values
-        if (length(series_choices) > 0) {
-          updateSelectInput(session, paste0("abs_id_", i), choices = series_choices, selected = series_choices[1])
-        }
-      }
-    })
-  })
+  
+  
+  
+  
+  
   
 
+  
+  ##### bloomy  ----
+  
   # Observe changes in each category separately to update series
   lapply(1:4, function(i) {
     observe({
