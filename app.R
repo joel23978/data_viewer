@@ -598,13 +598,16 @@ ui <- navbarPage(
           ## Static Chart
           , h4("Static Chart:")
           , plotOutput("p_cust_static")
+          , h6("Note: Copy to clipboard only works in Chrome.")
           , fluidRow(
-            useShinyToastify()
-            , actionButton("copybtn", "Copy", icon = icon("copy"), class = "btn-primary")        
-            
-          )
-          
-          
+           column(width = 11, 
+              useShinyToastify(),
+              div(style="display:inline-block",actionButton("copybtn", "Copy", icon = icon("copy"), class = "btn-primary")),
+              div(style="display:inline-block",downloadButton("exportPNG", "Chart (.png)")),
+              div(style="display:inline-block",downloadButton("exportData", "Data (.csv)")),
+              div(style="display:inline-block",downloadButton("exportHTML", "Chart (.html)"))
+            ))
+
           
           
           , hr()
@@ -646,18 +649,7 @@ ui <- navbarPage(
           , hr()
           
           
-          
-          ## More inputs
-          , fluidRow(
-            h4("Exports:")
-            , downloadButton("exportData", "Data (.csv)")
-            , downloadButton("exportHTML", "Chart (.html)")
-            , downloadButton("exportPNG", "Chart (.png)")
-            # , downloadButton("exportPPTX", "x Chart (.pptx)")
-            # , downloadButton("exportR", "x Chart (.R)")
-
-          )
-          , hr()
+      
           
         )
       )
