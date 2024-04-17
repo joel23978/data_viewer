@@ -325,7 +325,7 @@ set_chart_defaults <- function(
                                    , aes(xmin=peak, xmax=trough)
                                    , ymin=cht_y_min
                                    , ymax=cht_title_y_placement - (cht_y_max-cht_title_y_placement)*1.5
-                                   , inherit.aes = FALSE, fill='grey', alpha=0.2)
+                                   , inherit.aes = FALSE, fill='grey', alpha=0.35)
     
     )
   }
