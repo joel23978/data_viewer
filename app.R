@@ -985,7 +985,18 @@ server <- function(input, output, session) {
     )
   })
   
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
   # Data inputs ----
+  
   p_data_1 <- reactive({
     if (input$source_1 == "local"){
       tmp <- cpi_splits_cust(cpi_data = cpi_data_all
@@ -1102,7 +1113,6 @@ server <- function(input, output, session) {
       tmp <- cpi_splits_cust(cpi_data = cpi_data_all
                                        , transformation = input$trnsfrm_4
                                        , dates = as.numeric(input$year1)
-                                       
                                        , pick_split_1 = unlist(input$text_4)
                                        , region_1_split = input$region_4
                                        , rebase_date = as.Date(input$rebase_date_4)
@@ -1136,128 +1146,93 @@ server <- function(input, output, session) {
   })
   
   
+  # 
+  # # Function to fetch data based on the source index
+  # fetch_data_by_index <- function(index) {
+  #   reactive({
+  #     source <- input[[paste0("source_", index)]]
+  #     series <- input[[paste0("series_", index)]]
+  #     
+  #     if (source == "rba") {
+  #       rba_data(series)
+  #     } else if (source == "abs") {
+  #       abs_data(series)
+  #     } else {
+  #       dates <- as.numeric(input$year1)
+  #       start_date <- lubridate::ymd(min(dates), truncated = 2L)
+  #       end_date <- lubridate::ymd(max(dates), truncated = 2L)
+  #       if (source == "local") {
+  #         cpi_splits_cust(cpi_data = cpi_data_all, transformation = input[[paste0("trnsfrm_", index)]],
+  #                         dates = dates, pick_split_1 = unlist(input[[paste0("text_", index)]]),
+  #                         region_1_split = input[[paste0("region_", index)]], rebase_date = as.Date(input[[paste0("rebase_date_", index)]]))
+  #       } else if (source %in% c("FRED", "dbnomics", "bloomberg")) {
+  #         get_financial_data(source, series, start_date, end_date)
+  #       } 
+  #       
+  #     }
+  #     
+  #   })
+  # }
+  # 
+  # # Helper function to fetch financial data
+  # get_financial_data <- function(source, series, start_date, end_date) {
+  #   switch(source,
+  #          "FRED" = fred_data(series, start_date, end_date),
+  #          "dbnomics" = db_data(series, start_date, end_date),
+  #          "bloomberg" = bbg_data(series, start_date, end_date)
+  #   )
+  # }
+  # 
+  # 
+  # # Apply the function across multiple indices
+  # p_data_list <- lapply(1:4, fetch_data_by_index)
+  # 
+  # 
+  # 
   
   
   # data transform ----
-  
-  # Initialize reactive value to store modified data
-  p_data_1.1 <- reactiveVal()
-  
-  # Initialize p_data_1.1 with p_data_1
-  observe({
-    p_data_1.1(p_data_1())
-  })
-  
-  observeEvent(input$calculate_1, {
-    # Retrieve the user's expression and replace 'data' with 'value'
-    expression_text <- sub("data", "value", input$expression_1)
+    initialize_and_transform_data <- function(data_source, index) {
+    # Initialize reactive value
+    reactive_val <- reactiveVal()
     
-    # Update the data using the provided expression
-    tmp <- p_data_1.1() %>%  # use the latest stored data
-      mutate(value = eval(parse(text = expression_text)))
+    # Initialize reactive value with data source
+    observe({
+      reactive_val(data_source())
+    })
     
-    # Update the reactive value with new data
-    p_data_1.1(tmp)
-  })
+    # Create a reactive for transformed data
+    transformed_data <- reactive({
+      # Check if there's an expression to evaluate
+      if (input[[paste0("calculate_", index)]] > 0) {
+        expression_text <- sub("data", "value", input[[paste0("expression_", index)]])
+        data <- reactive_val() %>%
+          dplyr::mutate(value = eval(parse(text = expression_text)))
+      } else {
+        data <- reactive_val()
+      }
+      
+      # Apply label and visualization type transformations if applicable
+      if (nzchar(input[[paste0("label_", index)]])) {
+        data <- data %>%
+          dplyr::mutate(name = input[[paste0("label_", index)]])
+      }
+      
+      # Apply visualization type and series transformations
+      data %>%
+        dplyr::mutate(plotting = input[[paste0("vis_type_", index)]],
+                      series = index)
+    })
+    
+    return(transformed_data)
+  }
   
-  # 2.1
-  p_data_2.1 <- reactiveVal()
-  observe({
-    p_data_2.1(p_data_2())
-  })
-  observeEvent(input$calculate_2, {
-    expression_text <- sub("data", "value", input$expression_2)
-    tmp <- p_data_2.1() %>%  # use the latest stored data
-      mutate(value = eval(parse(text = expression_text)))
-    p_data_2.1(tmp)
-  })
+  # Apply the combined function for each dataset
+  p_data_1.2 <- initialize_and_transform_data(p_data_1, 1)
+  p_data_2.2 <- initialize_and_transform_data(p_data_2, 2)
+  p_data_3.2 <- initialize_and_transform_data(p_data_3, 3)
+  p_data_4.2 <- initialize_and_transform_data(p_data_4, 4)
   
-  # 3.1
-  p_data_3.1 <- reactiveVal()
-  observe({
-    p_data_3.1(p_data_3())
-  })
-  observeEvent(input$calculate_3, {
-    expression_text <- sub("data", "value", input$expression_3)
-    tmp <- p_data_3.1() %>%  # use the latest stored data
-      mutate(value = eval(parse(text = expression_text)))
-    p_data_3.1(tmp)
-  })
-  
-  # 4.1
-  p_data_4.1 <- reactiveVal()
-  observe({
-    p_data_4.1(p_data_4())
-  })
-  observeEvent(input$calculate_4, {
-    expression_text <- sub("data", "value", input$expression_4)
-    tmp <- p_data_4.1() %>%  # use the latest stored data
-      mutate(value = eval(parse(text = expression_text)))
-    p_data_4.1(tmp)
-  })
-  
-  
-
-  
-p_data_1.2 <- reactive({
-  tmp <- p_data_1.1()
-  
-  if(nzchar(input$label_1)){
-    tmp <- tmp %>%
-      mutate(name = input$label_1)
-  } 
-  
-  tmp <- tmp %>%
-    mutate(plotting = input$vis_type_1) %>%
-    mutate(series = 1)
-  return(tmp)
-  
-})
-
-p_data_2.2 <- reactive({
-  tmp <- p_data_2.1()
-  
-  if(nzchar(input$label_2)){
-    tmp <- tmp %>%
-      mutate(name = input$label_2)
-  } 
-  
-  tmp <- tmp %>%
-    mutate(plotting = input$vis_type_2) %>%
-    mutate(series = 2)
-  return(tmp)
-  
-})
-
-  
-p_data_3.2 <- reactive({
-  tmp <- p_data_3.1()
-  
-  if(nzchar(input$label_3)){
-    tmp <- tmp %>%
-      mutate(name = input$label_3)
-  } 
-  
-  tmp <- tmp %>%
-    mutate(plotting = input$vis_type_3)  %>%
-    mutate(series = 3)
-  return(tmp)
-  
-})
-
-p_data_4.2 <- reactive({
-  tmp <- p_data_4.1()
-  
-  if(nzchar(input$label_4)){
-    tmp <- tmp %>%
-      mutate(name = input$label_4)
-  } 
-  tmp <- tmp %>%
-    mutate(plotting = input$vis_type_4) %>%
-    mutate(series = 4)
-  return(tmp)
-  
-})
   
   
   p_data_edit <- reactive({

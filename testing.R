@@ -27,3 +27,31 @@
 # save(abs_ref, file = here("data", "abs_ref.Rda"))
 # abs_cat <- paste(abs_catalogue$`Catalogue Number`, abs_catalogue$`Topic`) %>% head(39)
 # save(abs_cat, file = here("data", "abs_cat.Rda"))
+
+library(shiny)
+library(tidyverse)
+
+ui <- fluidPage(
+  textInput("package", "Package name", value = "ggplot2"),
+  plotOutput("plot")
+)
+
+server <- function(input, output, session) {
+  
+  downloads <- reactive({
+    cranlogs::cran_downloads(input$package, from = Sys.Date() - 365, to = Sys.Date())
+  })
+  
+  downloads_rolling <- reactive({
+    validate(need(sum(downloads()$count) > 0, "Input a valid package name"))
+    
+    downloads() %>% 
+      mutate(count = zoo::rollapply(count, 7, mean, fill = "extend"))
+  })
+  
+  output$plot <- renderPlot({
+    ggplot(downloads_rolling(), aes(date, count)) + geom_line()
+  })
+}
+
+shinyApp(ui, server)
