@@ -76,104 +76,42 @@ fred_data <- function(
 }
 
 # recession shading ----
+
+rec_series <- c("AUSRECDP", "USRECDP", "GBRRECDP", "EURORECDP", "CANRECDP", "CHNRECDP", "JPNRECDP")
+rec_regions <- c("Australia", "United States", "United Kingdom", "Euro area",  "Canada", "China", "Japan")
+# 
+# rec_data <- data.frame(peak=as.Date(character()),
+#                    trough=as.Date(character()),
+#                    region=character(), 
+#                    stringsAsFactors=FALSE)
 # 
 # # aus recession (extract peak and trough dates rather than boolean values.
-# rec_au <- fredr(series_id = "AUSRECD") %>%
-#   select(date, value) %>%
-#   filter(value != lag(value, 1)
-#          | value != lead(value, 1)
-#          | date == min(date)
-#          | date == max(date)) %>%
-#   mutate(dummy = ifelse(value != lag(value) | date == min(date), "peak", "trough")) %>%
-#   filter(value == 1) %>%
-#   select(date, dummy)
-# 
-# # us recession
-# rec_us <- fredr(series_id = "USRECD") %>%
-#   select(date, value) %>%
-#   filter(value != lag(value, 1)
-#          | value != lead(value, 1)
-#          | date == min(date)
-#          | date == max(date)) %>%
-#   mutate(dummy = ifelse(value != lag(value) | date == min(date), "peak", "trough")) %>%
-#   filter(value == 1) %>%
-#   select(date, dummy)
-# 
-# 
-# # uk recession
-# rec_uk <- fredr(series_id = "GBRRECD") %>%
-#   select(date, value) %>%
-#   filter(value != lag(value, 1)
-#          | value != lead(value, 1)
-#          | date == min(date)
-#          | date == max(date)) %>%
-#   mutate(dummy = ifelse(value != lag(value) | date == min(date), "peak", "trough")) %>%
-#   filter(value == 1) %>%
-#   select(date, dummy)
-# 
-# # eu recession
-# rec_ez <- fredr(series_id = "EURORECD") %>%
-#   select(date, value) %>%
-#   filter(value != lag(value, 1)
-#          | value != lead(value, 1)
-#          | date == min(date)
-#          | date == max(date)) %>%
-#   mutate(dummy = ifelse(value != lag(value) | date == min(date), "peak", "trough")) %>%
-#   filter(value == 1) %>%
-#   select(date, dummy)
-# 
-# 
-# rec_data <- rec_au %>%
-#   filter(dummy == "peak") %>%
-#   select(date) %>%
-#   rename(peak = date) %>%
-#   cbind(
-#     rec_au %>%
-#       filter(dummy == "trough") %>%
-#       select(date) %>%
-#       rename(trough = date)
-#   ) %>%
-#   mutate(region = "AU") %>%
-#   rbind(
-#     rec_us %>%
-#       filter(dummy == "peak") %>%
-#       select(date) %>%
-#       rename(peak = date) %>%
-#       cbind(
-#         rec_us %>%
-#           filter(dummy == "trough") %>%
-#           select(date) %>%
-#           rename(trough = date)
-#       ) %>%
-#       mutate(region = "US")
-#   )  %>%
-#   rbind(
-#     rec_uk %>%
-#       filter(dummy == "peak") %>%
-#       select(date) %>%
-#       rename(peak = date) %>%
-#       cbind(
-#         rec_uk %>%
-#           filter(dummy == "trough") %>%
-#           select(date) %>%
-#           rename(trough = date)
-#       ) %>%
-#       mutate(region = "UK")
-#   )  %>%
-#   rbind(
-#     rec_ez %>%
-#       filter(dummy == "peak") %>%
-#       select(date) %>%
-#       rename(peak = date) %>%
-#       cbind(
-#         rec_ez %>%
-#           filter(dummy == "trough") %>%
-#           select(date) %>%
-#           rename(trough = date)
-#       ) %>%
-#       mutate(region = "EZ")
-#   )
-# 
+# for (i in 1:length(rec_series)){
+#   tmp <- fredr(series_id = rec_series[i]) %>%
+#     select(date, value) %>%
+#     filter(value != lag(value, 1)
+#            | value != lead(value, 1)
+#            | date == min(date)
+#            | date == max(date)) %>%
+#     mutate(dummy = ifelse(value != lag(value) | date == min(date), "peak", "trough")) %>%
+#     filter(value == 1) %>%
+#     select(date, dummy)
+#   
+#   rec_data <- rec_data %>%
+#     rbind(
+#       tmp %>%
+#         filter(dummy == "peak") %>%
+#         select(date) %>%
+#         rename(peak = date) %>%
+#         cbind(
+#           tmp %>%
+#             filter(dummy == "trough") %>%
+#             select(date) %>%
+#             rename(trough = date)
+#         ) %>%
+#         mutate(region = rec_regions[i])
+#     )
+# }
 # 
 # save(rec_data, file = here("data", "rec_data.Rda"))
 load(file = here("data", "rec_data.Rda"))

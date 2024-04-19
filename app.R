@@ -579,7 +579,7 @@ ui <- navbarPage(
             ),
             column(4
                    , selectInput("recession_shading", "Recession Shading:"
-                                 , choices = c("AU", "US", "UK", "EZ", "none"), selected = "none")
+                                 , choices = append(rec_regions, "none"), selected = "none")
                    , numericRangeInput("horizontal_shading", "Horizontal Shading", value = c(NA,NA))
                    # Input for the mathematical expression
                    , textInput("expression_num", "Enter an expression (use 'data' as variable):", value = "data * 2")
