@@ -30,7 +30,7 @@ seriesUI <- function(id) {
         Category_4 = cat4
       ), multiple = TRUE),
       selectizeInput(ns("region"), "Region", choices = region_list, multiple = TRUE, selected = region_list[[1]]),
-      selectInput(ns("transform"), "Transformation", choices = transformation_choices, selected = transformation_choices[[1]]),
+      selectInput(ns("transform"), "Transformation", choices = transformation_choices, selected = transformation_choices[[2]]),
       conditionalPanel(
         condition = "input.transform== 'rebased index'",
         dateInput(ns("rebase_date"), "Date (rebase)", startview = "year", value = "2019-12-31"),
@@ -60,10 +60,10 @@ seriesUI <- function(id) {
     , conditionalPanel(
       condition = "input.source == 'abs'",
       selectInput(ns("abs_catalogue"), "Catalogue", choices = abs_cat),
-      selectInput(ns("abs_desc"), "Series", choices = abs_ref[[1]]$series),
+      selectizeInput(ns("abs_desc"), "Series", choices = abs_ref[[1]]$series),
       selectInput(ns("abs_series_type"), "Series Type", choices = unique(abs_ref[[1]]$series_type)),
       selectInput(ns("abs_table"), "Table", choices = unique(abs_ref[[1]]$table_title)),
-      selectizeInput(ns("abs_id"), "Series ID (for query)", choices = abs_ref[[1]]$series_id, options = list(create = TRUE)),
+      selectizeInput(ns("abs_id"), "Series ID (for query)", choices = abs_ref[[1]]$series_id, options = list(create = TRUE), multiple = TRUE),
       ns=NS(id)
     )
     
@@ -203,21 +203,19 @@ data_query <- function(input, output, session, input_dates){
       ) 
     } else if (input$source == "FRED"){
       tmp <- fred_data(series = input$fred_series
-                       , start_date 
-                       , end_date 
-      )
+                       , start_date, end_date)
+      
     } else if (input$source == "dbnomics"){
       tmp <- db_data(series = input$dbnomics_series
-                     , start_date
-                     , end_date
-      )
+                     , start_date, end_date)
+      
     } else if (input$source == "rba"){
       tmp <- rba_data(series = input$rba_desc)
+      
     } else if (input$source == "bloomberg"){
       tmp <- bbg_data(series = input$bloomberg_ticker
-                      , start_date
-                      , end_date
-      )
+                      , start_date, end_date)
+      
     } else if (input$source == "abs"){
       tmp <- abs_data(series = input$abs_id)
     }
@@ -228,6 +226,8 @@ data_query <- function(input, output, session, input_dates){
 data_transform <- function(input, output, session, data_source){
   
   tmp <- data_source()
+  
+  if(is.null(tmp)){return(tmp)}
  
   if (input$calculate > 0) {
     expression_text <- sub("data", "value", input$expression)

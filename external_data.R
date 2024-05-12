@@ -159,21 +159,19 @@ library(readrba)
 
 rba_tables <- unique(browse_rba_series()$table_no)
 
-tmp <- browse_rba_series() %>%
+rba_desc_id <- browse_rba_series() %>%
   select(c(table_no, description, series_id)) %>%
   unique()
 
 rba_series <- list()
 
 for (i in 1:length(rba_tables)){
-  rba_series[[i]] <- tmp %>%
+  rba_series[[i]] <- rba_desc_id %>%
     filter(table_no == rba_tables[i]) %>%
     pull(description)
 }
 
 names(rba_series) <- rba_tables
-
-rba_desc_id <- tmp
 
 
 rba_data <- function(
@@ -191,7 +189,6 @@ rba_data <- function(
                        name=character(), 
                        stringsAsFactors=FALSE)
     
-    print(length(tmp))
     for (i in 1:length(tmp)){
       tmp1 <- tmp1 %>%
         rbind(
@@ -245,7 +242,7 @@ abs_data <- function(
   series = input$abs_id_1
 ){
   
-  if(series != ""){
+  if(length(series) > 0){
     shinyCatch(
       return(
         read_abs(series_id = series) %>%
