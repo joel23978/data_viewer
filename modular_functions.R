@@ -185,28 +185,6 @@ bloomy_update <- function(input, output, session){
 
 
 
-bloomy_update <- function(input, output, session){
-  observe({
-    cat_input <- input$bloomberg_category
-    if (!is.null(cat_input)) {
-      series_choices <- bbg_series[[cat_input]] %>% na.omit()  # Ensure no NA values
-      if (length(series_choices) > 0) {
-        updateSelectInput(session, 'bloomberg_desc', choices = series_choices, selected = series_choices[1])
-      }
-    }
-  })
-  
-  observe({
-    desc_input <- input$bloomberg_desc
-    if (!is.null(desc_input)) {
-      valid_tickers <- bbg_ref %>% filter(Description %in% desc_input) %>% pull(Security) %>% na.omit()
-      if (length(valid_tickers) > 0) {
-        updateSelectInput(session, 'bloomberg_ticker', choices = valid_tickers, selected = valid_tickers)
-      }
-    }
-  })
-}
-
 
 
 data_query <- function(input, output, session, input_dates){
