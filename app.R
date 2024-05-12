@@ -22,8 +22,10 @@ library(spsComps)
 
 
 source(here::here("cpi_annual.R"))
-source(here::here("plot_functions.R"))
 source(here::here("external_data.R"))
+
+source(here::here("plot_functions.R"))
+source(here::here("modular_functions.R"))
 
 set_default_values()
 
@@ -87,462 +89,23 @@ ui <- navbarPage(
                         )
           )
           
-          
-          ## Series 1 ----
+          ## Series (mod) ----
           , hr()
           , h4("Series 1")
-          , selectInput("source_1"
-                        , label = "Data Source"
-                        , choices = data_sources
-                        , selected = "local")
-          
-          , conditionalPanel(
-            condition = "input.source_1 == `FRED`"
-            , textInput("fred_series_1"
-                        , label  = "FRED Series ID"
-                        , value = "UNRATE"
-            )
-          )
-          , conditionalPanel(
-            condition = "input.source_1 == `dbnomics`"
-            , textInput("dbnomics_series_1"
-                        , label  = "dbnomics Series ID"
-                        , value = "AMECO/ZUTN/EA19.1.0.0.0.ZUTN"
-            )
-          )
-          , conditionalPanel(
-            condition = "input.source_1 == `local`"
-            , selectizeInput("text_1"
-                             , "Search"
-                             , choices = list(
-                               Category_1 = cat1,
-                               Category_2 = cat2,
-                               Category_3 = cat3,
-                               Category_4 = cat4
-                             )
-                             , selected = cat1[[1]]
-                             , multiple = TRUE)
-            , selectizeInput("region_1"
-                             , label = "Region"
-                             , choices = region_list
-                             , selected = region_list[[1]]
-                             , multiple = TRUE
-            )
-            , selectInput("trnsfrm_1"
-                          , label = "Transformation"
-                          , choices = transformation_choices
-                          , selected = "y.y")
-            , conditionalPanel(
-              condition = "input.trnsfrm_1 == `rebased index`"
-              , dateInput("rebase_date_1"
-                          , label = "Date (rebase)"
-                          , startview = "year"
-                          , value = "2019-12-31"
-              ))
-          )
-          
-          , conditionalPanel(
-            condition = "input.source_1 == `rba`"
-            , selectInput("rba_table_1"
-                          , "RBA Table"
-                          , choices = rba_tables
-                          , selected = ""
-            )
-            , selectizeInput("rba_desc_1"
-                          , label = "RBA Series"
-                          , choices = rba_series[[1]]
-                          , selected = "" #rba_series[["A1"]][1]
-                          , multiple = T
-            )
-          )
-          
-          , conditionalPanel(
-            condition = "input.source_1 == `bloomberg`"
-            , selectInput("bloomberg_category_1"
-                          , "Category"
-                          , choices = bbg_categories
-                          , selected = bbg_categories[1]
-            )
-            , selectizeInput("bloomberg_desc_1"
-                          , label = "Series"
-                          , choices = bbg_series[[1]]
-                          , selected = "" 
-                          , multiple = T
-            )
-            , selectizeInput("bloomberg_ticker_1"
-                          , label = "Ticker (for query)"
-                          , choices = bbg_tickers[[1]]
-                          , selected = "" 
-                          , options = list(create = TRUE)
-                          , multiple = T
-            )
-          )
-          , conditionalPanel(
-            condition = "input.source_1 == `abs`"
-            , selectInput("abs_catalogue_1"
-                          , "Catalogue"
-                          , choices = abs_cat
-                          , selected = abs_cat[1]
-            )
-            , selectInput("abs_desc_1"
-                             , label = "Series"
-                             , choices = abs_ref[[1]]$series
-                             , selected = "" 
-            )
-            , selectInput("abs_series_type_1"
-                             , label = "Series Type"
-                             , choices = unique(abs_ref[[1]]$series_type)
-                             , selected = ""
-            )
-            , selectInput("abs_table_1"
-                          , label = "Table"
-                          , choices = unique(abs_ref[[1]]$table_title)
-                          , selected = ""
-            )
-            , selectizeInput("abs_id_1"
-                             , label = "Series ID (for query)"
-                             , choices = abs_ref[[1]]$series_id
-                             , selected = ""
-                             , options = list(create = TRUE)
-            )
-          )
-          
-          
-          , textInput("label_1",  "Label:", value = "")
-          
-          # Input for the mathematical expression
-          ,textInput("expression_1", "Enter an expression (use 'data' as variable):", value = "data * 2")
-          ,actionButton("calculate_1", "Calculate")
-        
+          , seriesUI(1)
 
-          , selectizeInput("vis_type_1", "Series plot:"
-                           , choices = c("line", "bar", "scatter"))
-          
-          
-          
-      
-          
-          ## Series 2 ----
-        
           , hr()
           , h4("Series 2")
-          , selectInput("source_2"
-                        , label = "Data Source"
-                        , choices = data_sources
-                        , selected = "local")
-          
-          , conditionalPanel(
-            condition = "input.source_2 == `FRED`"
-            , textInput("fred_series_2"
-                        , label  = "FRED Series ID"
-                        , value = "DFF"
-            )
-          )
-          , conditionalPanel(
-            condition = "input.source_2 == `dbnomics`"
-            , textInput("dbnomics_series_2"
-                        , label  = "dbnomics Series ID"
-                        , value = "AMECO/ZUTN/EA19.1.0.0.0.ZUTN"
-            )
-          )
-          
-          
-          , conditionalPanel(
-            condition = "input.source_2 == `local`"
-            , selectizeInput("text_2"
-                             , "Search"
-                             , choices = list(
-                               Category_1 = cat1,
-                               Category_2 = cat2,
-                               Category_3 = cat3,
-                               Category_4 = cat4
-                             )
-                             , selected = NULL
-                             , multiple = TRUE)
-            , selectizeInput("region_2"
-                             , label = "Region"
-                             , choices = region_list
-                             , selected = region_list[[1]]
-                             , multiple = TRUE
-            )
-            , selectInput("trnsfrm_2"
-                          , label = "Transformation"
-                          , choices = transformation_choices
-                          , selected = "y.y")
-            , conditionalPanel(
-              condition = "input.trnsfrm_2 == `rebased index`"
-              , dateInput("rebase_date_2"
-                          , label = "Date (rebase)"
-                          , startview = "year"
-                          , value = "2019-12-31"
-              ))
-          )
-          , conditionalPanel(
-            condition = "input.source_2 == `rba`"
-            , selectizeInput("rba_table_2"
-                             , "RBA Table"
-                             , choices = names(rba_series)
-                             , selected = "F16")
-            , selectizeInput("rba_desc_2"
-                             , label = "RBA Series"
-                             , choices = rba_series[[1]]
-            )
-          )
-          , conditionalPanel(
-            condition = "input.source_2 == `abs`"
-            , selectInput("abs_catalogue_2"
-                          , "Catalogue"
-                          , choices = abs_cat
-                          , selected = abs_cat[1]
-            )
-            , selectInput("abs_desc_2"
-                          , label = "Series"
-                          , choices = abs_ref[[1]]$series
-                          , selected = "" 
-            )
-            , selectInput("abs_series_type_2"
-                          , label = "Series Type"
-                          , choices = unique(abs_ref[[1]]$series_type)
-                          , selected = ""
-            )
-            , selectInput("abs_table_2"
-                          , label = "Table"
-                          , choices = unique(abs_ref[[1]]$table_title)
-                          , selected = ""
-            )
-            , selectizeInput("abs_id_2"
-                             , label = "Series ID (for query)"
-                             , choices = abs_ref[[1]]$series_id
-                             , selected = ""
-                             , options = list(create = TRUE)
-            )
-          )
-          
-          , textInput("label_2",  "Label:", value = "")
-          ,textInput("expression_2", "Enter an expression (use 'data' as variable):", value = "data * 2")
-          ,actionButton("calculate_2", "Calculate")
-          , selectizeInput("vis_type_2", "Series plot:"
-                           , choices = c("line", "bar", "scatter"))
-          
-          
-          
-          
-          
-          
-          ## Series 3 ----
-        
+          , seriesUI(2)
+
           , hr()
           , h4("Series 3")
-          , selectInput("source_3"
-                        , label = "Data Source"
-                        , choices = data_sources
-                        , selected = "local")
-          
-          , conditionalPanel(
-            condition = "input.source_3 == `FRED`"
-            , textInput("fred_series_3"
-                        , label  = "FRED Series ID"
-                        , value = "PCE"
-            )
-          )
-          , conditionalPanel(
-            condition = "input.source_3 == `dbnomics`"
-            , textInput("dbnomics_series_3"
-                        , label  = "dbnomics Series ID"
-                        , value = "AMECO/ZUTN/EA19.1.0.0.0.ZUTN"
-            )
-          )
-          
-          , conditionalPanel(
-            condition = "input.source_3 == `local`"
-            , selectizeInput("text_3"
-                             , "Search"
-                             , choices = list(
-                               Category_1 = cat1,
-                               Category_2 = cat2,
-                               Category_3 = cat3,
-                               Category_4 = cat4
-                             )
-                             , selected = NULL
-                             , multiple = TRUE)
-            , selectizeInput("region_3"
-                             , label = "Region"
-                             , choices = region_list
-                             , selected = region_list[[1]]
-                             , multiple = TRUE
-            )
-            , selectInput("trnsfrm_3"
-                          , label = "Transformation"
-                          , choices = transformation_choices
-                          , selected = "y.y")
-            , conditionalPanel(
-              condition = "input.trnsfrm_3 == `rebased index`"
-              , dateInput("rebase_date_3"
-                          , label = "Date (rebase)"
-                          , startview = "year"
-                          , value = "2019-12-31"
-              ))
-          )
-          , conditionalPanel(
-            condition = "input.source_3 == `rba`"
-            , selectizeInput("rba_table_3"
-                             , "RBA Table"
-                             , choices = names(rba_series)
-                             , selected = "F16")
-            , selectizeInput("rba_desc_3"
-                             , label = "RBA Series"
-                             , choices = rba_series[[1]]
-            )
-          )
-          
-          , conditionalPanel(
-            condition = "input.source_3 == `abs`"
-            , selectInput("abs_catalogue_3"
-                          , "Catalogue"
-                          , choices = abs_cat
-                          , selected = abs_cat[1]
-            )
-            , selectInput("abs_desc_3"
-                          , label = "Series"
-                          , choices = abs_ref[[1]]$series
-                          , selected = "" 
-            )
-            , selectInput("abs_series_type_3"
-                          , label = "Series Type"
-                          , choices = unique(abs_ref[[1]]$series_type)
-                          , selected = ""
-            )
-            , selectInput("abs_table_3"
-                          , label = "Table"
-                          , choices = unique(abs_ref[[1]]$table_title)
-                          , selected = ""
-            )
-            , selectizeInput("abs_id_3"
-                             , label = "Series ID (for query)"
-                             , choices = abs_ref[[1]]$series_id
-                             , selected = ""
-                             , options = list(create = TRUE)
-            )
-          )
-          
-          , textInput("label_3",  "Label:", value = "")
-          ,textInput("expression_3", "Enter an expression (use 'data' as variable):", value = "data * 2")
-          ,actionButton("calculate_3", "Calculate")
-          , selectizeInput("vis_type_3", "Series plot:"
-                           , choices = c("line", "bar", "scatter"))
-          
-          
-          
-          
-          
-          
-          
-          
-          
-          ## Series 4 ----
-        
+          , seriesUI(3)
+
           , hr()
           , h4("Series 4")
-          , selectInput("source_4"
-                        , label = "Data Source"
-                        , choices = data_sources
-                        , selected = "local")
-          
-          , conditionalPanel(
-            condition = "input.source_4 == `FRED`"
-            , textInput("fred_series_4"
-                        , label  = "FRED Series ID"
-                        , value = "GDP"
-            )
-          )
-          , conditionalPanel(
-            condition = "input.source_4 == `dbnomics`"
-            , textInput("dbnomics_series_4"
-                        , label  = "dbnomics Series ID"
-                        , value = "AMECO/ZUTN/EA19.1.0.0.0.ZUTN"
-            )
-          )
-          
-          , conditionalPanel(
-            condition = "input.source_4 == `local`"
-            , selectizeInput("text_4"
-                             , "Search"
-                             , choices = list(
-                               Category_1 = cat1,
-                               Category_2 = cat2,
-                               Category_3 = cat3,
-                               Category_4 = cat4
-                             )
-                             , selected = NULL
-                             , multiple = TRUE)
-            , selectizeInput("region_4"
-                             , label = "Region"
-                             , choices = region_list
-                             , selected = region_list[[1]]
-                             , multiple = TRUE
-            )
-            , selectInput("trnsfrm_4"
-                          , label = "Transformation"
-                          , choices = transformation_choices
-                          , selected = "y.y")
-            , conditionalPanel(
-              condition = "input.trnsfrm_4 == `rebased index`"
-              , dateInput("rebase_date_4"
-                          , label = "Date (rebase)"
-                          , startview = "year"
-                          , value = "2019-12-31"
-              ))
-          )
-          , conditionalPanel(
-            condition = "input.source_4 == `rba`"
-            , selectizeInput("rba_table_4"
-                             , "RBA Table"
-                             , choices = names(rba_series)
-                             , selected = "F16")
-            , selectizeInput("rba_desc_4"
-                             , label = "RBA Series"
-                             , choices = rba_series[[1]]
-            )
-          )
-          
-          , conditionalPanel(
-            condition = "input.source_4 == `abs`"
-            , selectInput("abs_catalogue_4"
-                          , "Catalogue"
-                          , choices = abs_cat
-                          , selected = abs_cat[1]
-            )
-            , selectInput("abs_desc_4"
-                          , label = "Series"
-                          , choices = abs_ref[[1]]$series
-                          , selected = "" 
-            )
-            , selectInput("abs_series_type_4"
-                          , label = "Series Type"
-                          , choices = unique(abs_ref[[1]]$series_type)
-                          , selected = ""
-            )
-            , selectInput("abs_table_4"
-                          , label = "Table"
-                          , choices = unique(abs_ref[[1]]$table_title)
-                          , selected = ""
-            )
-            , selectizeInput("abs_id_4"
-                             , label = "Series ID (for query)"
-                             , choices = abs_ref[[1]]$series_id
-                             , selected = ""
-                             , options = list(create = TRUE)
-            )
-          )
-          
-          , textInput("label_4",  "Label:", value = "")
-          
-          ,textInput("expression_4", "Enter an expression (use 'data' as variable):", value = "data * 2")
-          ,actionButton("calculate_4", "Calculate")
-          , selectizeInput("vis_type_4", "Series plot:"
-                           , choices = c("line", "bar", "scatter"))
-          
-          
+          , seriesUI(4)
+ 
           
         )
         ## outputs ----
@@ -769,7 +332,7 @@ server <- function(input, output, session) {
 
 
   
-  #weblinks
+  ### weblinks----
   
   fred_link <- a("FRED", href="https://fred.stlouisfed.org/tags/series")
   dbnomics_link <- a("dbnomics", href="https://db.nomics.world")
@@ -782,170 +345,8 @@ server <- function(input, output, session) {
   })
   
   
-  # ## input FRED API key
-  l <- reactiveValues()
-  observeEvent(input$reset, {
-    # display a modal dialog with a header, textinput and action buttons
-    showModal(modalDialog(
-      tags$h2('Please enter your FRED API key'),
-      textInput('fred_key', 'Key:'),
-      footer=tagList(
-        actionButton('submit', 'Submit'),
-        modalButton('cancel')
-      )
-    ))
-  })
   
-  # only store the information if the user clicks submit
-  observeEvent(input$submit, {
-    removeModal()
-    l$fred_key <- input$fred_key
-    fredr_set_key(l$fred_key)
-  })
-  
-  # display whatever is listed in l
-  output$text <- renderPrint({
-    if (is.null(l$fred_key)) return(NULL)
-    paste('FRED API Key:', l$fred_key)
-  })
-
-  
-  
-  
-  observe({
-    ## chart formatting
-    if(input$cht_y_invert == F){
-      y_vals <- pretty(c(min(p_data_cust()$value), max(p_data_cust()$value)+(max(p_data_cust()$value) - min(p_data_cust()$value))/10)
-                       , n = n_ticks) 
-      title_placement <- max(y_vals) -1/20*(max(y_vals)-min(y_vals))
-    } else {
-      y_vals <- pretty(c(min(p_data_cust()$value) - (max(p_data_cust()$value) - min(p_data_cust()$value))/10, max(p_data_cust()$value))
-                       , n = n_ticks) 
-      title_placement <- min(y_vals) +1/20*(max(y_vals)-min(y_vals))
-    }
-    updateNumericInput(session, "cht_y_min", value = min(y_vals))
-    updateNumericInput(session, "cht_y_max", value = max(y_vals))
-    updateNumericInput(session, "cht_y_increment", value = y_vals[2] - y_vals[1])
-    updateNumericInput(session, "cht_title_y_placement", value = title_placement)
-    
-    # data choices 
-    updateSelectInput(session, "sub_sub_split", choices = name_list[[input$sub_split]])
-    
-  })
-  
-  session_store <- reactiveValues()
-  
-  
-  # Observe changes in table to update series
-  lapply(1:4, function(i) {
-    observe({
-      table_input <- input[[paste0("rba_table_", i)]]
-      if (!is.null(table_input)) {
-        series_choices <- rba_series[[table_input]] %>% na.omit()  # Ensure no NA values
-        if (length(series_choices) > 0) {
-          updateSelectInput(session, paste0("rba_desc_", i), choices = series_choices, selected = series_choices[1])
-        }
-      }
-    })
-  })
-  
-    
-  ##### abs  ----
-  lapply(1:4, function(i) {
-    
-    #catalogue
-    #observeEvent(input[[paste0("abs_catalogue_", i)]],
-                 observe({
-                   cat_input <- input[[paste0("abs_catalogue_", i)]]
-                   desc_choices <- abs_ref[[cat_input]] %>% pull(series) %>% unique() %>% na.omit()  
-                   if (length(desc_choices) > 0) {
-                     desc_input <- desc_choices[1]
-                     updateSelectInput(session, paste0("abs_desc_", i), choices = desc_choices, selected = desc_choices[1])
-                   }
-                 })
-    
-    #desc
-    #observeEvent(input[[paste0("abs_desc_", i)]],
-                 observe({
-                   cat_input <- input[[paste0("abs_catalogue_", i)]]
-                   desc_input <- input[[paste0("abs_desc_", i)]]
-                   series_type_choices <- abs_ref[[cat_input]] %>% filter(series == desc_input) %>% pull(series_type) %>% unique() %>% na.omit() 
-                   if (length(series_type_choices) > 0) {
-                     series_type_input <- series_type_choices[1]
-                     updateSelectInput(session, paste0("abs_series_type_", i), choices = series_type_choices, selected = series_type_choices[1])
-                   }
-                  # browser()
-                 })
-
-    
-    #series type
-    #observeEvent(input[[paste0("abs_series_type_", i)]],
-    observe({
-                   cat_input <- input[[paste0("abs_catalogue_", i)]]
-                   desc_input <- input[[paste0("abs_desc_", i)]]
-                   series_type_input <- input[[paste0("abs_series_type_", i)]]
-                   table_choices <- abs_ref[[cat_input]] %>% filter(series == desc_input
-                                                                    , series_type == series_type_input) %>% pull(table_title) %>% na.omit() 
-                   if (length(table_choices) > 0) {
-                     updateSelectInput(session, paste0("abs_table_", i), choices = table_choices, selected = table_choices[1])
-                   }
-                 })
-    
-    #table input
-    #observeEvent(input[[paste0("abs_table_", i)]],
-    observe({
-                   cat_input <- input[[paste0("abs_catalogue_", i)]]
-                   desc_input <- input[[paste0("abs_desc_", i)]]
-                   series_type_input <- input[[paste0("abs_series_type_", i)]]
-                   table_input <- input[[paste0("abs_table_", i)]]
-                   id_choices <- abs_ref[[cat_input]] %>% filter(series == desc_input
-                                                                 , series_type == series_type_input
-                                                                 , table_title == table_input) %>% pull(series_id) %>% na.omit() 
-                   if (length(id_choices) > 0) {
-                     updateSelectInput(session, paste0("abs_id_", i), choices = id_choices, selected = id_choices[1])
-                   }
-                 })
-
-  })
-  
-  
-  
-  
-  
-  
-  
-
-  
-  ##### bloomy  ----
-  
-  # Observe changes in each category separately to update series
-  lapply(1:4, function(i) {
-    observe({
-      cat_input <- input[[paste0("bloomberg_category_", i)]]
-      if (!is.null(cat_input)) {
-        series_choices <- bbg_series[[cat_input]] %>% na.omit()  # Ensure no NA values
-        if (length(series_choices) > 0) {
-          updateSelectInput(session, paste0("bloomberg_desc_", i), choices = series_choices, selected = series_choices[1])
-        }
-      }
-    })
-  })
-  
-  # Observe changes in each series separately to update ticker
-  lapply(1:4, function(i) {
-    observe({
-      desc_input <- input[[paste0("bloomberg_desc_", i)]]
-      if (!is.null(desc_input)) {
-        valid_tickers <- bbg_ref %>% filter(Description %in% desc_input) %>% pull(Security) %>% na.omit()
-        if (length(valid_tickers) > 0) {
-          updateSelectInput(session, paste0("bloomberg_ticker_", i), choices = valid_tickers, selected = valid_tickers)
-        }
-      }
-    })
-  })
-  
-  
-  
+  ### copy/paste notification ----
   
   observeEvent(input[["success"]], {
     showToast(
@@ -988,261 +389,103 @@ server <- function(input, output, session) {
   
   
   
-  
-  
-  
-  
-  
-  
-  
-  # Data inputs ----
-  
-  p_data_1 <- reactive({
-    if (input$source_1 == "local"){
-      tmp <- cpi_splits_cust(cpi_data = cpi_data_all
-                                  , transformation = input$trnsfrm_1
-                                  , dates = as.numeric(input$year1)
-                                  
-                                  , pick_split_1 = unlist(input$text_1)
-                                  , region_1_split = input$region_1
-                                  , rebase_date = as.Date(input$rebase_date_1)
-      ) 
-    } else if (input$source_1 == "FRED"){
-      tmp <- fred_data(series = input$fred_series_1
-                                , start_date = lubridate::ymd(min(input$year1), truncated = 2L)
-                                , end_date = lubridate::ymd(max(input$year1), truncated = 2L)
-                               )
-    } else if (input$source_1 == "dbnomics"){
-      tmp <- db_data(series = input$dbnomics_series_1
-                                 , start_date = lubridate::ymd(min(input$year1), truncated = 2L)
-                                 , end_date = lubridate::ymd(max(input$year1), truncated = 2L)
+  ### FRED API key ----
+  l <- reactiveValues()
+  observeEvent(input$reset, {
+    # display a modal dialog with a header, textinput and action buttons
+    showModal(modalDialog(
+      tags$h2('Please enter your FRED API key'),
+      textInput('fred_key', 'Key:'),
+      footer=tagList(
+        actionButton('submit', 'Submit'),
+        modalButton('cancel')
       )
-    } else if (input$source_1 == "rba"){
-      tmp <- rba_data(#table = input$rba_table_1,
-                               series = input$rba_desc_1
-      )
-    } else if (input$source_1 == "bloomberg"){
-      tmp <- bbg_data(series = input$bloomberg_ticker_1
-                                , start_date = lubridate::ymd(min(input$year1), truncated = 2L)
-                                , end_date = lubridate::ymd(max(input$year1), truncated = 2L)
-      )
-    } else if (input$source_1 == "abs"){
-      tmp <- abs_data(series = input$abs_id_1
-      )
-    }
-    return(tmp)
+    ))
   })
   
-  
-  p_data_2 <- reactive({
-    if (input$source_2 == "local"){
-      tmp <- cpi_splits_cust(cpi_data = cpi_data_all
-                                     , transformation = input$trnsfrm_2
-                                     , dates = as.numeric(input$year1)
-                                     
-                                     , pick_split_1 = unlist(input$text_2)
-                                     , region_1_split = input$region_2
-                                     , rebase_date = as.Date(input$rebase_date_2)
-      ) 
-    } else if (input$source_2 == "FRED"){
-      tmp <- fred_data(series = input$fred_series_2
-                               , start_date = lubridate::ymd(min(input$year1), truncated = 2L)
-                               , end_date = lubridate::ymd(max(input$year1), truncated = 2L)
-      )
-    } else if (input$source_2 == "dbnomics"){
-      tmp <- db_data(series = input$dbnomics_series_2
-                                 , start_date = lubridate::ymd(min(input$year1), truncated = 2L)
-                                 , end_date = lubridate::ymd(max(input$year1), truncated = 2L)
-      )
-    } else if (input$source_2 == "rba"){
-      tmp <- rba_data(#table = input$rba_table_2,
-                              series = input$rba_desc_2
-      )
-    } else if (input$source_2 == "bloomberg"){
-      tmp <- bbg_data(series = input$bloomberg_ticker_2
-                                , start_date = lubridate::ymd(min(input$year1), truncated = 2L)
-                                , end_date = lubridate::ymd(max(input$year1), truncated = 2L)
-      )
-    } else if (input$source_2 == "abs"){
-      tmp <- abs_data(series = input$abs_id_2
-      )
-    }
-    return(tmp)
-  })
-    
-    
-  p_data_3 <- reactive({
-    if (input$source_3 == "local"){
-      tmp <- cpi_splits_cust(cpi_data = cpi_data_all
-                                       , transformation = input$trnsfrm_3
-                                       , dates = as.numeric(input$year1)
-                                       
-                                       , pick_split_1 = unlist(input$text_3)
-                                       , region_1_split = input$region_3
-                                       , rebase_date = as.Date(input$rebase_date_3)
-      ) 
-    } else if (input$source_3 == "FRED"){
-      tmp <- fred_data(series = input$fred_series_3
-                                 , start_date = lubridate::ymd(min(input$year1), truncated = 2L)
-                                 , end_date = lubridate::ymd(max(input$year1), truncated = 2L)
-      )
-    } else if (input$source_3 == "dbnomics"){
-      tmp <- db_data(series = input$dbnomics_series_3
-                                 , start_date = lubridate::ymd(min(input$year1), truncated = 2L)
-                                 , end_date = lubridate::ymd(max(input$year1), truncated = 2L)
-      )
-    }  else if (input$source_3 == "rba"){
-      tmp <- rba_data(#table = input$rba_table_3,
-                               series = input$rba_desc_3
-      )
-    } else if (input$source_3 == "bloomberg"){
-      tmp <- bbg_data(series = input$bloomberg_ticker_3
-                                , start_date = lubridate::ymd(min(input$year1), truncated = 2L)
-                                , end_date = lubridate::ymd(max(input$year1), truncated = 2L)
-      )
-    } else if (input$source_3 == "abs"){
-      tmp <- abs_data(series = input$abs_id_3
-      )
-    }
-    return(tmp)
-  })
-    
-    
-  p_data_4 <- reactive({
-    if (input$source_4 == "local"){
-      tmp <- cpi_splits_cust(cpi_data = cpi_data_all
-                                       , transformation = input$trnsfrm_4
-                                       , dates = as.numeric(input$year1)
-                                       , pick_split_1 = unlist(input$text_4)
-                                       , region_1_split = input$region_4
-                                       , rebase_date = as.Date(input$rebase_date_4)
-      ) 
-      
-    } else if (input$source_4 == "FRED"){
-      
-      tmp <- fred_data(series = input$fred_series_4
-                                 , start_date = lubridate::ymd(min(input$year1), truncated = 2L)
-                                 , end_date = lubridate::ymd(max(input$year1), truncated = 2L)
-      )
-    } else if (input$source_4 == "dbnomics"){
-      tmp <- db_data(series = input$dbnomics_series_4
-                                 , start_date = lubridate::ymd(min(input$year1), truncated = 2L)
-                                 , end_date = lubridate::ymd(max(input$year1), truncated = 2L)
-      )
-    } else if (input$source_4 == "rba"){
-      tmp <- rba_data(#table = input$rba_table_4,
-                                series = input$rba_desc_4
-      )
-    }  else if (input$source_4 == "bloomberg"){
-      tmp <- bbg_data(series = input$bloomberg_ticker_4
-                                , start_date = lubridate::ymd(min(input$year1), truncated = 2L)
-                                , end_date = lubridate::ymd(max(input$year1), truncated = 2L)
-      )
-    }else if (input$source_4 == "abs"){
-      tmp <- abs_data(series = input$abs_id_4
-      )
-    }
-    return(tmp)
+  # only store the information if the user clicks submit
+  observeEvent(input$submit, {
+    removeModal()
+    l$fred_key <- input$fred_key
+    fredr_set_key(l$fred_key)
   })
   
-  
-  # 
-  # # Function to fetch data based on the source index
-  # fetch_data_by_index <- function(index) {
-  #   reactive({
-  #     source <- input[[paste0("source_", index)]]
-  #     series <- input[[paste0("series_", index)]]
-  #     
-  #     if (source == "rba") {
-  #       rba_data(series)
-  #     } else if (source == "abs") {
-  #       abs_data(series)
-  #     } else {
-  #       dates <- as.numeric(input$year1)
-  #       start_date <- lubridate::ymd(min(dates), truncated = 2L)
-  #       end_date <- lubridate::ymd(max(dates), truncated = 2L)
-  #       if (source == "local") {
-  #         cpi_splits_cust(cpi_data = cpi_data_all, transformation = input[[paste0("trnsfrm_", index)]],
-  #                         dates = dates, pick_split_1 = unlist(input[[paste0("text_", index)]]),
-  #                         region_1_split = input[[paste0("region_", index)]], rebase_date = as.Date(input[[paste0("rebase_date_", index)]]))
-  #       } else if (source %in% c("FRED", "dbnomics", "bloomberg")) {
-  #         get_financial_data(source, series, start_date, end_date)
-  #       } 
-  #       
-  #     }
-  #     
-  #   })
-  # }
-  # 
-  # # Helper function to fetch financial data
-  # get_financial_data <- function(source, series, start_date, end_date) {
-  #   switch(source,
-  #          "FRED" = fred_data(series, start_date, end_date),
-  #          "dbnomics" = db_data(series, start_date, end_date),
-  #          "bloomberg" = bbg_data(series, start_date, end_date)
-  #   )
-  # }
-  # 
-  # 
-  # # Apply the function across multiple indices
-  # p_data_list <- lapply(1:4, fetch_data_by_index)
-  # 
-  # 
-  # 
+  # display whatever is listed in l
+  output$text <- renderPrint({
+    if (is.null(l$fred_key)) return(NULL)
+    paste('FRED API Key:', l$fred_key)
+  })
+
   
   
-  # data transform ----
-    initialize_and_transform_data <- function(data_source, index) {
-    # Initialize reactive value
-    reactive_val <- reactiveVal()
+  
+  
+  ### update inputs ----
+  observe({
+    ## chart formatting
+    if(input$cht_y_invert == F){
+      y_vals <- pretty(c(min(data_for_plotting()$value), max(data_for_plotting()$value)+(max(data_for_plotting()$value) - min(data_for_plotting()$value))/10)
+                       , n = n_ticks) 
+      title_placement <- max(y_vals) -1/20*(max(y_vals)-min(y_vals))
+    } else {
+      y_vals <- pretty(c(min(data_for_plotting()$value) - (max(data_for_plotting()$value) - min(data_for_plotting()$value))/10, max(data_for_plotting()$value))
+                       , n = n_ticks) 
+      title_placement <- min(y_vals) +1/20*(max(y_vals)-min(y_vals))
+    }
+    updateNumericInput(session, "cht_y_min", value = min(y_vals))
+    updateNumericInput(session, "cht_y_max", value = max(y_vals))
+    updateNumericInput(session, "cht_y_increment", value = y_vals[2] - y_vals[1])
+    updateNumericInput(session, "cht_title_y_placement", value = title_placement)
     
-    # Initialize reactive value with data source
-    observe({
-      reactive_val(data_source())
-    })
+    # data choices 
+    updateSelectInput(session, "sub_sub_split", choices = name_list[[input$sub_split]])
     
-    # Create a reactive for transformed data
-    transformed_data <- reactive({
-      # Check if there's an expression to evaluate
-      if (input[[paste0("calculate_", index)]] > 0) {
-        expression_text <- sub("data", "value", input[[paste0("expression_", index)]])
-        data <- reactive_val() %>%
-          dplyr::mutate(value = eval(parse(text = expression_text)))
-      } else {
-        data <- reactive_val()
-      }
-      
-      # Apply label and visualization type transformations if applicable
-      if (nzchar(input[[paste0("label_", index)]])) {
-        data <- data %>%
-          dplyr::mutate(name = input[[paste0("label_", index)]])
-      }
-      
-      # Apply visualization type and series transformations
-      data %>%
-        dplyr::mutate(plotting = input[[paste0("vis_type_", index)]],
-                      series = index)
-    })
-    
-    return(transformed_data)
-  }
+  })
   
-  # Apply the combined function for each dataset
-  p_data_1.2 <- initialize_and_transform_data(p_data_1, 1)
-  p_data_2.2 <- initialize_and_transform_data(p_data_2, 2)
-  p_data_3.2 <- initialize_and_transform_data(p_data_3, 3)
-  p_data_4.2 <- initialize_and_transform_data(p_data_4, 4)
+  session_store <- reactiveValues()
   
   
   
-  p_data_edit <- reactive({
-    tmp <- p_data_1.2() %>%
-             rbind(p_data_2.2()) %>%
-             rbind(p_data_3.2()) %>%
-             rbind(p_data_4.2()) %>%
-             filter(date >=  lubridate::ymd(min(input$year1), truncated = 2L)
-                    , date <= lubridate::ymd(max(input$year1), truncated = 2L)
-             )
+  ### query series ----
+  callModule(rba_update, 1)
+  callModule(abs_update, 1)
+  callModule(bloomy_update, 1)
+  data_queried1 <- reactive({callModule(data_query, "1", input_dates = input$year1)})
+  data_transformed1 <- reactive({callModule(data_transform, "1", data_source = data_queried1)})
+  
+  callModule(rba_update, 2)
+  callModule(abs_update, 2)
+  callModule(bloomy_update, 2)
+  data_queried2 <- reactive({callModule(data_query, "2", input_dates = input$year1)})
+  data_transformed2 <- reactive({callModule(data_transform, "2", data_source = data_queried2)})
+  
+  
+  callModule(rba_update, 3)
+  callModule(abs_update, 3)
+  callModule(bloomy_update, 3)
+  data_queried3 <- reactive({callModule(data_query, "3", input_dates = input$year1)})
+  data_transformed3 <- reactive({callModule(data_transform, "3", data_source = data_queried3)})
+  
+  
+  callModule(rba_update, 4)
+  callModule(abs_update, 4)
+  callModule(bloomy_update, 4)
+  data_queried4 <- reactive({callModule(data_query, "4", input_dates = input$year1)})
+  data_transformed4 <- reactive({callModule(data_transform, "4", data_source = data_queried4)})
+  
+  
+  
+  
+  ### combine series ----
+  
+  data_combined <- reactive({
+    tmp <- data_transformed1() %>%
+      rbind(data_transformed2()) %>%
+      rbind(data_transformed3()) %>%
+      rbind(data_transformed4()) %>%
+      filter(date >=  lubridate::ymd(min(input$year1), truncated = 2L)
+             , date <= lubridate::ymd(max(input$year1), truncated = 2L)
+      )
     
     if(is.integer(input$moving_avg) == T){
       tmp <- calc_moving_avg(input_data = tmp
@@ -1251,17 +494,17 @@ server <- function(input, output, session) {
     
     if(is.integer(input$lagged_change_val) == T & input$lagged_change_val != 0){
       tmp <- calc_lagged_change_val(input_data = tmp
-                             , input_lag = input$lagged_change_val) 
+                                    , input_lag = input$lagged_change_val) 
     } 
     
     if(is.integer(input$lagged_change_pct) == T & input$lagged_change_pct != 0){
       tmp <- calc_lagged_change_pct(input_data = tmp
-                                , input_lag = input$lagged_change_pct) 
+                                    , input_lag = input$lagged_change_pct) 
     } 
     
     if(is.integer(input$lagged_change_ann) == T & input$lagged_change_ann != 0){
       tmp <- calc_lagged_change_ann(input_data = tmp
-                                , input_lag = input$lagged_change_ann) 
+                                    , input_lag = input$lagged_change_ann) 
     }
     
     return(tmp)
@@ -1270,30 +513,25 @@ server <- function(input, output, session) {
   
   
   
-  
-  
-  
-  p_data_cust <- reactiveVal()
+
+  data_for_plotting <- reactiveVal()
   observe({
-    p_data_cust(p_data_edit())
+    data_for_plotting(data_combined())
   })
   observeEvent(input$calculate_num, {
     expression_text <- sub("data", "value", input$expression_num)
-    tmp <- p_data_cust() %>%  # use the latest stored data
+    tmp <- data_for_plotting() %>%  # use the latest stored data
       mutate(value = eval(parse(text = expression_text)))
-    p_data_cust(tmp)
+    data_for_plotting(tmp)
   })
-
-
   
-
   
   
 
   # Plot (interactive) ---------------
   output$p_cust <- renderPlotly({
     session_store$plt <- ggplotly(
-      p_data_cust() %>%
+      data_for_plotting() %>%
       ggplot() +
       geom_line(aes(x=date, y=value, colour = name)) +
       theme_minimal() +
@@ -1306,9 +544,9 @@ server <- function(input, output, session) {
   
   # Plot (static) ---------------
   p_plot_settings <- reactive({
-    chart_formatting(p_data_cust())
+    chart_formatting(data_for_plotting())
     
-    set_chart_defaults(input_data = p_data_cust()
+    set_chart_defaults(input_data = data_for_plotting()
                        , cht_y_min = input$cht_y_min
                        , cht_y_max = input$cht_y_max
                        , cht_y_increment = input$cht_y_increment
@@ -1343,7 +581,7 @@ server <- function(input, output, session) {
   })
 
   p_cust_static <- reactive({
-    p_data_cust() %>%
+    data_for_plotting() %>%
       ggplot(aes(x=date, y=value, colour = name, fill = name)) +
       p_plot_settings() 
   })
@@ -1381,7 +619,7 @@ server <- function(input, output, session) {
   output$p_table_cust <- DT::renderDataTable(
     
     if(input$viewData1 == 1){
-      tmp <- p_data_cust()  %>%
+      tmp <- data_for_plotting()  %>%
         select(c("name", "value", "date")) %>%
         arrange(date) %>%
         pivot_wider(names_from = name, values_from = value)
@@ -1398,7 +636,7 @@ server <- function(input, output, session) {
   output$exportData <- downloadHandler(
     filename = function(){paste0(input$cht_title, ".csv")}, 
     content = function(file) {
-      write.csv(p_data_cust()  %>%
+      write.csv(data_for_plotting()  %>%
                   select(c("name", "value", "date")) %>%
                   arrange(date) %>%
                   pivot_wider(names_from = name, values_from = value)
