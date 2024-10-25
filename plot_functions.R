@@ -1,4 +1,4 @@
-data_sources <- list("local" 
+data_sources <- list("ABS CPI" 
                     , "FRED"
                     , "dbnomics"
                     , "rba"

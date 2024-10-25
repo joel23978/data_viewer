@@ -4,7 +4,7 @@
 seriesUI <- function(id) {
   ns <- NS(id)
   tagList(
-    selectInput(ns("source"), "Data Source", choices = data_sources, selected = "local")
+    selectInput(ns("source"), "Data Source", choices = data_sources, selected = "ABS CPI")
   
     # FRED Series ID input
     , conditionalPanel(
@@ -20,9 +20,9 @@ seriesUI <- function(id) {
       ns=NS(id)  
     )
     
-    # Local source inputs
+    # ABS CPI source inputs
     , conditionalPanel(
-      condition = "input.source == 'local'",
+      condition = "input.source == 'ABS CPI'",
       selectizeInput(ns("text"), "Search", choices = list(
         Category_1 = cat1,
         Category_2 = cat2,
@@ -192,7 +192,7 @@ data_query <- function(input, output, session, input_dates){
  start_date <- lubridate::ymd(min(input_dates), truncated = 2L)
  end_date <- lubridate::ymd(max(input_dates), truncated = 2L)
  
-    if (input$source == "local"){
+    if (input$source == "ABS CPI"){
       tmp <- cpi_splits_cust(cpi_data = cpi_data_all
                              , transformation = input$transform
                              , dates = as.numeric(input_dates)
