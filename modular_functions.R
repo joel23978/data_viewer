@@ -23,7 +23,7 @@ seriesUI <- function(id) {
     # ABS CPI source inputs
     , conditionalPanel(
       condition = "input.source == 'ABS CPI'",
-      selectizeInput(ns("text"), "Search", choices = list(
+      selectizeInput(ns("text"), "Data Series", choices = list(
         Category_1 = cat1,
         Category_2 = cat2,
         Category_3 = cat3,

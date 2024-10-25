@@ -73,6 +73,8 @@ ui <- navbarPage(
         tags$script(HTML(js))
       ),
       
+      h5("Note: Select a data source and a data series to display a chart"),
+      
       sidebarLayout(
         sidebarPanel(
           h4("Data Inputs")
@@ -341,7 +343,7 @@ server <- function(input, output, session) {
   fred_api_link <- a("FRED API Keys", href="https://fred.stlouisfed.org/docs/api/api_key.html")
   
   output$tab <- renderUI({
-    tagList("Data Sources:  ", fred_link, "...", dbnomics_link, "...", rba_link, "...", abs_link,  "...",fred_api_link)
+    tagList("Data Sources:", fred_link,  dbnomics_link, rba_link, abs_link, fred_api_link)
   })
   
   
@@ -447,6 +449,7 @@ server <- function(input, output, session) {
   
   
   ### query series ----
+  
   callModule(rba_update, 1)
   callModule(abs_update, 1)
   callModule(bloomy_update, 1)
@@ -477,7 +480,6 @@ server <- function(input, output, session) {
   
   
   ### combine series ----
-  
   data_combined <- reactive({
     tmp <- data_transformed1() %>%
       rbind(data_transformed2()) %>%
