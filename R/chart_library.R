@@ -1,5 +1,5 @@
 chart_library_path <- function() {
-  here::here("data", "chart_library.rds")
+  getOption("data_viewer.chart_library_path", here::here("data", "chart_library.rds"))
 }
 
 empty_chart_library <- function() {

@@ -30,19 +30,22 @@ names(bbg_tickers) <- bbg_categories
 bbg_data <- function(
     series = input$bloomberg_ticker_1
     # , desc = input$bloomberg_desc_1
-    , start_date = lubridate::ymd(min(input$year1), truncated = 2L)
-    , end_date = lubridate::ymd(max(input$year1), truncated = 2L)
+    , start_date = NULL
+    , end_date = NULL
 ){
-  shinyCatch(return(
-    bdh(securities = series,
-              fields = c("PX_LAST"),
-              start.date=start_date
+  query_start <- if (is.null(start_date)) as.Date("1900-01-01") else start_date
+
+  bdh(
+    securities = series,
+    fields = c("PX_LAST"),
+    start.date = query_start
   ) %>%
     mutate(security = series) %>%
-    select(c(3,1,2)) %>%
-    `colnames<-`(c("name", "date", "value"))
-  
-))
+    select(c(3, 1, 2)) %>%
+    `colnames<-`(c("name", "date", "value")) %>%
+    {
+      if (is.null(end_date)) . else filter(., date <= end_date)
+    }
 }
 
 
@@ -60,19 +63,20 @@ Sys.getenv("FRED_API_KEY")
 
 fred_data <- function(
     series = input$fred_series
-    , start_date = lubridate::ymd(min(input$year1), truncated = 2L)
-    , end_date = lubridate::ymd(max(input$year1), truncated = 2L)
+    , start_date = NULL
+    , end_date = NULL
 ){
-  shinyCatch(return(
-    fredr(
-    series_id = series,
-    observation_start = start_date,
-    observation_end = end_date
-  ) %>%
+  query_args <- list(series_id = series)
+  if (!is.null(start_date)) {
+    query_args$observation_start <- start_date
+  }
+  if (!is.null(end_date)) {
+    query_args$observation_end <- end_date
+  }
+
+  do.call(fredr, query_args) %>%
     select(c(date, value, series_id)) %>%
     rename(name = series_id)
-  
-  ))
 }
 
 # recession shading ----
@@ -125,25 +129,24 @@ library(rdbnomics)
 
 db_data <- function(
     series = input$db_series
-    , start_date = lubridate::ymd(min(input$year1), truncated = 2L)
-    , end_date = lubridate::ymd(max(input$year1), truncated = 2L)
+    , start_date = NULL
+    , end_date = NULL
 ){
-  
-  shinyCatch(return(
-    rdb(
+
+  rdb(
     ids = series
   ) %>%
     select(c(period, value, dataset_name)) %>%
     rename(name = dataset_name
            , date = period) %>%
     mutate(date = as.Date(date)) %>%
-    filter(date <= end_date
-           , date >= start_date) %>%
+    {
+      if (!is.null(start_date)) filter(., date >= start_date) else .
+    } %>%
+    {
+      if (!is.null(end_date)) filter(., date <= end_date) else .
+    } %>%
     drop_na()
-  ),
-  position = "bottom-right",
-  blocking_level = "error"
-  )
 }
 
 
@@ -157,7 +160,28 @@ library(readrba)
 # tmp <- browse_rba_tables()
 # rba_table_names <- paste(tmp$no, tmp$title)
 
-rba_tables <- unique(browse_rba_series()$table_no)
+rba_table_meta <- browse_rba_series() %>%
+  select(table_no, table_title) %>%
+  distinct() %>%
+  group_by(table_no) %>%
+  summarise(table_title = table_title[1], .groups = "drop") %>%
+  arrange(table_no)
+
+compact_rba_table_title <- function(table_no, table_title) {
+  short_title <- table_title %>%
+    stringr::str_remove(paste0("^", stringr::fixed(table_no), "\\s*")) %>%
+    stringr::str_replace("^Reserve Bank Of Australia\\s*-\\s*", "RBA ") %>%
+    stringr::str_replace("\\s*-\\s*.*$", "") %>%
+    stringr::str_squish()
+
+  paste(table_no, short_title)
+}
+
+rba_tables <- rba_table_meta$table_no
+rba_table_choices <- stats::setNames(
+  rba_table_meta$table_no,
+  mapply(compact_rba_table_title, rba_table_meta$table_no, rba_table_meta$table_title, USE.NAMES = FALSE)
+)
 
 rba_desc_id <- browse_rba_series() %>%
   select(c(table_no, description, series_id)) %>%
@@ -243,17 +267,10 @@ abs_data <- function(
 ){
   
   if(length(series) > 0){
-    shinyCatch(
-      return(
-        read_abs(series_id = series) %>%
-          select(date, value, series) %>%
-          rename(name = series) %>%
-          drop_na()
-      ))
+    read_abs(series_id = series) %>%
+      select(date, value, series) %>%
+      rename(name = series) %>%
+      drop_na()
   }
 }
-
-
-
-
 

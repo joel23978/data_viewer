@@ -28,6 +28,32 @@ body {
   padding: 18px;
 }
 
+.app-card__body .nav-tabs {
+  border-bottom: 1px solid #d7ddea;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 16px;
+}
+
+.app-card__body .nav-tabs > li > a {
+  background: #eef2ff;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  color: #1e3a8a;
+  font-weight: 600;
+  margin-right: 0;
+  padding: 8px 12px;
+}
+
+.app-card__body .nav-tabs > li.active > a,
+.app-card__body .nav-tabs > li.active > a:hover,
+.app-card__body .nav-tabs > li.active > a:focus {
+  background: #1d4ed8;
+  border-color: #1d4ed8;
+  color: #ffffff;
+}
+
 .muted-copy {
   color: #475569;
   margin-bottom: 14px;
@@ -101,4 +127,15 @@ body {
 
 .btn-block {
   width: 100%;
+}
+
+@media (max-width: 991px) {
+  .page-shell {
+    padding: 14px 8px 22px;
+  }
+
+  .export-row,
+  .library-actions {
+    flex-direction: column;
+  }
 }

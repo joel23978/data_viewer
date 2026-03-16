@@ -40,17 +40,7 @@ for ( i in 1: length(tmp)) {
 }
 names(name_list) <- tmp
 
-region_list <- list("Australia"
-                    , "Sydney"		
-                    , "Melbourne"			
-                    , "Brisbane"		
-                    , "Adelaide"			
-                    , "Perth"		
-                    , "Hobart"			
-                    , "Darwin"		
-                    , "Canberra"			
-                    #, "Weighted average of eight capital cities"
-)
+region_list <- sort(unique(cpi_data_all$region))
 
 
 cat1 <- sort(unique(cpi_data_all$class_1_name[cpi_data_all$class_0==1]))
@@ -60,6 +50,100 @@ cat4 <- sort(unique(cpi_data_all$class_3_name[cpi_data_all$class_3==1]))
 
 
 ## functions ----
+
+cpi_quarter_lag <- function(input_data) {
+  if (nrow(input_data) < 2) {
+    return(3)
+  }
+
+  median_gap <- median(as.numeric(diff(sort(unique(input_data$date)))), na.rm = TRUE)
+
+  if (!is.finite(median_gap)) {
+    return(3)
+  }
+
+  if (median_gap <= 40) {
+    return(3)
+  }
+
+  1
+}
+
+dedupe_cpi_output <- function(input_data) {
+  if (nrow(input_data) == 0) {
+    return(input_data)
+  }
+
+  grouping_columns <- intersect(c("date", "name", "region", "parent", "series"), names(input_data))
+
+  input_data %>%
+    group_by(across(all_of(grouping_columns))) %>%
+    summarise(value = mean(value, na.rm = TRUE), .groups = "drop")
+}
+
+apply_cpi_transformation <- function(input_data, transformation = "y.y", rebase_date = as.Date("2019-12-31")) {
+  if (nrow(input_data) == 0) {
+    return(input_data)
+  }
+
+  if (identical(transformation, "rebased index")) {
+    return(dedupe_cpi_output(
+      input_data %>%
+        filter(series == "index") %>%
+        group_by(name) %>%
+        mutate(
+          value = value / value[which.min(abs(date - rebase_date))] * 100,
+          series = "rebased index"
+        ) %>%
+        ungroup()
+    ))
+  }
+
+  if (identical(transformation, "index")) {
+    return(dedupe_cpi_output(input_data %>% filter(series == "index")))
+  }
+
+  if (identical(transformation, "y.y")) {
+    yoy_label <- "Percentage Change from Corresponding Month of Previous Year"
+
+    if (any(input_data$series == yoy_label)) {
+      return(dedupe_cpi_output(
+        input_data %>%
+          filter(series == yoy_label) %>%
+          mutate(series = "y.y")
+      ))
+    }
+
+    return(dedupe_cpi_output(
+      input_data %>%
+        filter(series == "index") %>%
+        group_by(name) %>%
+        arrange(date, .by_group = TRUE) %>%
+        mutate(value = 100 * value / lag(value, 12) - 100, series = "y.y") %>%
+        ungroup() %>%
+        drop_na(value)
+    ))
+  }
+
+  if (identical(transformation, "q.q")) {
+    quarter_lag <- cpi_quarter_lag(input_data)
+
+    return(dedupe_cpi_output(
+      input_data %>%
+        filter(series == "index") %>%
+        group_by(name) %>%
+        arrange(date, .by_group = TRUE) %>%
+        mutate(value = 100 * value / lag(value, quarter_lag) - 100, series = "q.q") %>%
+        ungroup() %>%
+        drop_na(value)
+    ))
+  }
+
+  dedupe_cpi_output(
+    input_data %>%
+      filter(series == transformation)
+  )
+}
 
 cpi_splits <- function(
     cpi_data = cpi_data_all
@@ -78,7 +162,6 @@ cpi_splits <- function(
              , date < lubridate::ymd(dates[2]+1, truncated = 2L)
              , region == region_split
              , eval(as.symbol(pick_split)) ==1
-             , series == transformation
       ) %>%
       mutate(name = class_1_name) %>%
       select(name, region, series, date, value) %>%
@@ -93,7 +176,6 @@ cpi_splits <- function(
              , date < lubridate::ymd(dates[2]+1, truncated = 2L)
              , region == region_split
              , eval(as.symbol(pick_split)) ==1
-             , series == transformation
       ) %>%
       rename(name = eval(paste0(as.symbol(pick_split), "_name"))) %>%
       select(name, region, series, date, value) %>%
@@ -103,7 +185,7 @@ cpi_splits <- function(
     
   }
 
-  return(cpi_data)
+  apply_cpi_transformation(cpi_data, transformation = transformation)
 }
 
 
@@ -123,7 +205,6 @@ cpi_sub_splits <- function(
            , region == region_split
            , class_1_name == pick_sub_split
            , class_2 ==1
-           , series == transformation
     ) %>%
     rename(name = class_2_name) %>%
     select(name, region, series, date, value) %>%
@@ -131,7 +212,7 @@ cpi_sub_splits <- function(
     ungroup() %>%
     filter(date > lubridate::ymd(dates[1], truncated = 2L))
 
-  return(cpi_data)
+  apply_cpi_transformation(cpi_data, transformation = transformation)
   }
 
 
@@ -151,7 +232,6 @@ cpi_sub_sub_splits <- function(
              , region == region_split
              , class_2_name == pick_sub_sub_split
              , class_3 ==1
-             , series == transformation
       ) %>%
       rename(name = class_3_name
              , parent = class_2_name) %>%
@@ -160,7 +240,7 @@ cpi_sub_sub_splits <- function(
       ungroup() %>%
       filter(date > lubridate::ymd(dates[1], truncated = 2L))
     
-    return(cpi_data)
+    apply_cpi_transformation(cpi_data, transformation = transformation)
   
 }
 
@@ -188,16 +268,11 @@ cpi_splits_cust <- function(
     ungroup() %>%
     filter(date > lubridate::ymd(dates[1], truncated = 2L))
   
-  if(transformation == "rebased index"){
-    cpi_data <- cpi_data %>%
-      filter(series == "index")%>%
-      group_by(name) %>%
-      mutate(value = value/value[which(abs(date-rebase_date) == min(abs(date - rebase_date)))]*100) %>%
-      ungroup()
-  } else {
-    cpi_data <- cpi_data %>%
-      filter(series == transformation)
-  }
+  cpi_data <- apply_cpi_transformation(
+    cpi_data,
+    transformation = transformation,
+    rebase_date = rebase_date
+  )
   
   cpi_data <- cpi_data %>%
     mutate(name = paste0(name, ", ", transformation)) %>%
