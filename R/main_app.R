@@ -341,17 +341,17 @@ build_main_ui <- function() {
                 class = "muted-copy",
                 "Set titles, axes, guides, colours, and export options."
               ),
-              textInput("style_note", "Source note or caption shown below the chart", value = default_builder_state()$style$note),
               fluidRow(
                 column(
                   width = 4,
                   textInput("style_title", "Chart title shown above the plot", value = "Custom data view"),
                   textInput("style_subtitle", "Chart subtitle shown below the title", value = ""),
-                  textInput("style_y_axis_label", "Y-axis label", value = "%")
+                  textInput("style_y_axis_label", "Y-axis label", value = "%"),
+                  textInput("style_note", "Source note or caption shown below the chart", value = default_builder_state()$style$note),
+                  selectInput("style_font_family", "Chart font", choices = APP_CHART_FONTS, selected = APP_CHART_FONTS[[1]])
                 ),
                 column(
                   width = 4,
-                  selectInput("style_font_family", "Chart font", choices = APP_CHART_FONTS, selected = APP_CHART_FONTS[[1]]),
                   selectInput("style_palette", "Colour palette", choices = APP_PALETTES, selected = APP_PALETTES[[1]]),
                   radioGroupButtons(
                     "style_legend",
@@ -366,8 +366,6 @@ build_main_ui <- function() {
                 ),
                 column(
                   width = 4,
-                  selectInput("style_date_format", "Date label format on the x-axis", choices = APP_DATE_FORMATS, selected = APP_DATE_FORMATS[[2]]),
-                  numericInput("style_x_labels", "Approximate number of x-axis labels", value = 6, min = 2, step = 1),
                   radioGroupButtons(
                     "style_auto_y_axis",
                     "Y-axis range mode",
@@ -390,16 +388,8 @@ build_main_ui <- function() {
                     justified = TRUE,
                     checkIcon = list(yes = icon("check"))
                   ),
-                  fluidRow(
-                    column(
-                      width = 6,
-                      numericInput("export_width", "PNG export width", value = 7, min = 4, step = 0.5)
-                    ),
-                    column(
-                      width = 6,
-                      numericInput("export_height", "PNG export height", value = 5, min = 3, step = 0.5)
-                    )
-                  )
+                  numericInput("export_width", "PNG export width", value = 7, min = 4, step = 0.5),
+                  numericInput("export_height", "PNG export height", value = 5, min = 3, step = 0.5)
                 )
               ),
               tags$hr(),
@@ -567,6 +557,68 @@ build_main_ui <- function() {
                       checkIcon = list(yes = icon("check"))
                     ),
                     actionButton("analysis_add_seasonal_series", "Add to builder", class = "btn-primary btn-block")
+                  ),
+                  tabPanel(
+                    "HP Filter",
+                    tags$p(class = "muted-copy", "Estimate a Hodrick-Prescott trend and cycle. The chart appears in the main panel."),
+                    selectInput("analysis_hp_series", "Series to filter", choices = character()),
+                    radioGroupButtons(
+                      "analysis_hp_side",
+                      "Filter direction",
+                      choices = c("Two-sided" = "two_sided", "One-sided" = "one_sided"),
+                      selected = "two_sided",
+                      justified = TRUE,
+                      checkIcon = list(yes = icon("check"))
+                    ),
+                    radioGroupButtons(
+                      "analysis_hp_view",
+                      "Display",
+                      choices = filter_display_choices(),
+                      selected = "overlay",
+                      justified = TRUE,
+                      checkIcon = list(yes = icon("check"))
+                    ),
+                    uiOutput("analysis_hp_summary"),
+                    radioGroupButtons(
+                      "analysis_hp_target_series",
+                      "Add filtered result to",
+                      choices = c("Series 1" = "1", "Series 2" = "2", "Series 3" = "3", "Series 4" = "4"),
+                      selected = "1",
+                      justified = TRUE,
+                      checkIcon = list(yes = icon("check"))
+                    ),
+                    actionButton("analysis_add_hp_series", "Add to builder", class = "btn-primary btn-block")
+                  ),
+                  tabPanel(
+                    "Kalman Filter",
+                    tags$p(class = "muted-copy", "Estimate a local linear trend with a Kalman filter. The chart appears in the main panel."),
+                    selectInput("analysis_kalman_series", "Series to filter", choices = character()),
+                    radioGroupButtons(
+                      "analysis_kalman_side",
+                      "Filter direction",
+                      choices = c("Two-sided" = "two_sided", "One-sided" = "one_sided"),
+                      selected = "two_sided",
+                      justified = TRUE,
+                      checkIcon = list(yes = icon("check"))
+                    ),
+                    radioGroupButtons(
+                      "analysis_kalman_view",
+                      "Display",
+                      choices = filter_display_choices(),
+                      selected = "overlay",
+                      justified = TRUE,
+                      checkIcon = list(yes = icon("check"))
+                    ),
+                    uiOutput("analysis_kalman_summary"),
+                    radioGroupButtons(
+                      "analysis_kalman_target_series",
+                      "Add filtered result to",
+                      choices = c("Series 1" = "1", "Series 2" = "2", "Series 3" = "3", "Series 4" = "4"),
+                      selected = "1",
+                      justified = TRUE,
+                      checkIcon = list(yes = icon("check"))
+                    ),
+                    actionButton("analysis_add_kalman_series", "Add to builder", class = "btn-primary btn-block")
                   )
                 )
               )
@@ -881,6 +933,10 @@ build_main_server <- function(input, output, session) {
     updateNumericInput(session, "analysis_forecast_holdout", value = 0)
     updateNumericInput(session, "analysis_forecast_horizon", value = 4)
     updateRadioGroupButtons(session, "analysis_seasonal_view", selected = "both")
+    updateRadioGroupButtons(session, "analysis_hp_side", selected = "two_sided")
+    updateRadioGroupButtons(session, "analysis_hp_view", selected = "overlay")
+    updateRadioGroupButtons(session, "analysis_kalman_side", selected = "two_sided")
+    updateRadioGroupButtons(session, "analysis_kalman_view", selected = "overlay")
     showNotification("Workspace tools cleared.", type = "message")
   })
 
@@ -1735,6 +1791,82 @@ build_main_server <- function(input, output, session) {
       ))
     }
 
+    if (identical(active_tab, "HP Filter")) {
+      series_name <- input$analysis_hp_series %||% ""
+      side <- input$analysis_hp_side %||% "two_sided"
+      display_mode <- input$analysis_hp_view %||% "overlay"
+
+      if (!nzchar(series_name)) {
+        return(NULL)
+      }
+
+      result <- tryCatch(
+        hp_filter_analysis(
+          data,
+          series_name = series_name,
+          side = side,
+          display_mode = display_mode
+        ),
+        error = function(error) NULL
+      )
+
+      if (is.null(result)) {
+        return(NULL)
+      }
+
+      return(list(
+        chart_kind = "hp_filter",
+        title = paste("HP filter:", series_name),
+        chart_state = chart_state,
+        data_snapshot = empty_chart_data(),
+        analysis_spec = list(
+          tab = "HP Filter",
+          series_name = series_name,
+          side = side,
+          display_mode = display_mode
+        ),
+        analysis_payload = result
+      ))
+    }
+
+    if (identical(active_tab, "Kalman Filter")) {
+      series_name <- input$analysis_kalman_series %||% ""
+      side <- input$analysis_kalman_side %||% "two_sided"
+      display_mode <- input$analysis_kalman_view %||% "overlay"
+
+      if (!nzchar(series_name)) {
+        return(NULL)
+      }
+
+      result <- tryCatch(
+        kalman_filter_analysis(
+          data,
+          series_name = series_name,
+          side = side,
+          display_mode = display_mode
+        ),
+        error = function(error) NULL
+      )
+
+      if (is.null(result)) {
+        return(NULL)
+      }
+
+      return(list(
+        chart_kind = "kalman_filter",
+        title = paste("Kalman filter:", series_name),
+        chart_state = chart_state,
+        data_snapshot = empty_chart_data(),
+        analysis_spec = list(
+          tab = "Kalman Filter",
+          series_name = series_name,
+          side = side,
+          display_mode = display_mode
+        ),
+        analysis_payload = result
+      ))
+    }
+
     NULL
   }
 
@@ -1805,6 +1937,26 @@ build_main_server <- function(input, output, session) {
         ),
         tooltip = c("x", "y", "colour")
       )
+    } else if (identical(chart_kind, "hp_filter")) {
+      ggplotly(
+        build_hp_filter_plot(
+          analysis_payload,
+          analysis_spec$series_name %||% "Series",
+          analysis_spec$side %||% "two_sided",
+          analysis_spec$display_mode %||% "overlay"
+        ),
+        tooltip = c("x", "y", "colour")
+      )
+    } else if (identical(chart_kind, "kalman_filter")) {
+      ggplotly(
+        build_kalman_filter_plot(
+          analysis_payload,
+          analysis_spec$series_name %||% "Series",
+          analysis_spec$side %||% "two_sided",
+          analysis_spec$display_mode %||% "overlay"
+        ),
+        tooltip = c("x", "y", "colour")
+      )
     } else {
       build_chart_widget(chart_record$data_snapshot[[1]], chart_state$style)
     }
@@ -1858,6 +2010,14 @@ build_main_server <- function(input, output, session) {
       } else if (identical(chart_kind, "seasonal_adjustment")) {
         updateSelectInput(session, "analysis_seasonal_series", selected = analysis_spec$series_name %||% "")
         updateRadioGroupButtons(session, "analysis_seasonal_view", selected = analysis_spec$display_mode %||% "both")
+      } else if (identical(chart_kind, "hp_filter")) {
+        updateSelectInput(session, "analysis_hp_series", selected = analysis_spec$series_name %||% "")
+        updateRadioGroupButtons(session, "analysis_hp_side", selected = analysis_spec$side %||% "two_sided")
+        updateRadioGroupButtons(session, "analysis_hp_view", selected = analysis_spec$display_mode %||% "overlay")
+      } else if (identical(chart_kind, "kalman_filter")) {
+        updateSelectInput(session, "analysis_kalman_series", selected = analysis_spec$series_name %||% "")
+        updateRadioGroupButtons(session, "analysis_kalman_side", selected = analysis_spec$side %||% "two_sided")
+        updateRadioGroupButtons(session, "analysis_kalman_view", selected = analysis_spec$display_mode %||% "overlay")
       }
     }, once = TRUE)
 
@@ -2452,6 +2612,8 @@ build_main_server <- function(input, output, session) {
     updateSelectInput(session, "analysis_reg_y", choices = series_choices, selected = reg_pair$secondary %||% character())
     updateSelectInput(session, "analysis_forecast_series", choices = series_choices, selected = series_choices[1] %||% character())
     updateSelectInput(session, "analysis_seasonal_series", choices = series_choices, selected = series_choices[1] %||% character())
+    updateSelectInput(session, "analysis_hp_series", choices = series_choices, selected = series_choices[1] %||% character())
+    updateSelectInput(session, "analysis_kalman_series", choices = series_choices, selected = series_choices[1] %||% character())
   })
 
   correlation_result <- reactive({
@@ -2526,6 +2688,52 @@ build_main_server <- function(input, output, session) {
             result,
             input$analysis_seasonal_series,
             input$analysis_seasonal_view %||% "both"
+          ),
+          tooltip = c("x", "y", "colour")
+        )
+      )
+    }
+
+    if (identical(active_tab, "HP Filter")) {
+      if (length(available_series()) < 1) {
+        return(empty_plotly_widget("Add at least one chart series to run an HP filter."))
+      }
+
+      result <- tryCatch(hp_filter_result(), error = function(error) NULL)
+      if (is.null(result)) {
+        return(empty_plotly_widget("Unable to estimate the requested HP filter."))
+      }
+
+      return(
+        ggplotly(
+          build_hp_filter_plot(
+            result,
+            input$analysis_hp_series,
+            input$analysis_hp_side %||% "two_sided",
+            input$analysis_hp_view %||% "overlay"
+          ),
+          tooltip = c("x", "y", "colour")
+        )
+      )
+    }
+
+    if (identical(active_tab, "Kalman Filter")) {
+      if (length(available_series()) < 1) {
+        return(empty_plotly_widget("Add at least one chart series to run a Kalman filter."))
+      }
+
+      result <- tryCatch(kalman_filter_result(), error = function(error) NULL)
+      if (is.null(result)) {
+        return(empty_plotly_widget("Unable to estimate the requested Kalman filter."))
+      }
+
+      return(
+        ggplotly(
+          build_kalman_filter_plot(
+            result,
+            input$analysis_kalman_series,
+            input$analysis_kalman_side %||% "two_sided",
+            input$analysis_kalman_view %||% "overlay"
           ),
           tooltip = c("x", "y", "colour")
         )
@@ -2651,6 +2859,70 @@ build_main_server <- function(input, output, session) {
     )
   })
 
+  hp_filter_result <- reactive({
+    req(length(available_series()) >= 1)
+    req(nzchar(input$analysis_hp_series))
+
+    hp_filter_analysis(
+      chart_data(),
+      series_name = input$analysis_hp_series,
+      side = input$analysis_hp_side %||% "two_sided",
+      display_mode = input$analysis_hp_view %||% "overlay"
+    )
+  })
+
+  output$analysis_hp_summary <- renderUI({
+    if (length(available_series()) < 1) {
+      return(div(class = "empty-state", "Add at least one chart series to run an HP filter."))
+    }
+
+    result <- tryCatch(hp_filter_result(), error = function(error) NULL)
+    if (is.null(result)) {
+      return(div(class = "empty-state", "Unable to estimate the requested HP filter."))
+    }
+
+    div(
+      class = "summary-chip-row",
+      summary_chip("Method", result$metrics$method),
+      summary_chip("Side", result$metrics$side),
+      summary_chip("Lambda", format(round(result$metrics$lambda, 2), trim = TRUE)),
+      summary_chip("Points", result$metrics$observations),
+      summary_chip("Frequency", result$metrics$frequency)
+    )
+  })
+
+  kalman_filter_result <- reactive({
+    req(length(available_series()) >= 1)
+    req(nzchar(input$analysis_kalman_series))
+
+    kalman_filter_analysis(
+      chart_data(),
+      series_name = input$analysis_kalman_series,
+      side = input$analysis_kalman_side %||% "two_sided",
+      display_mode = input$analysis_kalman_view %||% "overlay"
+    )
+  })
+
+  output$analysis_kalman_summary <- renderUI({
+    if (length(available_series()) < 1) {
+      return(div(class = "empty-state", "Add at least one chart series to run a Kalman filter."))
+    }
+
+    result <- tryCatch(kalman_filter_result(), error = function(error) NULL)
+    if (is.null(result)) {
+      return(div(class = "empty-state", "Unable to estimate the requested Kalman filter."))
+    }
+
+    div(
+      class = "summary-chip-row",
+      summary_chip("Method", result$metrics$method),
+      summary_chip("Side", result$metrics$side),
+      summary_chip("Points", result$metrics$observations),
+      summary_chip("Frequency", result$metrics$frequency),
+      summary_chip("Range", paste(format(result$metrics$start_date, "%Y"), "-", format(result$metrics$end_date, "%Y")))
+    )
+  })
+
   observeEvent(input$analysis_add_seasonal_series, {
     result <- tryCatch(seasonal_adjustment_result(), error = function(error) NULL)
     if (is.null(result)) {
@@ -2683,6 +2955,70 @@ build_main_server <- function(input, output, session) {
     apply_builder_state(updated_state, selected_series_index = target_index, navigate_builder = FALSE)
 
     showNotification(sprintf("Seasonally adjusted result added to Series %s.", target_index), type = "message")
+  })
+
+  observeEvent(input$analysis_add_hp_series, {
+    result <- tryCatch(hp_filter_result(), error = function(error) NULL)
+    if (is.null(result)) {
+      showNotification("Run a valid HP filter before adding it to the builder.", type = "error")
+      return(invisible(NULL))
+    }
+
+    target_index <- max(1L, min(MAX_SERIES, as.integer(input$analysis_hp_target_series %||% "1")))
+    series_name <- trimws(input$analysis_hp_series %||% "HP filter")
+    view_mode <- input$analysis_hp_view %||% "overlay"
+    side <- input$analysis_hp_side %||% "two_sided"
+    result_key <- paste0("hp_filter::", digest::digest(list(series_name, side, view_mode, result$data)))
+
+    analysis_spec <- normalize_series_spec(list(
+      index = target_index,
+      source = "analysis_result",
+      label = if (identical(view_mode, "trend")) paste(series_name, "(HP trend)") else paste(series_name, "(HP)"),
+      transform_profile = default_transform_profile(),
+      vis_type = "line",
+      analysis_result_key = result_key,
+      analysis_result_name = paste(series_name, "HP filter"),
+      analysis_data = result$data %>%
+        transmute(date = as.Date(date), value = as.numeric(value), name = as.character(series))
+    ))
+
+    updated_state <- builder_state()
+    updated_state$series[[target_index]] <- analysis_spec
+    apply_builder_state(updated_state, selected_series_index = target_index, navigate_builder = FALSE)
+
+    showNotification(sprintf("HP-filtered result added to Series %s.", target_index), type = "message")
+  })
+
+  observeEvent(input$analysis_add_kalman_series, {
+    result <- tryCatch(kalman_filter_result(), error = function(error) NULL)
+    if (is.null(result)) {
+      showNotification("Run a valid Kalman filter before adding it to the builder.", type = "error")
+      return(invisible(NULL))
+    }
+
+    target_index <- max(1L, min(MAX_SERIES, as.integer(input$analysis_kalman_target_series %||% "1")))
+    series_name <- trimws(input$analysis_kalman_series %||% "Kalman filter")
+    view_mode <- input$analysis_kalman_view %||% "overlay"
+    side <- input$analysis_kalman_side %||% "two_sided"
+    result_key <- paste0("kalman_filter::", digest::digest(list(series_name, side, view_mode, result$data)))
+
+    analysis_spec <- normalize_series_spec(list(
+      index = target_index,
+      source = "analysis_result",
+      label = if (identical(view_mode, "trend")) paste(series_name, "(Kalman trend)") else paste(series_name, "(Kalman)"),
+      transform_profile = default_transform_profile(),
+      vis_type = "line",
+      analysis_result_key = result_key,
+      analysis_result_name = paste(series_name, "Kalman filter"),
+      analysis_data = result$data %>%
+        transmute(date = as.Date(date), value = as.numeric(value), name = as.character(series))
+    ))
+
+    updated_state <- builder_state()
+    updated_state$series[[target_index]] <- analysis_spec
+    apply_builder_state(updated_state, selected_series_index = target_index, navigate_builder = FALSE)
+
+    showNotification(sprintf("Kalman-filtered result added to Series %s.", target_index), type = "message")
   })
 
   forecast_result <- reactive({

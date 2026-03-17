@@ -563,3 +563,298 @@ build_seasonal_adjustment_plot <- function(seasonal_result, series_name, display
     ) +
     theme_minimal(base_size = 12)
 }
+
+filter_display_choices <- function() {
+  c(
+    "Original vs trend" = "overlay",
+    "Trend only" = "trend",
+    "Cycle only" = "cycle",
+    "Components" = "components"
+  )
+}
+
+analysis_series_frequency <- function(dates) {
+  step <- infer_date_step(dates)
+
+  if (identical(step, "year")) {
+    return(list(step = "year", frequency = 1, label = "Annual"))
+  }
+
+  if (identical(step, "quarter")) {
+    return(list(step = "quarter", frequency = 4, label = "Quarterly"))
+  }
+
+  if (identical(step, "month")) {
+    return(list(step = "month", frequency = 12, label = "Monthly"))
+  }
+
+  if (identical(step, "week")) {
+    return(list(step = "week", frequency = 52, label = "Weekly"))
+  }
+
+  list(step = step, frequency = 1, label = stringr::str_to_title(step))
+}
+
+default_hp_lambda <- function(dates) {
+  step <- analysis_series_frequency(dates)$step
+
+  if (identical(step, "year")) {
+    return(6.25)
+  }
+
+  if (identical(step, "quarter")) {
+    return(1600)
+  }
+
+  if (identical(step, "month")) {
+    return(129600)
+  }
+
+  if (identical(step, "week")) {
+    return(270400)
+  }
+
+  1600
+}
+
+hp_trend_two_sided <- function(values, lambda) {
+  observation_count <- length(values)
+
+  if (observation_count < 4) {
+    stop("Not enough observations to estimate an HP filter.", call. = FALSE)
+  }
+
+  difference_matrix <- matrix(0, nrow = observation_count - 2, ncol = observation_count)
+  for (row_index in seq_len(observation_count - 2)) {
+    difference_matrix[row_index, row_index:(row_index + 2)] <- c(1, -2, 1)
+  }
+
+  penalty_matrix <- crossprod(difference_matrix)
+  as.numeric(solve(diag(observation_count) + (lambda * penalty_matrix), values))
+}
+
+hp_trend_one_sided <- function(values, lambda, minimum_window = 8L) {
+  observation_count <- length(values)
+  trend_values <- rep(NA_real_, observation_count)
+
+  if (observation_count < minimum_window) {
+    stop("Not enough observations to estimate a one-sided HP filter.", call. = FALSE)
+  }
+
+  for (end_index in seq.int(minimum_window, observation_count)) {
+    trend_values[[end_index]] <- tail(hp_trend_two_sided(values[seq_len(end_index)], lambda), 1)
+  }
+
+  trend_values
+}
+
+filter_plot_data <- function(component_data, display_mode = "overlay") {
+  if (identical(display_mode, "trend")) {
+    return(component_data %>%
+      transmute(date = date, value = trend, series = "Trend"))
+  }
+
+  if (identical(display_mode, "cycle")) {
+    return(component_data %>%
+      transmute(date = date, value = cycle, series = "Cycle"))
+  }
+
+  if (identical(display_mode, "components")) {
+    return(bind_rows(
+      component_data %>% transmute(date = date, value = trend, series = "Trend", component = "Trend"),
+      component_data %>% transmute(date = date, value = cycle, series = "Cycle", component = "Cycle")
+    ))
+  }
+
+  bind_rows(
+    component_data %>% transmute(date = date, value = original, series = "Original"),
+    component_data %>% transmute(date = date, value = trend, series = "Trend")
+  )
+}
+
+hp_filter_analysis <- function(data, series_name, side = "two_sided", display_mode = "overlay", lambda = NULL) {
+  series_data <- analysis_single_series_data(data, series_name)
+
+  if (nrow(series_data) < 8) {
+    stop("Not enough observations to estimate the HP filter.", call. = FALSE)
+  }
+
+  lambda_value <- suppressWarnings(as.numeric(lambda %||% NA_real_))
+  if (!is.finite(lambda_value) || lambda_value <= 0) {
+    lambda_value <- default_hp_lambda(series_data$date)
+  }
+
+  trend_values <- if (identical(side, "one_sided")) {
+    hp_trend_one_sided(series_data$value, lambda_value)
+  } else {
+    hp_trend_two_sided(series_data$value, lambda_value)
+  }
+
+  component_data <- series_data %>%
+    transmute(
+      date = date,
+      original = value,
+      trend = trend_values,
+      cycle = value - trend_values
+    ) %>%
+    filter(!is.na(trend))
+
+  if (nrow(component_data) == 0) {
+    stop("Unable to estimate the HP filter for the selected series.", call. = FALSE)
+  }
+
+  list(
+    data = filter_plot_data(component_data, display_mode),
+    components = component_data,
+    metrics = list(
+      method = "HP filter",
+      side = if (identical(side, "one_sided")) "One-sided" else "Two-sided",
+      lambda = lambda_value,
+      frequency = analysis_series_frequency(component_data$date)$label,
+      observations = nrow(component_data),
+      start_date = min(component_data$date, na.rm = TRUE),
+      end_date = max(component_data$date, na.rm = TRUE),
+      display_mode = display_mode
+    )
+  )
+}
+
+build_hp_filter_plot <- function(filter_result, series_name, side = "two_sided", display_mode = "overlay") {
+  plotted_data <- filter_result$data
+  subtitle_text <- paste(
+    if (identical(side, "one_sided")) "One-sided" else "Two-sided",
+    "| lambda:",
+    format(round(filter_result$metrics$lambda, 2), trim = TRUE)
+  )
+
+  if (identical(display_mode, "components")) {
+    return(
+      ggplot(plotted_data, aes(x = date, y = value)) +
+        geom_line(linewidth = 0.95, colour = "#1d4ed8") +
+        facet_wrap(~component, ncol = 1, scales = "free_y") +
+        labs(
+          title = paste("HP filter:", series_name),
+          subtitle = subtitle_text,
+          x = NULL,
+          y = NULL
+        ) +
+        theme_minimal(base_size = 12)
+    )
+  }
+
+  plot_object <- ggplot(plotted_data, aes(x = date, y = value))
+
+  if (identical(display_mode, "overlay")) {
+    plot_object <- plot_object +
+      geom_line(aes(colour = series), linewidth = 0.95) +
+      scale_colour_manual(values = c("Original" = "#94a3b8", "Trend" = "#1d4ed8"))
+  } else if (identical(display_mode, "cycle")) {
+    plot_object <- plot_object +
+      geom_hline(yintercept = 0, colour = "#94a3b8", linetype = "dashed") +
+      geom_line(linewidth = 0.95, colour = "#1d4ed8")
+  } else {
+    plot_object <- plot_object +
+      geom_line(linewidth = 0.95, colour = "#1d4ed8")
+  }
+
+  plot_object +
+    labs(
+      title = paste("HP filter:", series_name),
+      subtitle = subtitle_text,
+      x = NULL,
+      y = if (identical(display_mode, "cycle")) "Cycle" else "Value",
+      colour = NULL
+    ) +
+    theme_minimal(base_size = 12)
+}
+
+kalman_filter_analysis <- function(data, series_name, side = "two_sided", display_mode = "overlay") {
+  series_data <- analysis_single_series_data(data, series_name)
+
+  if (nrow(series_data) < 8) {
+    stop("Not enough observations to estimate the Kalman filter.", call. = FALSE)
+  }
+
+  frequency_info <- analysis_series_frequency(series_data$date)
+  ts_data <- stats::ts(series_data$value, frequency = frequency_info$frequency)
+  model_fit <- stats::StructTS(ts_data, type = "trend")
+
+  trend_values <- if (identical(side, "one_sided")) {
+    as.numeric(stats::KalmanRun(ts_data, model_fit$model)$states[, 1])
+  } else {
+    as.numeric(stats::KalmanSmooth(ts_data, model_fit$model)$smooth[, 1])
+  }
+
+  component_data <- series_data %>%
+    transmute(
+      date = date,
+      original = value,
+      trend = trend_values,
+      cycle = value - trend_values
+    ) %>%
+    filter(!is.na(trend))
+
+  if (nrow(component_data) == 0) {
+    stop("Unable to estimate the Kalman filter for the selected series.", call. = FALSE)
+  }
+
+  list(
+    model = model_fit,
+    data = filter_plot_data(component_data, display_mode),
+    components = component_data,
+    metrics = list(
+      method = "Local linear trend",
+      side = if (identical(side, "one_sided")) "One-sided" else "Two-sided",
+      frequency = frequency_info$label,
+      observations = nrow(component_data),
+      start_date = min(component_data$date, na.rm = TRUE),
+      end_date = max(component_data$date, na.rm = TRUE),
+      display_mode = display_mode
+    )
+  )
+}
+
+build_kalman_filter_plot <- function(filter_result, series_name, side = "two_sided", display_mode = "overlay") {
+  plotted_data <- filter_result$data
+  subtitle_text <- paste(if (identical(side, "one_sided")) "One-sided" else "Two-sided", "| Local linear trend")
+
+  if (identical(display_mode, "components")) {
+    return(
+      ggplot(plotted_data, aes(x = date, y = value)) +
+        geom_line(linewidth = 0.95, colour = "#1d4ed8") +
+        facet_wrap(~component, ncol = 1, scales = "free_y") +
+        labs(
+          title = paste("Kalman filter:", series_name),
+          subtitle = subtitle_text,
+          x = NULL,
+          y = NULL
+        ) +
+        theme_minimal(base_size = 12)
+    )
+  }
+
+  plot_object <- ggplot(plotted_data, aes(x = date, y = value))
+
+  if (identical(display_mode, "overlay")) {
+    plot_object <- plot_object +
+      geom_line(aes(colour = series), linewidth = 0.95) +
+      scale_colour_manual(values = c("Original" = "#94a3b8", "Trend" = "#1d4ed8"))
+  } else if (identical(display_mode, "cycle")) {
+    plot_object <- plot_object +
+      geom_hline(yintercept = 0, colour = "#94a3b8", linetype = "dashed") +
+      geom_line(linewidth = 0.95, colour = "#1d4ed8")
+  } else {
+    plot_object <- plot_object +
+      geom_line(linewidth = 0.95, colour = "#1d4ed8")
+  }
+
+  plot_object +
+    labs(
+      title = paste("Kalman filter:", series_name),
+      subtitle = subtitle_text,
+      x = NULL,
+      y = if (identical(display_mode, "cycle")) "Cycle" else "Value",
+      colour = NULL
+    ) +
+    theme_minimal(base_size = 12)
+}
