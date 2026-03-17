@@ -5,6 +5,15 @@ analysis_series_choices <- function(data) {
     sort()
 }
 
+analysis_single_series_data <- function(data, series_name) {
+  data %>%
+    filter(name == series_name) %>%
+    select(date, name, value) %>%
+    group_by(date, name) %>%
+    summarise(value = mean(value, na.rm = TRUE), .groups = "drop") %>%
+    arrange(date)
+}
+
 analysis_pair_data <- function(data, series_x, series_y) {
   data %>%
     filter(name %in% c(series_x, series_y)) %>%
@@ -371,6 +380,151 @@ build_forecast_plot <- function(forecast_result, series_name) {
       ),
       x = NULL,
       y = "Value"
+    ) +
+    theme_minimal(base_size = 12)
+}
+
+seasonal_adjustment_frequency <- function(dates) {
+  step <- infer_date_step(dates)
+
+  if (identical(step, "month")) {
+    return(list(
+      step = "month",
+      frequency = 12L,
+      label = "Monthly",
+      sequence_by = "1 month",
+      minimum_observations = 36L
+    ))
+  }
+
+  if (identical(step, "quarter")) {
+    return(list(
+      step = "quarter",
+      frequency = 4L,
+      label = "Quarterly",
+      sequence_by = "3 months",
+      minimum_observations = 20L
+    ))
+  }
+
+  stop("X-13 seasonal adjustment currently supports monthly and quarterly series only.", call. = FALSE)
+}
+
+seasonal_adjustment_series <- function(series_data) {
+  frequency_info <- seasonal_adjustment_frequency(series_data$date)
+
+  if (nrow(series_data) < frequency_info$minimum_observations) {
+    stop("Not enough observations to run X-13 seasonal adjustment for this series.", call. = FALSE)
+  }
+
+  period_unit <- if (identical(frequency_info$step, "quarter")) "quarter" else "month"
+  normalized_series <- series_data %>%
+    mutate(date = lubridate::floor_date(date, unit = period_unit)) %>%
+    group_by(date) %>%
+    summarise(value = mean(value, na.rm = TRUE), .groups = "drop") %>%
+    arrange(date)
+
+  full_dates <- seq(min(normalized_series$date), max(normalized_series$date), by = frequency_info$sequence_by)
+  regular_series <- tibble::tibble(date = full_dates) %>%
+    left_join(normalized_series, by = "date")
+
+  if (anyNA(regular_series$value)) {
+    stop("The selected series has gaps. X-13 seasonal adjustment needs a continuous monthly or quarterly history.", call. = FALSE)
+  }
+
+  start_date <- min(regular_series$date)
+  series_start <- if (identical(frequency_info$step, "quarter")) {
+    c(lubridate::year(start_date), lubridate::quarter(start_date))
+  } else {
+    c(lubridate::year(start_date), lubridate::month(start_date))
+  }
+
+  ts_data <- stats::ts(
+    regular_series$value,
+    start = series_start,
+    frequency = frequency_info$frequency
+  )
+
+  list(
+    regular_series = regular_series,
+    ts_data = ts_data,
+    frequency = frequency_info
+  )
+}
+
+seasonal_adjustment_analysis <- function(data, series_name, display_mode = "both") {
+  if (!requireNamespace("seasonal", quietly = TRUE) || !requireNamespace("x13binary", quietly = TRUE)) {
+    stop("The X-13 seasonal-adjustment packages are not installed in this R environment.", call. = FALSE)
+  }
+
+  series_data <- analysis_single_series_data(data, series_name)
+  if (nrow(series_data) == 0) {
+    stop("No data is available for the selected series.", call. = FALSE)
+  }
+
+  prepared_series <- seasonal_adjustment_series(series_data)
+  model <- seasonal::seas(prepared_series$ts_data, seats = "")
+  adjusted_values <- as.numeric(seasonal::final(model))
+
+  adjusted_data <- prepared_series$regular_series %>%
+    mutate(
+      original = value,
+      adjusted = adjusted_values
+    )
+
+  plotted_data <- if (identical(display_mode, "adjusted")) {
+    adjusted_data %>%
+      transmute(date = date, value = adjusted, series = "Seasonally adjusted")
+  } else {
+    bind_rows(
+      adjusted_data %>% transmute(date = date, value = original, series = "Original"),
+      adjusted_data %>% transmute(date = date, value = adjusted, series = "Seasonally adjusted")
+    )
+  }
+
+  list(
+    model = model,
+    data = plotted_data,
+    adjusted_data = adjusted_data,
+    metrics = list(
+      method = "X-13ARIMA-SEATS",
+      frequency = prepared_series$frequency$label,
+      observations = nrow(adjusted_data),
+      start_date = min(adjusted_data$date, na.rm = TRUE),
+      end_date = max(adjusted_data$date, na.rm = TRUE),
+      display_mode = display_mode
+    )
+  )
+}
+
+build_seasonal_adjustment_plot <- function(seasonal_result, series_name, display_mode = "both") {
+  plotted_data <- seasonal_result$data
+
+  if (identical(display_mode, "adjusted")) {
+    return(
+      ggplot(plotted_data, aes(x = date, y = value)) +
+        geom_line(linewidth = 0.95, colour = "#1d4ed8") +
+        labs(
+          title = paste("Seasonally adjusted:", series_name),
+          subtitle = "X-13ARIMA-SEATS",
+          x = NULL,
+          y = "Value"
+        ) +
+        theme_minimal(base_size = 12)
+    )
+  }
+
+  ggplot(plotted_data, aes(x = date, y = value, colour = series)) +
+    geom_line(linewidth = 0.95) +
+    scale_colour_manual(
+      values = c("Original" = "#94a3b8", "Seasonally adjusted" = "#1d4ed8")
+    ) +
+    labs(
+      title = paste("Seasonal adjustment:", series_name),
+      subtitle = "X-13ARIMA-SEATS",
+      x = NULL,
+      y = "Value",
+      colour = NULL
     ) +
     theme_minimal(base_size = 12)
 }

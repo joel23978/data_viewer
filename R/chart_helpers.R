@@ -67,6 +67,10 @@ series_source_note_value <- function(spec) {
     id_values <- as.character(spec$abs_id %||% character())
   }
 
+  if (identical(source_label, "analysis_result")) {
+    id_values <- as.character(spec$analysis_result_name %||% character())
+  }
+
   id_values <- unique(trimws(id_values[nzchar(trimws(id_values))]))
 
   if (length(id_values) == 0) {
@@ -291,7 +295,8 @@ series_cache_key <- function(spec) {
     cache_key_value(spec$abs_desc),
     cache_key_value(spec$abs_series_type),
     cache_key_value(spec$abs_table),
-    cache_key_value(spec$abs_id)
+    cache_key_value(spec$abs_id),
+    cache_key_value(spec$analysis_result_key)
   )
 
   paste(base_parts, collapse = "::")
@@ -329,7 +334,14 @@ builder_series_ui <- function(index) {
       selectInput(
         source_id,
         "Data source",
-        choices = c("ABS CPI", "FRED", "dbnomics", "rba", "abs"),
+        choices = c(
+          "ABS CPI" = "ABS CPI",
+          "FRED" = "FRED",
+          "dbnomics" = "dbnomics",
+          "rba" = "rba",
+          "abs" = "abs",
+          "Analysis result" = "analysis_result"
+        ),
         selected = "ABS CPI"
       ),
       uiOutput(series_source_controls_id(index)),
@@ -534,6 +546,15 @@ series_source_controls_ui <- function(input, session, index, source_value = "ABS
           options = list(create = TRUE),
           multiple = TRUE
         )
+      )
+    )
+  }
+
+  if (identical(source_value, "Analysis result") || identical(source_value, "analysis_result")) {
+    return(
+      div(
+        class = "muted-copy",
+        restored_spec$analysis_result_name %||% "This slot contains an analysis result added from the workspace."
       )
     )
   }
@@ -870,7 +891,7 @@ restore_transform_profile <- function(session, prefix, profile) {
   updateSelectInput(session, transform_input_id(prefix, "subtract_series"), selected = profile$subtract_series %||% "none")
 }
 
-series_spec_from_input <- function(input, index, transform_profile = default_transform_profile()) {
+series_spec_from_input <- function(input, index, transform_profile = default_transform_profile(), restored_spec = NULL) {
   if (!series_enabled(input, index)) {
     return(NULL)
   }
@@ -931,6 +952,21 @@ series_spec_from_input <- function(input, index, transform_profile = default_tra
     }
   }
 
+  if (identical(source_value, "Analysis result") || identical(source_value, "analysis_result")) {
+    if (is.null(restored_spec) || !identical(restored_spec$source %||% "", "analysis_result")) {
+      return(NULL)
+    }
+
+    spec$source <- "analysis_result"
+    spec$analysis_result_key <- trimws(restored_spec$analysis_result_key %||% "")
+    spec$analysis_result_name <- trimws(restored_spec$analysis_result_name %||% "")
+    spec$analysis_data <- restored_spec$analysis_data %||% tibble::tibble()
+
+    if (!nzchar(spec$analysis_result_key) || nrow(spec$analysis_data) == 0) {
+      return(NULL)
+    }
+  }
+
   spec
 }
 
@@ -985,7 +1021,7 @@ style_settings_from_input <- function(input) {
   )
 }
 
-builder_state_from_input <- function(input) {
+builder_state_from_input <- function(input, session = NULL) {
   year_bounds <- default_year_bounds()
   start_date <- as.Date(input$start_date %||% year_bounds$start_date)
   end_date <- as.Date(input$end_date %||% year_bounds$end_date)
@@ -999,7 +1035,8 @@ builder_state_from_input <- function(input) {
         series_spec_from_input(
           input,
           index,
-          transform_profile_from_input(input, paste0("transform_", index))
+          transform_profile_from_input(input, paste0("transform_", index)),
+          restored_spec = if (is.null(session)) NULL else restored_series_spec(session, index)
         )
       }
     ),
@@ -1099,6 +1136,17 @@ normalize_series_spec <- function(spec) {
     normalized_spec$abs_series_type <- spec$abs_series_type %||% unique(abs_ref[[1]]$series_type)[1]
     normalized_spec$abs_table <- spec$abs_table %||% unique(abs_ref[[1]]$table_title)[1]
     normalized_spec$abs_id <- spec$abs_id %||% character()
+  }
+
+  if (identical(normalized_spec$source, "Analysis result") || identical(normalized_spec$source, "analysis_result")) {
+    normalized_spec$source <- "analysis_result"
+    normalized_spec$analysis_result_key <- trimws(spec$analysis_result_key %||% "")
+    normalized_spec$analysis_result_name <- trimws(spec$analysis_result_name %||% "")
+    normalized_spec$analysis_data <- spec$analysis_data %||% tibble::tibble(
+      date = as.Date(character()),
+      value = numeric(),
+      name = character()
+    )
   }
 
   normalized_spec
@@ -1236,6 +1284,10 @@ query_series_history <- function(spec) {
 
   if (identical(spec$source, "abs")) {
     return(abs_data(series = spec$abs_id))
+  }
+
+  if (identical(spec$source, "analysis_result")) {
+    return(spec$analysis_data %||% tibble::tibble())
   }
 
   tibble::tibble()

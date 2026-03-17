@@ -534,6 +534,29 @@ build_main_ui <- function() {
                     ),
                     numericInput("analysis_forecast_horizon", "Forecast horizon", value = 4, min = 1, step = 1),
                     uiOutput("analysis_forecast_summary")
+                  ),
+                  tabPanel(
+                    "Seasonal Adjust",
+                    tags$p(class = "muted-copy", "Run X-13ARIMA-SEATS on a monthly or quarterly series. The adjusted chart appears in the main panel."),
+                    selectInput("analysis_seasonal_series", "Series to seasonally adjust", choices = character()),
+                    radioGroupButtons(
+                      "analysis_seasonal_view",
+                      "Display",
+                      choices = c("Adjusted only" = "adjusted", "Original vs adjusted" = "both"),
+                      selected = "both",
+                      justified = TRUE,
+                      checkIcon = list(yes = icon("check"))
+                    ),
+                    uiOutput("analysis_seasonal_summary"),
+                    radioGroupButtons(
+                      "analysis_seasonal_target_series",
+                      "Add adjusted result to",
+                      choices = c("Series 1" = "1", "Series 2" = "2", "Series 3" = "3", "Series 4" = "4"),
+                      selected = "1",
+                      justified = TRUE,
+                      checkIcon = list(yes = icon("check"))
+                    ),
+                    actionButton("analysis_add_seasonal_series", "Add to builder", class = "btn-primary btn-block")
                   )
                 )
               )
@@ -785,7 +808,7 @@ build_main_server <- function(input, output, session) {
   })
 
   observe({
-    generated_source_note <- default_source_note(normalize_chart_state(builder_state_from_input(input))$series)
+    generated_source_note <- default_source_note(normalize_chart_state(builder_state_from_input(input, session))$series)
     current_source_note <- trimws(input$style_note %||% "")
     prior_synced_note <- trimws(synced_source_note() %||% "")
 
@@ -847,6 +870,7 @@ build_main_server <- function(input, output, session) {
     updateNumericInput(session, "analysis_forecast_ma", value = 0)
     updateNumericInput(session, "analysis_forecast_holdout", value = 0)
     updateNumericInput(session, "analysis_forecast_horizon", value = 4)
+    updateRadioGroupButtons(session, "analysis_seasonal_view", selected = "both")
     showNotification("Workspace tools cleared.", type = "message")
   })
 
@@ -882,7 +906,7 @@ build_main_server <- function(input, output, session) {
   }, ignoreInit = TRUE)
 
   builder_state <- reactive({
-    input_state <- normalize_chart_state(builder_state_from_input(input))
+    input_state <- normalize_chart_state(builder_state_from_input(input, session))
     loaded_state <- restored_state()
 
     if (!is.null(loaded_state)) {
@@ -2123,6 +2147,7 @@ build_main_server <- function(input, output, session) {
     updateSelectInput(session, "analysis_reg_x", choices = series_choices, selected = reg_pair$primary %||% character())
     updateSelectInput(session, "analysis_reg_y", choices = series_choices, selected = reg_pair$secondary %||% character())
     updateSelectInput(session, "analysis_forecast_series", choices = series_choices, selected = series_choices[1] %||% character())
+    updateSelectInput(session, "analysis_seasonal_series", choices = series_choices, selected = series_choices[1] %||% character())
   })
 
   correlation_result <- reactive({
@@ -2177,6 +2202,28 @@ build_main_server <- function(input, output, session) {
         ggplotly(
           build_regression_plot(result, input$analysis_reg_y, input$analysis_reg_x),
           tooltip = c("x", "y")
+        )
+      )
+    }
+
+    if (identical(active_tab, "Seasonal Adjust")) {
+      if (length(available_series()) < 1) {
+        return(empty_plotly_widget("Add at least one chart series to run seasonal adjustment."))
+      }
+
+      result <- tryCatch(seasonal_adjustment_result(), error = function(error) NULL)
+      if (is.null(result)) {
+        return(empty_plotly_widget("Unable to run X-13 seasonal adjustment for the selected series."))
+      }
+
+      return(
+        ggplotly(
+          build_seasonal_adjustment_plot(
+            result,
+            input$analysis_seasonal_series,
+            input$analysis_seasonal_view %||% "both"
+          ),
+          tooltip = c("x", "y", "colour")
         )
       )
     }
@@ -2267,6 +2314,71 @@ build_main_server <- function(input, output, session) {
       summary_chip("Adj. R-squared", round(result$metrics$adjusted_r_squared, 3)),
       summary_chip(result$metrics$statistic_label, round(result$metrics$statistic_value, 3))
     )
+  })
+
+  seasonal_adjustment_result <- reactive({
+    req(length(available_series()) >= 1)
+    req(nzchar(input$analysis_seasonal_series))
+
+    seasonal_adjustment_analysis(
+      chart_data(),
+      series_name = input$analysis_seasonal_series,
+      display_mode = input$analysis_seasonal_view %||% "both"
+    )
+  })
+
+  output$analysis_seasonal_summary <- renderUI({
+    if (length(available_series()) < 1) {
+      return(div(class = "empty-state", "Add at least one chart series to run seasonal adjustment."))
+    }
+
+    result <- tryCatch(seasonal_adjustment_result(), error = function(error) NULL)
+    if (is.null(result)) {
+      return(div(class = "empty-state", "Unable to run X-13 seasonal adjustment for the selected series."))
+    }
+
+    div(
+      class = "summary-chip-row",
+      summary_chip("Method", result$metrics$method),
+      summary_chip("Frequency", result$metrics$frequency),
+      summary_chip("Points", result$metrics$observations),
+      summary_chip("Start", format(result$metrics$start_date, "%Y-%m-%d")),
+      summary_chip("End", format(result$metrics$end_date, "%Y-%m-%d"))
+    )
+  })
+
+  observeEvent(input$analysis_add_seasonal_series, {
+    result <- tryCatch(seasonal_adjustment_result(), error = function(error) NULL)
+    if (is.null(result)) {
+      showNotification("Run a valid seasonal adjustment before adding it to the builder.", type = "error")
+      return(invisible(NULL))
+    }
+
+    target_index <- max(1L, min(MAX_SERIES, as.integer(input$analysis_seasonal_target_series %||% "1")))
+    series_name <- trimws(input$analysis_seasonal_series %||% "Seasonal adjustment")
+    display_mode <- input$analysis_seasonal_view %||% "both"
+    result_key <- paste0(
+      "seasonal_adjustment::",
+      digest::digest(list(series_name, display_mode, result$data))
+    )
+
+    analysis_spec <- normalize_series_spec(list(
+      index = target_index,
+      source = "analysis_result",
+      label = if (identical(display_mode, "adjusted")) paste(series_name, "(SA)") else paste(series_name, "(X-13)"),
+      transform_profile = default_transform_profile(),
+      vis_type = "line",
+      analysis_result_key = result_key,
+      analysis_result_name = paste(series_name, "seasonal adjustment"),
+      analysis_data = result$data %>%
+        transmute(date = as.Date(date), value = as.numeric(value), name = as.character(series))
+    ))
+
+    updated_state <- builder_state()
+    updated_state$series[[target_index]] <- analysis_spec
+    apply_builder_state(updated_state, selected_series_index = target_index, navigate_builder = FALSE)
+
+    showNotification(sprintf("Seasonally adjusted result added to Series %s.", target_index), type = "message")
   })
 
   forecast_result <- reactive({
