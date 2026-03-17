@@ -352,7 +352,7 @@ build_main_ui <- function() {
                   radioGroupButtons(
                     "style_legend",
                     "Legend position",
-                    choices = c("Bottom" = "bottom", "Right" = "right", "Hide" = "none"),
+                    choices = c("Below" = "bottom", "Right" = "right", "Hide" = "none"),
                     selected = "bottom",
                     justified = TRUE,
                     checkIcon = list(yes = icon("check"))
