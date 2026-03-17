@@ -283,6 +283,7 @@ build_main_ui <- function() {
             ),
             chart_card(
               "Series Setup",
+              class = "series-setup-card",
               header_actions = actionButton("clear_series_setup", "Clear", class = "app-card__header-chip"),
               tags$p(
                 class = "muted-copy",
@@ -422,6 +423,7 @@ build_main_ui <- function() {
             width = 3,
             chart_card(
               "Workspace Tools",
+              class = "workspace-tools-card",
               header_actions = actionButton("clear_workspace_tools", "Clear", class = "app-card__header-chip"),
               radioGroupButtons(
                 "side_panel_mode",

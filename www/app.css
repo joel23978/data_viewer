@@ -125,6 +125,16 @@ body {
   color: #ffffff;
 }
 
+.series-setup-card .app-card__body .nav-tabs {
+  margin-bottom: 28px;
+  padding-bottom: 10px;
+}
+
+.workspace-tools-card .app-card__body .nav-tabs {
+  margin-bottom: 28px;
+  padding-bottom: 10px;
+}
+
 .app-card__body .radio-group-buttons > .btn-group-container-sw {
   align-items: stretch;
   display: flex !important;
