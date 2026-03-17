@@ -1621,9 +1621,11 @@ build_chart_plot <- function(data, style) {
     theme(
       plot.tag = element_text(face = "plain", size = 16, colour = "#0f172a", hjust = 0),
       plot.tag.position = c(0, 1),
-      plot.title = element_text(face = "bold", size = 16, margin = margin(b = 12)),
-      plot.subtitle = element_text(size = 11, colour = "#475569", margin = margin(b = 10)),
+      plot.title = element_text(face = "bold", size = 16, hjust = 0, margin = margin(b = 12)),
+      plot.subtitle = element_text(size = 11, colour = "#475569", hjust = 0, margin = margin(b = 10)),
       plot.caption = element_text(size = 9, colour = "#4b5563"),
+      plot.title.position = "plot",
+      plot.caption.position = "plot",
       panel.grid.minor = element_blank(),
       panel.grid.major.x = element_blank(),
       legend.position = style$legend,
@@ -1697,6 +1699,8 @@ build_chart_widget <- function(data, style) {
   if (length(annotations) > 0) {
     layout_args$annotations <- annotations
   }
+
+  layout_args$title <- list(x = 0, xanchor = "left")
 
   if (identical(style$legend, "none")) {
     layout_args$showlegend <- FALSE
