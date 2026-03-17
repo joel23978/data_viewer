@@ -154,17 +154,12 @@ build_library_tab_ui <- function() {
           div(
             class = "library-actions",
             actionButton("create_presentation", "Create presentation"),
-            actionButton("update_presentation", "Update presentation"),
             actionButton("delete_presentation", "Delete presentation")
           ),
           div(
             class = "library-actions",
             actionButton("add_to_presentation", "Add selected charts"),
             actionButton("replace_presentation_charts", "Replace with selected charts")
-          ),
-          div(
-            class = "library-actions",
-            downloadButton("export_selected_presentation", "Export selected presentation")
           )
         )
       ),
@@ -179,6 +174,7 @@ build_library_tab_ui <- function() {
           "Presentation Details",
           uiOutput("presentation_selected_meta"),
           DT::dataTableOutput("presentation_chart_table"),
+          uiOutput("presentation_detail_actions"),
           uiOutput("presentation_chart_actions")
         )
       )
@@ -1610,6 +1606,19 @@ build_main_server <- function(input, output, session) {
       actionButton("presentation_chart_up", "Move up"),
       actionButton("presentation_chart_down", "Move down"),
       actionButton("presentation_chart_remove", "Remove chart")
+    )
+  })
+
+  output$presentation_detail_actions <- renderUI({
+    presentation_record <- selected_presentation_record()
+    if (is.null(presentation_record)) {
+      return(NULL)
+    }
+
+    div(
+      class = "library-actions",
+      actionButton("update_presentation", "Update presentation"),
+      downloadButton("export_selected_presentation", "Export presentation")
     )
   })
 
