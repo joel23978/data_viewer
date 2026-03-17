@@ -196,6 +196,14 @@ body {
   margin-top: 14px;
 }
 
+.library-actions .btn,
+.library-actions .btn-default,
+.library-actions .btn-primary {
+  border-radius: 999px;
+  font-weight: 600;
+  padding: 10px 16px;
+}
+
 .empty-state {
   color: #64748b;
   font-size: 15px;
