@@ -106,33 +106,35 @@ body {
   color: #ffffff;
 }
 
-.app-card__body .btn-group-container-sw {
-  display: block;
+.app-card__body .radio-group-buttons > .btn-group-container-sw {
+  align-items: stretch;
+  display: flex !important;
+  flex-wrap: nowrap;
+  gap: 6px;
   margin-bottom: 14px;
   width: 100%;
 }
 
-.app-card__body .btn-group-container-sw .btn-group,
-.app-card__body .btn-group-container-sw .btn-group-vertical {
+.app-card__body .radio-group-buttons > .btn-group-container-sw > .btn-group,
+.app-card__body .radio-group-buttons > .btn-group-container-sw > .btn-group-vertical {
   align-items: stretch;
   display: flex !important;
-  flex-direction: row !important;
-  flex-wrap: nowrap;
-  gap: 6px;
+  flex: 1 1 0;
   margin: 0 !important;
   max-width: 100%;
-  width: 100%;
+  min-width: 0;
+  width: auto !important;
 }
 
-.app-card__body .btn-group-container-sw .btn-group .btn,
-.app-card__body .btn-group-container-sw .btn-group-vertical .btn,
-.app-card__body .btn-group-container-sw .radioBtn {
+.app-card__body .radio-group-buttons > .btn-group-container-sw > .btn-group > .btn,
+.app-card__body .radio-group-buttons > .btn-group-container-sw > .btn-group-vertical > .btn,
+.app-card__body .radio-group-buttons > .btn-group-container-sw > .radioBtn {
   border-radius: 12px !important;
   flex: 1 1 0;
   margin-left: 0 !important;
   max-width: 100%;
   min-width: 66px;
-  white-space: normal;
+  white-space: nowrap;
   width: 100% !important;
 }
 
