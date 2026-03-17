@@ -388,7 +388,7 @@ build_main_ui <- function() {
                     justified = TRUE,
                     checkIcon = list(yes = icon("check"))
                   ),
-                  numericInput("export_width", "PNG export width", value = 8, min = 4, step = 0.5),
+                  numericInput("export_width", "PNG export width", value = 7, min = 4, step = 0.5),
                   numericInput("export_height", "PNG export height", value = 5, min = 3, step = 0.5)
                 )
               ),

@@ -195,7 +195,7 @@ default_style_settings <- function() {
     vertical_1 = as.Date(NA),
     vertical_2 = as.Date(NA),
     recession_shading = "none",
-    export_width = 8,
+    export_width = 7,
     export_height = 5
   )
 }
