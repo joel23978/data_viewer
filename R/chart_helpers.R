@@ -1695,8 +1695,8 @@ build_chart_plot <- function(data, style) {
     ) +
     theme_minimal(base_size = 12) +
     theme(
-      plot.tag = element_text(face = "plain", size = 16, colour = "#0f172a", hjust = 1),
-      plot.tag.position = c(1, 0.965),
+      plot.tag = element_text(face = "plain", size = 12, colour = "#0f172a", hjust = 1),
+      plot.tag.position = c(1, 0.945),
       plot.title = element_text(face = "bold", size = 16, hjust = 0, margin = margin(b = 12)),
       plot.subtitle = element_text(size = 11, colour = "#475569", hjust = 0, margin = margin(b = 10)),
       plot.caption = element_text(size = 9, colour = "#4b5563"),
@@ -1764,14 +1764,14 @@ build_chart_widget <- function(data, style) {
       list(
         text = y_axis_label,
         x = 1,
-        y = 1.02,
+        y = 0.985,
         xref = "paper",
         yref = "paper",
         xanchor = "right",
         yanchor = "bottom",
         showarrow = FALSE,
         align = "right",
-        font = list(size = 16, color = "#0f172a")
+        font = list(size = 12, color = "#0f172a")
       )
     ))
   }
