@@ -1730,6 +1730,8 @@ build_chart_plot <- function(data, style) {
 
 build_chart_widget <- function(data, style) {
   widget <- ggplotly(build_chart_plot(data, style), tooltip = c("x", "y", "colour"))
+  title_text <- trimws(style$title %||% "")
+  subtitle_text <- trimws(style$subtitle %||% "")
   note_text <- trimws(style$note %||% "")
   y_axis_label <- trimws(style$y_axis_label %||% "")
   layout_args <- list()
@@ -1776,7 +1778,24 @@ build_chart_widget <- function(data, style) {
     layout_args$annotations <- annotations
   }
 
-  layout_args$title <- list(x = 0.07, xanchor = "left")
+  if (nzchar(title_text) || nzchar(subtitle_text)) {
+    layout_args$title <- list(
+      text = if (nzchar(subtitle_text)) {
+        paste0(
+          htmltools::htmlEscape(title_text),
+          "<br><sup>",
+          htmltools::htmlEscape(subtitle_text),
+          "</sup>"
+        )
+      } else {
+        htmltools::htmlEscape(title_text)
+      },
+      x = 0.07,
+      xanchor = "left"
+    )
+  } else {
+    layout_args$title <- list(text = "", x = 0.07, xanchor = "left")
+  }
 
   if (identical(style$legend, "none")) {
     layout_args$showlegend <- FALSE
