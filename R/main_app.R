@@ -2169,11 +2169,26 @@ build_main_server <- function(input, output, session) {
     )
   })
 
+  build_presentation_export_widget <- function(data, style) {
+    build_chart_widget(data, style) %>%
+      plotly::layout(
+        autosize = FALSE,
+        width = 960,
+        height = 540
+      )
+  }
+
   save_presentation_document <- function(title, subtitle = NULL, sections, file) {
     document <- tags$html(
       tags$head(
         tags$title(title),
-        tags$style("body { font-family: 'Helvetica Neue', Arial, sans-serif; margin: 32px; } h1 { margin-bottom: 12px; } section:last-child { page-break-after: auto; } .deck-meta { color: #475569; margin-bottom: 24px; }")
+        tags$style(
+          "body { font-family: 'Helvetica Neue', Arial, sans-serif; margin: 32px; }
+           h1 { margin-bottom: 12px; }
+           section:last-child { page-break-after: auto; }
+           .deck-meta { color: #475569; margin-bottom: 24px; }
+           .deck-chart { margin-top: 18px; width: 960px; max-width: 960px; }"
+        )
       ),
       tags$body(
         tags$h1(title),
@@ -2182,22 +2197,10 @@ build_main_server <- function(input, output, session) {
       )
     )
 
-    bundle_dir <- tempfile(pattern = "presentation_bundle_")
-    dir.create(bundle_dir, recursive = TRUE, showWarnings = FALSE)
-    on.exit(unlink(bundle_dir, recursive = TRUE, force = TRUE), add = TRUE)
-
-    html_path <- file.path(bundle_dir, "presentation.html")
-
-    htmltools::save_html(
-      htmltools::browsable(document),
-      file = html_path,
-      libdir = "lib"
-    )
-
-    zip::zipr(
-      zipfile = file,
-      files = c("presentation.html", "lib"),
-      root = bundle_dir
+    htmlwidgets::saveWidget(
+      widget = htmltools::browsable(document),
+      file = file,
+      selfcontained = TRUE
     )
   }
 
@@ -2221,7 +2224,7 @@ build_main_server <- function(input, output, session) {
 
   output$export_chart_presentation <- downloadHandler(
     filename = function() {
-      paste0("chart_presentation_", format(Sys.time(), "%Y%m%d_%H%M%S"), ".zip")
+      paste0("chart_presentation_", format(Sys.time(), "%Y%m%d_%H%M%S"), ".html")
     },
     content = function(file) {
       selected_records <- selected_chart_records()
@@ -2234,7 +2237,10 @@ build_main_server <- function(input, output, session) {
           style = "page-break-after: always; padding: 24px 0;",
           tags$h1(chart_record$title[[1]]),
           tags$p(chart_record$description[[1]] %||% ""),
-          htmltools::as.tags(build_chart_widget(chart_record$data_snapshot[[1]], chart_record$chart_state[[1]]$style))
+          div(
+            class = "deck-chart",
+            htmltools::as.tags(build_presentation_export_widget(chart_record$data_snapshot[[1]], chart_record$chart_state[[1]]$style))
+          )
         )
       })
 
@@ -2251,7 +2257,7 @@ build_main_server <- function(input, output, session) {
     filename = function() {
       presentation_record <- selected_presentation_record()
       req(!is.null(presentation_record))
-      paste0(str_replace_all(presentation_record$title[[1]], "[^A-Za-z0-9]+", "_"), ".zip")
+      paste0(str_replace_all(presentation_record$title[[1]], "[^A-Za-z0-9]+", "_"), ".html")
     },
     content = function(file) {
       presentation_record <- selected_presentation_record()
@@ -2265,7 +2271,10 @@ build_main_server <- function(input, output, session) {
           style = "page-break-after: always; padding: 24px 0;",
           tags$h1(chart_record$title[[1]]),
           tags$p(chart_record$description[[1]] %||% ""),
-          htmltools::as.tags(build_chart_widget(chart_record$data_snapshot[[1]], chart_record$chart_state[[1]]$style))
+          div(
+            class = "deck-chart",
+            htmltools::as.tags(build_presentation_export_widget(chart_record$data_snapshot[[1]], chart_record$chart_state[[1]]$style))
+          )
         )
       })
 
