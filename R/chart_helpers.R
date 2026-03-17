@@ -57,6 +57,110 @@ compact_single_choice_input <- function(input_id, label, choices, selected = NUL
   )
 }
 
+default_year_bounds <- function() {
+  min_date <- as.Date(min(cpi_data_all$date))
+  max_date <- as.Date(max(cpi_data_all$date))
+  year_min <- as.numeric(lubridate::year(min_date))
+  year_max <- as.numeric(lubridate::year(max_date))
+  start_year <- max(year_min, year_max - 12)
+
+  list(
+    min = year_min,
+    max = year_max,
+    min_date = min_date,
+    max_date = max_date,
+    start_date = as.Date(sprintf("%s-01-01", start_year)),
+    end_date = max_date
+  )
+}
+
+default_style_settings <- function() {
+  list(
+    title = "Custom data view",
+    subtitle = "",
+    y_axis_label = "%",
+    note = "Source: custom query",
+    legend = "bottom",
+    palette = APP_PALETTES[[1]],
+    date_format = APP_DATE_FORMATS[[2]],
+    x_labels = 6,
+    auto_y_axis = TRUE,
+    y_min = NA_real_,
+    y_max = NA_real_,
+    y_breaks = NA_real_,
+    invert_y_axis = FALSE,
+    horizontal_1 = NA_real_,
+    horizontal_2 = NA_real_,
+    horizontal_shading = c(NA_real_, NA_real_),
+    vertical_1 = as.Date(NA),
+    vertical_2 = as.Date(NA),
+    recession_shading = "none",
+    export_width = 8,
+    export_height = 5
+  )
+}
+
+default_builder_state <- function() {
+  year_bounds <- default_year_bounds()
+
+  list(
+    date_range = c(year_bounds$start_date, year_bounds$end_date),
+    show_table = FALSE,
+    series = c(
+      list(
+        list(
+          index = 1,
+          source = "ABS CPI",
+          text = "All groups CPI",
+          region = region_list[[1]],
+          transform = "index",
+          rebase_date = as.Date("2019-12-31"),
+          label = "",
+          transform_profile = default_transform_profile(),
+          vis_type = "line"
+        )
+      ),
+      rep(list(NULL), MAX_SERIES - 1)
+    ),
+    all_series_transform = default_transform_profile(),
+    style = default_style_settings()
+  )
+}
+
+normalize_date_range <- function(date_range = NULL) {
+  year_bounds <- default_year_bounds()
+  fallback_range <- c(year_bounds$start_date, year_bounds$end_date)
+  values <- date_range %||% fallback_range
+
+  if (inherits(values, "Date")) {
+    normalized_dates <- as.Date(values)
+  } else {
+    numeric_values <- suppressWarnings(as.numeric(values))
+    numeric_values <- numeric_values[is.finite(numeric_values)]
+
+    if (length(numeric_values) >= 2) {
+      if (max(abs(numeric_values), na.rm = TRUE) > 3000) {
+        normalized_dates <- as.Date(numeric_values, origin = "1970-01-01")
+      } else {
+        normalized_dates <- as.Date(c(
+          sprintf("%s-01-01", round(min(numeric_values))),
+          sprintf("%s-12-31", round(max(numeric_values)))
+        ))
+      }
+    } else {
+      normalized_dates <- suppressWarnings(as.Date(values))
+    }
+  }
+
+  normalized_dates <- normalized_dates[!is.na(normalized_dates)]
+
+  if (length(normalized_dates) < 2) {
+    normalized_dates <- fallback_range
+  }
+
+  as.Date(sort(as.numeric(as.Date(normalized_dates[seq_len(2)]))), origin = "1970-01-01")
+}
+
 series_cache_env <- new.env(parent = emptyenv())
 
 cache_key_value <- function(value) {
@@ -137,7 +241,12 @@ builder_series_ui <- function(index) {
   )
 }
 
-series_source_controls_ui <- function(input, index, source_value = "ABS CPI") {
+restored_series_spec <- function(session, index) {
+  restored_specs <- session$userData$restored_series_specs %||% list()
+  restored_specs[[as.character(index)]] %||% NULL
+}
+
+series_source_controls_ui <- function(input, session, index, source_value = "ABS CPI", restored_spec = NULL) {
   default_cpi_series <- if (index == 1) "All groups CPI" else character()
 
   if (identical(source_value, "FRED")) {
@@ -145,7 +254,7 @@ series_source_controls_ui <- function(input, index, source_value = "ABS CPI") {
       textInput(
         series_input_id(index, "fred_series"),
         "FRED series ID",
-        value = input[[series_input_id(index, "fred_series")]] %||% "UNRATE"
+        value = input[[series_input_id(index, "fred_series")]] %||% restored_spec$fred_series %||% "UNRATE"
       )
     )
   }
@@ -155,13 +264,13 @@ series_source_controls_ui <- function(input, index, source_value = "ABS CPI") {
       textInput(
         series_input_id(index, "dbnomics_series"),
         "DBnomics series ID",
-        value = input[[series_input_id(index, "dbnomics_series")]] %||% "AMECO/ZUTN/EA19.1.0.0.0.ZUTN"
+        value = input[[series_input_id(index, "dbnomics_series")]] %||% restored_spec$dbnomics_series %||% "AMECO/ZUTN/EA19.0.0.0.0.ZUTN"
       )
     )
   }
 
   if (identical(source_value, "ABS CPI")) {
-    selected_transform <- input[[series_input_id(index, "transform")]] %||% "index"
+    selected_transform <- input[[series_input_id(index, "transform")]] %||% restored_spec$transform %||% "index"
 
     controls <- list(
       selectizeInput(
@@ -173,7 +282,7 @@ series_source_controls_ui <- function(input, index, source_value = "ABS CPI") {
           Category_3 = cat3,
           Category_4 = cat4
         ),
-        selected = input[[series_input_id(index, "text")]] %||% default_cpi_series,
+        selected = input[[series_input_id(index, "text")]] %||% restored_spec$text %||% default_cpi_series,
         multiple = TRUE
       ),
       selectizeInput(
@@ -181,7 +290,7 @@ series_source_controls_ui <- function(input, index, source_value = "ABS CPI") {
         "Geographic areas to include",
         choices = region_list,
         multiple = TRUE,
-        selected = input[[series_input_id(index, "region")]] %||% region_list[[1]]
+        selected = input[[series_input_id(index, "region")]] %||% restored_spec$region %||% region_list[[1]]
       ),
       selectInput(
         series_input_id(index, "transform"),
@@ -198,7 +307,7 @@ series_source_controls_ui <- function(input, index, source_value = "ABS CPI") {
           dateInput(
             series_input_id(index, "rebase_date"),
             "Reference date for the rebased index",
-            value = as.Date(input[[series_input_id(index, "rebase_date")]] %||% "2019-12-31")
+            value = as.Date(input[[series_input_id(index, "rebase_date")]] %||% restored_spec$rebase_date %||% "2019-12-31")
           )
         )
       )
@@ -208,7 +317,7 @@ series_source_controls_ui <- function(input, index, source_value = "ABS CPI") {
   }
 
   if (identical(source_value, "rba")) {
-    current_table <- input[[series_input_id(index, "rba_table")]] %||% rba_tables[[1]]
+    current_table <- input[[series_input_id(index, "rba_table")]] %||% restored_spec$rba_table %||% rba_tables[[1]]
     table_choices <- rba_series[[current_table]] %||% rba_series[[1]]
 
     return(
@@ -223,7 +332,7 @@ series_source_controls_ui <- function(input, index, source_value = "ABS CPI") {
           series_input_id(index, "rba_desc"),
           "RBA series",
           choices = table_choices,
-          selected = input[[series_input_id(index, "rba_desc")]] %||% table_choices[1],
+          selected = input[[series_input_id(index, "rba_desc")]] %||% restored_spec$rba_desc %||% table_choices[1],
           multiple = TRUE
         )
       )
@@ -231,21 +340,21 @@ series_source_controls_ui <- function(input, index, source_value = "ABS CPI") {
   }
 
   if (identical(source_value, "abs")) {
-    current_catalogue <- input[[series_input_id(index, "abs_catalogue")]] %||% abs_cat[[1]]
+    current_catalogue <- input[[series_input_id(index, "abs_catalogue")]] %||% restored_spec$abs_catalogue %||% abs_cat[[1]]
     catalogue_index <- match(current_catalogue, abs_cat)
     catalogue_data <- abs_ref[[catalogue_index]] %||% abs_ref[[1]]
     desc_choices <- unique(catalogue_data$series)
-    current_desc <- input[[series_input_id(index, "abs_desc")]] %||% desc_choices[1]
+    current_desc <- input[[series_input_id(index, "abs_desc")]] %||% restored_spec$abs_desc %||% desc_choices[1]
     type_choices <- catalogue_data %>%
       filter(series == current_desc) %>%
       pull(series_type) %>%
       unique()
-    current_type <- input[[series_input_id(index, "abs_series_type")]] %||% type_choices[1]
+    current_type <- input[[series_input_id(index, "abs_series_type")]] %||% restored_spec$abs_series_type %||% type_choices[1]
     table_choices <- catalogue_data %>%
       filter(series == current_desc, series_type == current_type) %>%
       pull(table_title) %>%
       unique()
-    current_table <- input[[series_input_id(index, "abs_table")]] %||% table_choices[1]
+    current_table <- input[[series_input_id(index, "abs_table")]] %||% restored_spec$abs_table %||% table_choices[1]
     id_choices <- catalogue_data %>%
       filter(series == current_desc, series_type == current_type, table_title == current_table) %>%
       pull(series_id) %>%
@@ -281,7 +390,7 @@ series_source_controls_ui <- function(input, index, source_value = "ABS CPI") {
           series_input_id(index, "abs_id"),
           "ABS series ID",
           choices = id_choices,
-          selected = input[[series_input_id(index, "abs_id")]] %||% id_choices[1],
+          selected = input[[series_input_id(index, "abs_id")]] %||% restored_spec$abs_id %||% id_choices[1],
           options = list(create = TRUE),
           multiple = TRUE
         )
@@ -296,7 +405,13 @@ register_series_dependencies <- function(input, output, session, index) {
   output[[series_source_controls_id(index)]] <- renderUI({
     req(series_enabled(input, index))
     source_value <- input[[series_input_id(index, "source")]] %||% "ABS CPI"
-    series_source_controls_ui(input, index, source_value)
+    restored_spec_value <- restored_series_spec(session, index)
+
+    if (!is.null(restored_spec_value) && !identical(restored_spec_value$source %||% source_value, source_value)) {
+      restored_spec_value <- NULL
+    }
+
+    series_source_controls_ui(input, session, index, source_value, restored_spec_value)
   })
 
   observeEvent(input[[series_input_id(index, "rba_table")]], {
@@ -612,6 +727,7 @@ style_settings_from_input <- function(input) {
 
   list(
     title = trimws(input$style_title %||% "Custom data view"),
+    subtitle = trimws(input$style_subtitle %||% ""),
     y_axis_label = trimws(input$style_y_axis_label %||% "%"),
     note = trimws(input$style_note %||% "Source: custom query"),
     legend = input$style_legend %||% "bottom",
@@ -638,11 +754,12 @@ style_settings_from_input <- function(input) {
 }
 
 builder_state_from_input <- function(input) {
-  start_year <- round(as.numeric(input$start_year %||% 2014))
-  end_year <- round(as.numeric(input$end_year %||% start_year))
+  year_bounds <- default_year_bounds()
+  start_date <- as.Date(input$start_date %||% year_bounds$start_date)
+  end_date <- as.Date(input$end_date %||% year_bounds$end_date)
 
   list(
-    date_range = sort(c(start_year, end_year)),
+    date_range = normalize_date_range(c(start_date, end_date)),
     show_table = identical(as.character(input$viewData1), "1"),
     series = lapply(
       seq_len(MAX_SERIES),
@@ -676,6 +793,7 @@ normalize_style_settings <- function(style) {
 
   list(
     title = trimws(style$title %||% "Custom data view"),
+    subtitle = trimws(style$subtitle %||% ""),
     y_axis_label = trimws(style$y_axis_label %||% "%"),
     note = trimws(style$note %||% "Source: custom query"),
     legend = style$legend %||% "bottom",
@@ -751,13 +869,9 @@ normalize_series_spec <- function(spec) {
 
 normalize_chart_state <- function(chart_state) {
   chart_state <- chart_state %||% list()
-  date_range <- as.numeric(chart_state$date_range %||% c(2014, 2024))
-  if (length(date_range) < 2) {
-    date_range <- c(date_range[1] %||% 2014, date_range[1] %||% 2014)
-  }
 
   list(
-    date_range = sort(round(date_range[seq_len(2)])),
+    date_range = normalize_date_range(chart_state$date_range),
     show_table = isTRUE(chart_state$show_table),
     series = lapply(seq_len(MAX_SERIES), function(index) normalize_series_spec((chart_state$series %||% list())[[index]])),
     all_series_transform = normalize_transform_profile(chart_state$all_series_transform),
@@ -869,11 +983,43 @@ filter_series_date_range <- function(data, date_range) {
     return(data)
   }
 
-  start_date <- lubridate::ymd(paste0(min(date_range), "-01-01"))
-  end_date <- lubridate::ymd(paste0(max(date_range), "-12-31"))
+  normalized_range <- normalize_date_range(date_range)
+  start_date <- min(normalized_range)
+  end_date <- max(normalized_range)
 
   data %>%
     filter(date >= start_date, date <= end_date)
+}
+
+latest_chart_observation_date <- function(chart_state) {
+  specs <- Filter(Negate(is.null), normalize_chart_state(chart_state)$series)
+
+  if (length(specs) == 0) {
+    return(as.Date(NA))
+  }
+
+  latest_dates <- vapply(
+    specs,
+    function(spec) {
+      series_data <- query_series_data(spec)
+
+      if (is.null(series_data) || nrow(series_data) == 0) {
+        return(as.Date(NA))
+      }
+
+      max(as.Date(series_data$date), na.rm = TRUE)
+    },
+    as.Date(NA)
+  )
+
+  latest_dates <- as.Date(latest_dates, origin = "1970-01-01")
+  latest_dates <- latest_dates[!is.na(latest_dates)]
+
+  if (length(latest_dates) == 0) {
+    as.Date(NA)
+  } else {
+    max(latest_dates)
+  }
 }
 
 make_unique_series_names <- function(data) {
@@ -1163,6 +1309,7 @@ build_chart_plot <- function(data, style) {
     ) +
     labs(
       title = style$title,
+      subtitle = style$subtitle,
       x = NULL,
       y = style$y_axis_label,
       caption = style$note,
@@ -1172,6 +1319,7 @@ build_chart_plot <- function(data, style) {
     theme_minimal(base_size = 12) +
     theme(
       plot.title = element_text(face = "bold", size = 16, margin = margin(b = 12)),
+      plot.subtitle = element_text(size = 11, colour = "#475569", margin = margin(b = 10)),
       plot.caption = element_text(size = 9, colour = "#4b5563"),
       panel.grid.minor = element_blank(),
       panel.grid.major.x = element_blank(),
@@ -1283,6 +1431,10 @@ chart_summary_metrics <- function(data) {
 }
 
 restore_series_spec <- function(session, index, spec = NULL) {
+  restored_specs <- session$userData$restored_series_specs %||% list()
+  restored_specs[[as.character(index)]] <- if (is.null(spec)) NULL else normalize_series_spec(spec)
+  session$userData$restored_series_specs <- restored_specs
+
   updateRadioGroupButtons(session, series_input_id(index, "enabled"), selected = if (is.null(spec)) "0" else "1")
 
   if (is.null(spec)) {
@@ -1293,81 +1445,83 @@ restore_series_spec <- function(session, index, spec = NULL) {
   updateTextInput(session, series_input_id(index, "label"), value = spec$label %||% "")
   updateRadioGroupButtons(session, series_input_id(index, "vis_type"), selected = spec$vis_type %||% "line")
 
-  if (identical(spec$source, "ABS CPI")) {
-    updateSelectizeInput(session, series_input_id(index, "text"), selected = spec$text, server = TRUE)
-    updateSelectizeInput(session, series_input_id(index, "region"), selected = spec$region, server = TRUE)
-    updateSelectInput(session, series_input_id(index, "transform"), selected = spec$transform)
-    updateDateInput(session, series_input_id(index, "rebase_date"), value = spec$rebase_date)
-  }
+  session$onFlushed(function() {
+    if (identical(spec$source, "ABS CPI")) {
+      updateSelectizeInput(session, series_input_id(index, "text"), selected = spec$text, server = TRUE)
+      updateSelectizeInput(session, series_input_id(index, "region"), selected = spec$region, server = TRUE)
+      updateSelectInput(session, series_input_id(index, "transform"), selected = spec$transform)
+      updateDateInput(session, series_input_id(index, "rebase_date"), value = spec$rebase_date)
+    }
 
-  if (identical(spec$source, "FRED")) {
-    updateTextInput(session, series_input_id(index, "fred_series"), value = spec$fred_series %||% "")
-  }
+    if (identical(spec$source, "FRED")) {
+      updateTextInput(session, series_input_id(index, "fred_series"), value = spec$fred_series %||% "")
+    }
 
-  if (identical(spec$source, "dbnomics")) {
-    updateTextInput(session, series_input_id(index, "dbnomics_series"), value = spec$dbnomics_series %||% "")
-  }
+    if (identical(spec$source, "dbnomics")) {
+      updateTextInput(session, series_input_id(index, "dbnomics_series"), value = spec$dbnomics_series %||% "")
+    }
 
-  if (identical(spec$source, "rba")) {
-    rba_choices <- rba_series[[spec$rba_table]] %||% character()
-    updateSelectInput(session, series_input_id(index, "rba_table"), selected = spec$rba_table)
-    updateSelectizeInput(
-      session,
-      series_input_id(index, "rba_desc"),
-      choices = rba_choices,
-      selected = spec$rba_desc,
-      server = TRUE
-    )
-  }
+    if (identical(spec$source, "rba")) {
+      rba_choices <- rba_series[[spec$rba_table]] %||% character()
+      updateSelectInput(session, series_input_id(index, "rba_table"), selected = spec$rba_table)
+      updateSelectizeInput(
+        session,
+        series_input_id(index, "rba_desc"),
+        choices = rba_choices,
+        selected = spec$rba_desc,
+        server = TRUE
+      )
+    }
 
-  if (identical(spec$source, "abs")) {
-    catalogue_index <- match(spec$abs_catalogue, abs_cat)
-    catalogue_data <- abs_ref[[catalogue_index]] %||% abs_ref[[1]]
-    desc_choices <- unique(catalogue_data$series)
-    type_choices <- catalogue_data %>%
-      filter(series == spec$abs_desc) %>%
-      pull(series_type) %>%
-      unique()
-    table_choices <- catalogue_data %>%
-      filter(series == spec$abs_desc, series_type == spec$abs_series_type) %>%
-      pull(table_title) %>%
-      unique()
-    id_choices <- catalogue_data %>%
-      filter(
-        series == spec$abs_desc,
-        series_type == spec$abs_series_type,
-        table_title == spec$abs_table
-      ) %>%
-      pull(series_id)
+    if (identical(spec$source, "abs")) {
+      catalogue_index <- match(spec$abs_catalogue, abs_cat)
+      catalogue_data <- abs_ref[[catalogue_index]] %||% abs_ref[[1]]
+      desc_choices <- unique(catalogue_data$series)
+      type_choices <- catalogue_data %>%
+        filter(series == spec$abs_desc) %>%
+        pull(series_type) %>%
+        unique()
+      table_choices <- catalogue_data %>%
+        filter(series == spec$abs_desc, series_type == spec$abs_series_type) %>%
+        pull(table_title) %>%
+        unique()
+      id_choices <- catalogue_data %>%
+        filter(
+          series == spec$abs_desc,
+          series_type == spec$abs_series_type,
+          table_title == spec$abs_table
+        ) %>%
+        pull(series_id)
 
-    updateSelectInput(session, series_input_id(index, "abs_catalogue"), selected = spec$abs_catalogue)
-    updateSelectizeInput(
-      session,
-      series_input_id(index, "abs_desc"),
-      choices = desc_choices,
-      selected = spec$abs_desc,
-      server = TRUE
-    )
-    updateSelectInput(
-      session,
-      series_input_id(index, "abs_series_type"),
-      choices = type_choices,
-      selected = spec$abs_series_type
-    )
-    updateSelectInput(
-      session,
-      series_input_id(index, "abs_table"),
-      choices = table_choices,
-      selected = spec$abs_table
-    )
-    updateSelectizeInput(
-      session,
-      series_input_id(index, "abs_id"),
-      choices = id_choices,
-      selected = spec$abs_id,
-      server = TRUE
-    )
-  }
+      updateSelectInput(session, series_input_id(index, "abs_catalogue"), selected = spec$abs_catalogue)
+      updateSelectizeInput(
+        session,
+        series_input_id(index, "abs_desc"),
+        choices = desc_choices,
+        selected = spec$abs_desc,
+        server = TRUE
+      )
+      updateSelectInput(
+        session,
+        series_input_id(index, "abs_series_type"),
+        choices = type_choices,
+        selected = spec$abs_series_type
+      )
+      updateSelectInput(
+        session,
+        series_input_id(index, "abs_table"),
+        choices = table_choices,
+        selected = spec$abs_table
+      )
+      updateSelectizeInput(
+        session,
+        series_input_id(index, "abs_id"),
+        choices = id_choices,
+        selected = spec$abs_id,
+        server = TRUE
+      )
+    }
+  }, once = TRUE)
 
   invisible(NULL)
 }
@@ -1375,11 +1529,12 @@ restore_series_spec <- function(session, index, spec = NULL) {
 restore_chart_state <- function(session, chart_state) {
   chart_state <- normalize_chart_state(chart_state)
 
-  updateNumericInput(session, "start_year", value = min(chart_state$date_range))
-  updateNumericInput(session, "end_year", value = max(chart_state$date_range))
+  updateDateInput(session, "start_date", value = min(chart_state$date_range))
+  updateDateInput(session, "end_date", value = max(chart_state$date_range))
   updateRadioGroupButtons(session, "viewData1", selected = if (isTRUE(chart_state$show_table)) "1" else "0")
 
   updateTextInput(session, "style_title", value = chart_state$style$title)
+  updateTextInput(session, "style_subtitle", value = chart_state$style$subtitle)
   updateTextInput(session, "style_y_axis_label", value = chart_state$style$y_axis_label)
   updateTextInput(session, "style_note", value = chart_state$style$note)
   updateRadioGroupButtons(session, "style_legend", selected = chart_state$style$legend)

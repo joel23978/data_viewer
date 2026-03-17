@@ -1,6 +1,148 @@
+build_search_tab_ui <- function() {
+  div(
+    class = "page-shell",
+    fluidRow(
+      column(
+        width = 3,
+        chart_card(
+          "Search",
+          class = "search-sidebar-card",
+          textInput("search_query", "Search terms", value = "", placeholder = "e.g. industrial AND production"),
+          radioGroupButtons(
+            "search_source_filter",
+            "Source",
+            choices = c("All" = "all", "CPI" = "ABS CPI", "FRED" = "FRED", "RBA" = "RBA", "ABS" = "ABS"),
+            selected = "all",
+            justified = FALSE,
+            checkIcon = list(yes = icon("check"))
+          ),
+          conditionalPanel(
+            condition = "input.search_source_filter === 'FRED' || input.search_source_filter === 'all'",
+            radioGroupButtons(
+              "search_fred_mode",
+              "FRED mode",
+              choices = c("Text" = "full_text", "ID" = "series_id"),
+              selected = "full_text",
+              justified = FALSE,
+              checkIcon = list(yes = icon("check"))
+            )
+          ),
+          radioGroupButtons(
+            "search_type_filter",
+            "Type",
+            choices = search_type_choices(),
+            selected = "all",
+            justified = FALSE,
+            checkIcon = list(yes = icon("check"))
+          ),
+          radioGroupButtons(
+            "search_location_filter",
+            "Location",
+            choices = search_location_choices(),
+            selected = "all",
+            justified = FALSE,
+            checkIcon = list(yes = icon("check"))
+          ),
+          uiOutput("search_frequency_filter")
+        ),
+        chart_card(
+          "Selected Result",
+          class = "search-sidebar-card",
+          uiOutput("search_selected_meta"),
+          radioGroupButtons(
+            "search_target_series",
+            "Add to",
+            choices = search_result_target_choices(),
+            selected = "next",
+            justified = FALSE,
+            checkIcon = list(yes = icon("check"))
+          ),
+          actionButton("search_add_series", "Add result to builder", class = "btn-primary btn-block"),
+          actionButton("open_fred_api_key_modal", "Enter FRED key", class = "btn-block")
+        )
+      ),
+      column(
+        width = 9,
+        uiOutput("search_status"),
+        chart_card(
+          "Search Results",
+          DT::dataTableOutput("search_results_table")
+        )
+      )
+    )
+  )
+}
+
+build_library_tab_ui <- function() {
+  div(
+    class = "page-shell",
+    fluidRow(
+      column(
+        width = 4,
+        chart_card(
+          "Chart Library",
+          textInput("library_search", "Search saved charts", value = "", placeholder = "Search by title, description, or source"),
+          DT::dataTableOutput("library_table"),
+          div(
+            class = "library-actions",
+            actionButton("load_chart", "Load into builder"),
+            actionButton("update_chart", "Update selected"),
+            actionButton("delete_chart", "Delete saved chart")
+          ),
+          div(
+            class = "library-actions",
+            downloadButton("export_saved_chart", "Export selected chart"),
+            downloadButton("export_chart_presentation", "Export chart presentation")
+          )
+        ),
+        chart_card(
+          "Presentations Library",
+          textInput("presentation_search", "Search presentations", value = "", placeholder = "Search presentations"),
+          textInput("presentation_title", "Presentation title", value = ""),
+          textAreaInput("presentation_description", "Presentation notes", value = "", rows = 2, resize = "vertical"),
+          DT::dataTableOutput("presentation_table"),
+          div(
+            class = "library-actions",
+            actionButton("create_presentation", "Create presentation"),
+            actionButton("update_presentation", "Update presentation"),
+            actionButton("delete_presentation", "Delete presentation")
+          ),
+          div(
+            class = "library-actions",
+            actionButton("add_to_presentation", "Add selected charts"),
+            actionButton("replace_presentation_charts", "Replace with selected charts")
+          ),
+          div(
+            class = "library-actions",
+            downloadButton("export_selected_presentation", "Export selected presentation")
+          )
+        )
+      ),
+      column(
+        width = 8,
+        chart_card(
+          "Selected Preview",
+          uiOutput("library_selected_meta"),
+          plotlyOutput("library_plot", height = "500px")
+        ),
+        chart_card(
+          "Presentation Details",
+          uiOutput("presentation_selected_meta"),
+          DT::dataTableOutput("presentation_chart_table"),
+          div(
+            class = "library-actions",
+            actionButton("presentation_chart_up", "Move up"),
+            actionButton("presentation_chart_down", "Move down"),
+            actionButton("presentation_chart_remove", "Remove chart")
+          )
+        )
+      )
+    )
+  )
+}
+
 build_main_ui <- function() {
-  year_min <- as.numeric(lubridate::year(min(cpi_data_all$date)))
-  year_max <- as.numeric(lubridate::year(max(cpi_data_all$date))) + 1
+  year_bounds <- default_year_bounds()
 
   navbarPage(
     title = "Data Explorer",
@@ -22,11 +164,11 @@ build_main_ui <- function() {
               fluidRow(
                 column(
                   width = 6,
-                  numericInput("start_year", "Start year", value = max(year_min, year_max - 12), min = year_min, max = year_max)
+                  dateInput("start_date", "Start date", value = year_bounds$start_date, min = year_bounds$min_date, max = year_bounds$max_date)
                 ),
                 column(
                   width = 6,
-                  numericInput("end_year", "End year", value = year_max, min = year_min, max = year_max)
+                  dateInput("end_date", "End date", value = year_bounds$end_date, min = year_bounds$min_date, max = year_bounds$max_date)
                 )
               ),
               radioGroupButtons(
@@ -60,7 +202,8 @@ build_main_ui <- function() {
               ),
               textInput("library_title", "Library title", value = ""),
               textAreaInput("library_description", "Library description", value = "", rows = 3, resize = "vertical"),
-              actionButton("save_chart", "Save chart to library", class = "btn-primary btn-block")
+              actionButton("save_chart", "Save chart to library", class = "btn-primary btn-block"),
+              actionButton("reset_builder", "Reset builder", class = "btn-block")
             )
           ),
           column(
@@ -94,6 +237,7 @@ build_main_ui <- function() {
                 column(
                   width = 4,
                   textInput("style_title", "Chart title shown above the plot", value = "Custom data view"),
+                  textInput("style_subtitle", "Chart subtitle shown below the title", value = ""),
                   textInput("style_y_axis_label", "Y-axis label", value = "%"),
                   textInput("style_note", "Source note or caption shown below the chart", value = "Source: custom query")
                 ),
@@ -270,41 +414,14 @@ build_main_ui <- function() {
       )
     ),
     tabPanel(
+      title = "Data Search",
+      value = "search",
+      uiOutput("search_tab_ui")
+    ),
+    tabPanel(
       title = "Saved Charts",
       value = "library",
-      div(
-        class = "page-shell",
-        fluidRow(
-          column(
-            width = 4,
-            chart_card(
-              "Chart Library",
-              textInput("library_search", "Search saved charts", value = "", placeholder = "Search by title, description, or source"),
-              DT::dataTableOutput("library_table"),
-              div(
-                class = "library-actions",
-                actionButton("load_chart", "Load into builder"),
-                actionButton("update_chart", "Update selected"),
-                actionButton("delete_chart", "Delete saved chart")
-              ),
-              div(
-                class = "library-actions",
-                downloadButton("export_saved_chart", "Export selected chart"),
-                downloadButton("export_chart_presentation", "Export chart presentation")
-              )
-            )
-          ),
-          column(
-            width = 8,
-            chart_card(
-              "Selected Preview",
-              uiOutput("library_selected_meta"),
-              plotlyOutput("library_plot", height = "500px"),
-              DT::dataTableOutput("library_preview_table")
-            )
-          )
-        )
-      )
+      uiOutput("library_tab_ui")
     ),
     header = tags$head(
       tags$link(rel = "stylesheet", type = "text/css", href = "app.css")
@@ -315,10 +432,140 @@ build_main_ui <- function() {
 
 build_main_server <- function(input, output, session) {
   ensure_chart_library()
+  session$userData$restored_series_specs <- list()
+  loaded_main_tabs <- reactiveVal(c("builder"))
+
+  fred_key_modal_open <- reactiveVal(FALSE)
+
+  run_with_status <- function(working_message, success_message, expr, success_type = "message", failure_prefix = NULL) {
+    notification_id <- paste0("status-", format(Sys.time(), "%H%M%OS3"), "-", sample.int(9999, 1))
+
+    showNotification(
+      working_message,
+      id = notification_id,
+      duration = NULL,
+      closeButton = FALSE,
+      type = "message"
+    )
+
+    tryCatch(
+      {
+        result <- force(expr)
+        showNotification(
+          success_message,
+          id = notification_id,
+          duration = 4,
+          closeButton = TRUE,
+          type = success_type
+        )
+        result
+      },
+      error = function(error) {
+        error_message <- if (is.null(failure_prefix)) {
+          conditionMessage(error)
+        } else {
+          paste(failure_prefix, conditionMessage(error))
+        }
+
+        showNotification(
+          error_message,
+          id = notification_id,
+          duration = NULL,
+          closeButton = TRUE,
+          type = "error"
+        )
+        invisible(NULL)
+      }
+    )
+  }
+
+  show_fred_key_modal <- function() {
+    if (isTRUE(fred_key_modal_open())) {
+      return(invisible(NULL))
+    }
+
+    fred_key_modal_open(TRUE)
+
+    showModal(
+      modalDialog(
+        title = "Enter FRED API Key",
+        passwordInput(
+          "fred_api_key_value",
+          "FRED API key",
+          value = current_fred_api_key()
+        ),
+        tags$p(
+          class = "muted-copy",
+          "This key is used for the current app session so live FRED search and downloads can run."
+        ),
+        footer = tagList(
+          actionButton("cancel_fred_api_key", "Cancel"),
+          actionButton("save_fred_api_key", "Save key", class = "btn-primary")
+        ),
+        easyClose = FALSE
+      )
+    )
+  }
 
   for (index in seq_len(MAX_SERIES)) {
     register_series_dependencies(input, output, session, index)
   }
+
+  observeEvent(input$main_tabs, {
+    selected_tab <- input$main_tabs %||% "builder"
+    loaded_main_tabs(unique(c(loaded_main_tabs(), selected_tab)))
+  }, ignoreInit = FALSE)
+
+  output$search_tab_ui <- renderUI({
+    req("search" %in% loaded_main_tabs())
+    build_search_tab_ui()
+  })
+
+  output$library_tab_ui <- renderUI({
+    req("library" %in% loaded_main_tabs())
+    build_library_tab_ui()
+  })
+
+  observeEvent(input$open_fred_api_key_modal, {
+    show_fred_key_modal()
+  })
+
+  observeEvent(input$cancel_fred_api_key, {
+    fred_key_modal_open(FALSE)
+    removeModal()
+  })
+
+  observeEvent(input$save_fred_api_key, {
+    entered_key <- trimws(input$fred_api_key_value %||% "")
+
+    if (!nzchar(entered_key)) {
+      showNotification("Enter a FRED API key before saving.", type = "warning")
+      return(invisible(NULL))
+    }
+
+    set_fred_api_key(entered_key)
+    fred_key_modal_open(FALSE)
+    removeModal()
+    showNotification("FRED API key saved for this app session.", type = "message")
+  })
+
+  observeEvent(input$search_source_filter, {
+    if (identical(input$search_source_filter %||% "all", "FRED") && !fred_search_available()) {
+      show_fred_key_modal()
+    }
+  }, ignoreInit = TRUE)
+
+  observe({
+    series_sources <- vapply(
+      seq_len(MAX_SERIES),
+      function(index) input[[series_input_id(index, "source")]] %||% "ABS CPI",
+      character(1)
+    )
+
+    if (any(series_sources == "FRED") && !fred_search_available()) {
+      show_fred_key_modal()
+    }
+  })
 
   observeEvent(
     {
@@ -343,6 +590,20 @@ build_main_server <- function(input, output, session) {
   restored_state <- reactiveVal(NULL)
   synced_library_title <- reactiveVal("")
 
+  apply_builder_state <- function(chart_state, selected_series_index = NULL, navigate_builder = FALSE) {
+    normalized_state <- normalize_chart_state(chart_state)
+    restored_state(normalized_state)
+    restore_chart_state(session, normalized_state)
+
+    if (!is.null(selected_series_index)) {
+      updateTabsetPanel(session, "series_tabs", selected = paste("Series", c("one", "two", "three", "four")[selected_series_index]))
+    }
+
+    if (isTRUE(navigate_builder)) {
+      updateNavbarPage(session, "main_tabs", selected = "builder")
+    }
+  }
+
   observe({
     current_chart_title <- trimws(input$style_title %||% "")
     current_library_title <- trimws(input$library_title %||% "")
@@ -352,6 +613,15 @@ build_main_server <- function(input, output, session) {
       updateTextInput(session, "library_title", value = current_chart_title)
       synced_library_title(current_chart_title)
     }
+  })
+
+  observeEvent(input$reset_builder, {
+    default_state <- normalize_chart_state(default_builder_state())
+    apply_builder_state(default_state, selected_series_index = 1, navigate_builder = TRUE)
+    updateTextInput(session, "library_title", value = default_state$style$title)
+    updateTextAreaInput(session, "library_description", value = "")
+    synced_library_title(default_state$style$title)
+    showNotification("Builder reset to the default view.", type = "message")
   })
 
   builder_state <- reactive({
@@ -372,6 +642,27 @@ build_main_server <- function(input, output, session) {
     input_state
   })
 
+  observeEvent(
+    {
+      list(input$start_date, input$end_date)
+    },
+    {
+      loaded_state <- restored_state()
+      req(!is.null(loaded_state))
+
+      requested_range <- normalize_date_range(c(
+        as.Date(input$start_date %||% loaded_state$date_range[[1]]),
+        as.Date(input$end_date %||% loaded_state$date_range[[2]])
+      ))
+      loaded_range <- normalize_date_range(loaded_state$date_range)
+
+      if (!identical(requested_range, loaded_range)) {
+        restored_state(NULL)
+      }
+    },
+    ignoreInit = TRUE
+  )
+
   chart_payload <- reactive({
     build_chart_data(builder_state())
   })
@@ -388,7 +679,300 @@ build_main_server <- function(input, output, session) {
     build_chart_widget(chart_data(), builder_state()$style)
   })
 
-  chart_library_store <- reactiveVal(read_chart_library())
+  chart_library_store <- reactiveVal(NULL)
+  presentation_library_store <- reactiveVal(NULL)
+  search_index_store <- reactiveVal(NULL)
+  search_loading_message <- reactiveVal("")
+  search_query_notification_id <- reactiveVal(NULL)
+  search_query_text <- reactive(input$search_query %||% "")
+  search_query_debounced <- debounce(search_query_text, millis = 350)
+
+  ensure_chart_library_loaded <- function() {
+    if (is.null(chart_library_store())) {
+      chart_library_store(read_chart_library())
+    }
+
+    invisible(chart_library_store())
+  }
+
+  ensure_presentation_library_loaded <- function() {
+    if (is.null(presentation_library_store())) {
+      presentation_library_store(read_chart_presentation_library())
+    }
+
+    invisible(presentation_library_store())
+  }
+
+  ensure_search_index_loaded <- function(force = FALSE) {
+    if (force || is.null(search_index_store())) {
+      search_loading_message("Loading local metadata index...")
+      on.exit(search_loading_message(""), add = TRUE)
+      search_index_store(build_search_index(force = force))
+    }
+
+    invisible(search_index_store())
+  }
+
+  session$onFlushed(function() {
+    showNotification(
+      "Opening the builder. Search metadata and libraries will load when needed.",
+      type = "message",
+      duration = 5
+    )
+
+    later::later(function() {
+      if (is.null(search_index_store())) {
+        try(ensure_search_index_loaded(), silent = TRUE)
+      }
+    }, delay = 1.5)
+  }, once = TRUE)
+
+  observeEvent(input$main_tabs, {
+    selected_tab <- input$main_tabs %||% "builder"
+
+    if (identical(selected_tab, "search") && is.null(search_index_store())) {
+      run_with_status(
+        "Loading search metadata...",
+        "Search metadata ready.",
+        {
+          ensure_search_index_loaded()
+        },
+        failure_prefix = "Unable to load the search metadata:"
+      )
+    }
+
+    if (identical(selected_tab, "library") && (is.null(chart_library_store()) || is.null(presentation_library_store()))) {
+      run_with_status(
+        "Loading saved charts and presentations...",
+        "Saved charts ready.",
+        {
+          ensure_chart_library_loaded()
+          ensure_presentation_library_loaded()
+        },
+        failure_prefix = "Unable to load the saved charts:"
+      )
+    }
+  }, ignoreInit = TRUE)
+
+  output$search_frequency_filter <- renderUI({
+    compact_single_choice_input(
+      "search_frequency_filter",
+      "Frequency",
+      choices = search_frequency_choices(search_index_store() %||% empty_search_index()),
+      selected = "all"
+    )
+  })
+
+  fred_search_response <- reactive({
+    if (!(input$search_source_filter %||% "all") %in% c("all", "FRED")) {
+      return(empty_search_response())
+    }
+
+    search_fred_series(
+      query = search_query_debounced(),
+      frequency_filter = input$search_frequency_filter %||% "all",
+      search_type = input$search_fred_mode %||% "full_text",
+      limit = 100
+    )
+  })
+
+  dbnomics_search_response <- reactive({
+    if (!(input$search_source_filter %||% "all") %in% c("all", "DBnomics")) {
+      return(empty_search_response())
+    }
+
+    if (identical(input$search_source_filter %||% "all", "all")) {
+      has_exact_id <- !is.null(parse_dbnomics_series_id(search_query_debounced()))
+      has_scope <- nzchar(trimws(input$search_dbnomics_provider %||% "")) &&
+        nzchar(trimws(input$search_dbnomics_dataset %||% ""))
+
+      if (!has_exact_id && !has_scope) {
+        return(empty_search_response())
+      }
+    }
+
+    search_dbnomics_series(
+      query = search_query_debounced(),
+      provider_code = input$search_dbnomics_provider %||% "",
+      dataset_code = input$search_dbnomics_dataset %||% "",
+      limit = 100
+    )
+  })
+
+  output$search_status <- renderUI({
+    loading_message <- trimws(search_loading_message() %||% "")
+    source_filter <- input$search_source_filter %||% "all"
+    query_text <- trimws(search_query_debounced())
+    include_remote_status <- nzchar(query_text) || source_filter %in% c("FRED", "DBnomics")
+
+    search_messages <- c(
+      loading_message,
+      if (is.null(search_index_store()) && source_filter %in% c("all", "ABS CPI", "RBA", "ABS")) "Local metadata will load when search runs." else "",
+      if (isTRUE(include_remote_status)) fred_search_response()$status %||% "" else "",
+      if (isTRUE(include_remote_status)) dbnomics_search_response()$status %||% "" else ""
+    )
+    search_messages <- unique(search_messages[nzchar(search_messages)])
+
+    if (length(search_messages) == 0) {
+      return(NULL)
+    }
+
+    div(
+      class = "search-status-banner",
+      lapply(search_messages, tags$p)
+    )
+  })
+
+  observeEvent(
+    {
+      list(
+        input$search_query,
+        input$search_source_filter,
+        input$search_type_filter,
+        input$search_location_filter,
+        input$search_frequency_filter,
+        input$search_fred_mode
+      )
+    },
+    {
+      req(identical(input$main_tabs %||% "builder", "search"))
+      notification_id <- "search-query-status"
+      search_query_notification_id(notification_id)
+      showNotification(
+        "Refreshing search results...",
+        id = notification_id,
+        duration = NULL,
+        closeButton = FALSE,
+        type = "message"
+      )
+    },
+    ignoreInit = TRUE
+  )
+
+  search_results <- reactive({
+    if ((input$search_source_filter %||% "all") %in% c("all", "ABS CPI", "RBA", "ABS") && is.null(search_index_store())) {
+      ensure_search_index_loaded()
+    }
+
+    local_results <- if ((input$search_source_filter %||% "all") %in% c("FRED", "DBnomics")) {
+      empty_search_index()
+    } else {
+      filter_search_index(
+        search_index_store(),
+        query = "",
+        source_filter = input$search_source_filter,
+        type_filter = "all",
+        location_filter = "all",
+        frequency_filter = input$search_frequency_filter %||% "all",
+        limit = Inf
+      )
+    }
+
+    combined_results <- bind_rows(
+      local_results,
+      fred_search_response()$results,
+      dbnomics_search_response()$results
+    )
+
+    apply_search_filters(
+      combined_results %>% distinct(search_id, .keep_all = TRUE),
+      query = search_query_debounced(),
+      source_filter = "all",
+      type_filter = input$search_type_filter %||% "all",
+      location_filter = input$search_location_filter %||% "all",
+      frequency_filter = "all",
+      limit = Inf
+    )
+  })
+
+  observe({
+    req("search" %in% loaded_main_tabs())
+    result_count <- nrow(search_results())
+    notification_id <- search_query_notification_id() %||% "search-query-status"
+
+    showNotification(
+      sprintf("Search ready: %s result%s.", scales::comma(result_count), if (identical(result_count, 1L)) "" else "s"),
+      id = notification_id,
+      duration = 2.5,
+      closeButton = TRUE,
+      type = "message"
+    )
+  })
+
+  output$search_results_table <- DT::renderDataTable({
+    search_rows <- search_results() %>%
+      transmute(
+        Title = title,
+        Source = source,
+        Type = type_code_label(type_code),
+        Location = location_code_label(location_code),
+        Frequency = frequency,
+        Start = if_else(is.na(start_date), "", format(start_date, "%Y-%m-%d")),
+        End = if_else(is.na(end_date), "", format(end_date, "%Y-%m-%d")),
+        Summary = summary
+      )
+
+    DT::datatable(
+      search_rows,
+      selection = "single",
+      rownames = FALSE,
+      options = list(
+        pageLength = 25,
+        scrollX = TRUE,
+        autoWidth = TRUE,
+        columnDefs = list(
+          list(width = "30%", targets = 0),
+          list(width = "34%", targets = 7)
+        )
+      )
+    )
+  }, server = TRUE)
+
+  selected_search_result <- reactive({
+    selected_row <- input$search_results_table_rows_selected
+    search_rows <- search_results()
+
+    if (length(selected_row) == 0 || nrow(search_rows) == 0) {
+      return(NULL)
+    }
+
+    search_rows[selected_row, , drop = FALSE]
+  })
+
+  output$search_selected_meta <- renderUI({
+    search_row <- selected_search_result()
+
+    if (is.null(search_row)) {
+      return(div(class = "empty-state", "Select a result to inspect it."))
+    }
+
+    div(
+      class = "library-meta",
+      tags$h3(search_row$title[[1]]),
+      tags$p(class = "muted-copy", search_row$summary[[1]]),
+      div(
+        class = "summary-chip-row",
+        summary_chip("Source", search_row$source[[1]]),
+        summary_chip("Type", type_code_label(search_row$type_code[[1]])),
+        summary_chip("Location", location_code_label(search_row$location_code[[1]])),
+        summary_chip("Frequency", search_row$frequency[[1]]),
+        summary_chip("Start", if (is.na(search_row$start_date[[1]])) "Unknown" else format(search_row$start_date[[1]], "%Y-%m-%d"))
+      )
+    )
+  })
+
+  observeEvent(input$search_add_series, {
+    search_row <- selected_search_result()
+    req(!is.null(search_row))
+
+    target_index <- series_slot_from_search_target(builder_state(), input$search_target_series)
+    series_spec <- search_result_series_spec(search_row, target_index)
+    updated_state <- builder_state()
+    updated_state$series[[target_index]] <- normalize_series_spec(series_spec)
+    apply_builder_state(updated_state, selected_series_index = target_index, navigate_builder = TRUE)
+
+    showNotification("Search result added to the builder.", type = "message")
+  })
 
   output$builder_summary <- renderUI({
     metrics <- chart_summary_metrics(chart_data())
@@ -464,33 +1048,44 @@ build_main_server <- function(input, output, session) {
   )
 
   observeEvent(input$save_chart, {
+    ensure_chart_library_loaded()
     current_data <- chart_data()
     if (nrow(current_data) == 0) {
       showNotification("Build a chart before saving it.", type = "error")
       return(invisible(NULL))
     }
 
-    chart_state <- builder_state()
-    save_title <- trimws(input$library_title %||% "")
-    save_description <- trimws(input$library_description %||% "")
+    run_with_status(
+      "Saving chart to the library...",
+      "Chart saved to the library.",
+      {
+        chart_state <- builder_state()
+        save_title <- trimws(input$library_title %||% "")
+        save_description <- trimws(input$library_description %||% "")
 
-    chart_record <- new_chart_record(
-      chart_state = chart_state,
-      data_snapshot = current_data,
-      title = if (nzchar(save_title)) save_title else chart_state$style$title,
-      description = save_description
+        chart_record <- new_chart_record(
+          chart_state = chart_state,
+          data_snapshot = current_data,
+          title = if (nzchar(save_title)) save_title else chart_state$style$title,
+          description = save_description
+        )
+
+        updated_library <- upsert_chart_record(chart_library_store(), chart_record)
+        chart_library_store(updated_library)
+        write_chart_library(updated_library)
+      },
+      failure_prefix = "Unable to save the chart:"
     )
-
-    updated_library <- upsert_chart_record(chart_library_store(), chart_record)
-    chart_library_store(updated_library)
-    write_chart_library(updated_library)
-
-    showNotification("Chart saved to the library.", type = "message")
   })
 
   filtered_library <- reactive({
-    chart_library_store() %>%
+    (chart_library_store() %||% empty_chart_library()) %>%
       filter_chart_library(input$library_search)
+  })
+
+  filtered_presentation_library <- reactive({
+    (presentation_library_store() %||% empty_chart_presentation_library()) %>%
+      filter_chart_presentation_library(input$presentation_search)
   })
 
   output$library_table <- DT::renderDataTable({
@@ -507,6 +1102,22 @@ build_main_server <- function(input, output, session) {
       selection = "multiple",
       rownames = FALSE,
       options = list(dom = "tip", pageLength = 8, scrollX = TRUE)
+    )
+  })
+
+  output$presentation_table <- DT::renderDataTable({
+    presentation_rows <- filtered_presentation_library() %>%
+      transmute(
+        Title = title,
+        Charts = chart_count,
+        Updated = format(updated_at, "%Y-%m-%d %H:%M")
+      )
+
+    DT::datatable(
+      presentation_rows,
+      selection = "single",
+      rownames = FALSE,
+      options = list(dom = "tip", pageLength = 6, scrollX = TRUE)
     )
   })
 
@@ -529,6 +1140,94 @@ build_main_server <- function(input, output, session) {
     }
 
     selected_records[1, , drop = FALSE]
+  })
+
+  selected_presentation_record <- reactive({
+    selected_rows <- input$presentation_table_rows_selected
+    presentation_rows <- filtered_presentation_library()
+
+    if (length(selected_rows) == 0 || nrow(presentation_rows) == 0) {
+      return(NULL)
+    }
+
+    presentation_rows[selected_rows[1], , drop = FALSE]
+  })
+
+  observe({
+    presentation_record <- selected_presentation_record()
+
+    if (is.null(presentation_record)) {
+      return(invisible(NULL))
+    }
+
+    updateTextInput(session, "presentation_title", value = presentation_record$title[[1]])
+    updateTextAreaInput(session, "presentation_description", value = presentation_record$description[[1]] %||% "")
+  })
+
+  selected_presentation_charts <- reactive({
+    presentation_chart_records(selected_presentation_record(), chart_library_store() %||% empty_chart_library())
+  })
+
+  output$presentation_selected_meta <- renderUI({
+    presentation_record <- selected_presentation_record()
+
+    if (is.null(presentation_record)) {
+      return(div(class = "empty-state", "Select or create a presentation to manage its charts."))
+    }
+
+    description_text <- presentation_record$description[[1]] %||% ""
+    if (!nzchar(description_text)) {
+      description_text <- "No notes saved."
+    }
+
+    missing_count <- length(setdiff(
+      as.character(presentation_record$chart_ids[[1]] %||% character()),
+      selected_presentation_charts()$chart_id
+    ))
+
+    div(
+      class = "library-meta",
+      tags$h3(presentation_record$title[[1]]),
+      tags$p(class = "muted-copy", description_text),
+      div(
+        class = "summary-chip-row",
+        summary_chip("Charts", presentation_record$chart_count[[1]]),
+        summary_chip("Updated", format(presentation_record$updated_at[[1]], "%d %b %Y %H:%M")),
+        if (missing_count > 0) summary_chip("Missing", missing_count)
+      )
+    )
+  })
+
+  output$presentation_chart_table <- DT::renderDataTable({
+    presentation_rows <- selected_presentation_charts()
+    validate(need(nrow(presentation_rows) > 0, "No charts are currently saved in this presentation."))
+
+    presentation_rows <- presentation_rows %>%
+      mutate(Order = seq_len(n())) %>%
+      transmute(
+        Order = Order,
+        Title = title,
+        Sources = source_summary,
+        Saved = format(saved_at, "%Y-%m-%d %H:%M")
+      )
+
+    DT::datatable(
+      presentation_rows,
+      selection = "single",
+      rownames = FALSE,
+      options = list(dom = "tip", pageLength = 6, scrollX = TRUE)
+    )
+  })
+
+  selected_presentation_chart_id <- reactive({
+    selected_row <- input$presentation_chart_table_rows_selected
+    presentation_rows <- selected_presentation_charts()
+
+    if (length(selected_row) == 0 || nrow(presentation_rows) == 0) {
+      return(NULL)
+    }
+
+    presentation_rows$chart_id[[selected_row[1]]]
   })
 
   output$library_selected_meta <- renderUI({
@@ -569,31 +1268,26 @@ build_main_server <- function(input, output, session) {
     build_chart_widget(chart_record$data_snapshot[[1]], chart_record$chart_state[[1]]$style)
   })
 
-  output$library_preview_table <- DT::renderDataTable({
-    chart_record <- selected_chart_record()
-    validate(need(!is.null(chart_record), "Select a saved chart to inspect its data."))
-
-    DT::datatable(
-      wide_chart_data(chart_record$data_snapshot[[1]]),
-      options = list(pageLength = 6, scrollX = TRUE)
-    )
-  })
-
   observeEvent(input$load_chart, {
+    ensure_chart_library_loaded()
     selected_records <- selected_chart_records()
     req(!is.null(selected_records), nrow(selected_records) == 1)
     chart_record <- selected_records[1, , drop = FALSE]
 
-    restored_state(chart_record$chart_state[[1]])
-    restore_chart_state(session, chart_record$chart_state[[1]])
-    updateTextInput(session, "library_title", value = chart_record$title[[1]])
-    updateTextAreaInput(session, "library_description", value = chart_record$description[[1]] %||% "")
-    updateNavbarPage(session, "main_tabs", selected = "builder")
-
-    showNotification("Saved chart loaded into the builder.", type = "message")
+    run_with_status(
+      paste("Loading", chart_record$title[[1]], "into the builder..."),
+      "Saved chart loaded into the builder.",
+      {
+        apply_builder_state(chart_record$chart_state[[1]], navigate_builder = TRUE)
+        updateTextInput(session, "library_title", value = chart_record$title[[1]])
+        updateTextAreaInput(session, "library_description", value = chart_record$description[[1]] %||% "")
+      },
+      failure_prefix = "Unable to load the saved chart:"
+    )
   })
 
   observeEvent(input$update_chart, {
+    ensure_chart_library_loaded()
     selected_records <- selected_chart_records()
     req(!is.null(selected_records), nrow(selected_records) == 1)
 
@@ -604,37 +1298,246 @@ build_main_server <- function(input, output, session) {
     }
 
     chart_record <- selected_records[1, , drop = FALSE]
-    chart_state <- builder_state()
-    updated_record <- new_chart_record(
-      chart_state = chart_state,
-      data_snapshot = current_data,
-      title = trimws(input$library_title %||% chart_state$style$title),
-      description = trimws(input$library_description %||% "")
+
+    run_with_status(
+      paste("Updating saved chart", chart_record$title[[1]], "..."),
+      "Saved chart updated.",
+      {
+        chart_state <- builder_state()
+        latest_date <- latest_chart_observation_date(chart_state)
+        if (!is.na(latest_date)) {
+          chart_state$date_range[[2]] <- latest_date
+        }
+
+        refreshed_payload <- build_chart_data(chart_state)
+        updated_record <- new_chart_record(
+          chart_state = chart_state,
+          data_snapshot = refreshed_payload$data,
+          title = trimws(input$library_title %||% chart_state$style$title),
+          description = trimws(input$library_description %||% "")
+        )
+        updated_record$chart_id <- chart_record$chart_id
+
+        updated_library <- upsert_chart_record(chart_library_store(), updated_record)
+        chart_library_store(updated_library)
+        write_chart_library(updated_library)
+        apply_builder_state(chart_state)
+      },
+      failure_prefix = "Unable to update the saved chart:"
     )
-    updated_record$chart_id <- chart_record$chart_id
-
-    updated_library <- upsert_chart_record(chart_library_store(), updated_record)
-    chart_library_store(updated_library)
-    write_chart_library(updated_library)
-
-    showNotification("Saved chart updated.", type = "message")
   })
 
   observeEvent(input$delete_chart, {
+    ensure_chart_library_loaded()
+    ensure_presentation_library_loaded()
     selected_records <- selected_chart_records()
     req(!is.null(selected_records))
 
-    updated_library <- Reduce(
-      f = function(library_data, chart_id) {
-        delete_chart_record(library_data, chart_id)
-      },
-      x = selected_records$chart_id,
-      init = chart_library_store()
-    )
-    chart_library_store(updated_library)
-    write_chart_library(updated_library)
+    run_with_status(
+      sprintf("Removing %s saved chart%s...", nrow(selected_records), if (nrow(selected_records) == 1) "" else "s"),
+      "Saved chart removed from the library.",
+      {
+        updated_library <- Reduce(
+          f = function(library_data, chart_id) {
+            delete_chart_record(library_data, chart_id)
+          },
+          x = selected_records$chart_id,
+          init = chart_library_store()
+        )
+        chart_library_store(updated_library)
+        write_chart_library(updated_library)
 
-    showNotification("Saved chart removed from the library.", type = "warning")
+        updated_presentations <- remove_chart_ids_from_presentations(
+          presentation_library_store(),
+          selected_records$chart_id
+        )
+        presentation_library_store(updated_presentations)
+        write_chart_presentation_library(updated_presentations)
+      },
+      success_type = "warning",
+      failure_prefix = "Unable to delete the saved chart:"
+    )
+  })
+
+  observeEvent(input$create_presentation, {
+    ensure_presentation_library_loaded()
+    selected_records <- selected_chart_records()
+    selected_chart_ids <- if (is.null(selected_records)) character() else selected_records$chart_id
+
+    run_with_status(
+      "Creating presentation...",
+      "Presentation saved to the library.",
+      {
+        new_record <- new_chart_presentation_record(
+          title = input$presentation_title,
+          description = input$presentation_description,
+          chart_ids = selected_chart_ids
+        )
+
+        updated_presentations <- upsert_chart_presentation_record(presentation_library_store(), new_record)
+        presentation_library_store(updated_presentations)
+        write_chart_presentation_library(updated_presentations)
+      },
+      failure_prefix = "Unable to create the presentation:"
+    )
+  })
+
+  observeEvent(input$update_presentation, {
+    ensure_presentation_library_loaded()
+    presentation_record <- selected_presentation_record()
+    req(!is.null(presentation_record))
+
+    run_with_status(
+      paste("Updating presentation", presentation_record$title[[1]], "..."),
+      "Presentation details updated.",
+      {
+        updated_record <- update_presentation_charts(
+          presentation_record,
+          presentation_record$chart_ids[[1]]
+        )
+        updated_record$title[[1]] <- trimws(input$presentation_title %||% updated_record$title[[1]])
+        updated_record$description[[1]] <- trimws(input$presentation_description %||% "")
+
+        updated_presentations <- upsert_chart_presentation_record(presentation_library_store(), updated_record)
+        presentation_library_store(updated_presentations)
+        write_chart_presentation_library(updated_presentations)
+      },
+      failure_prefix = "Unable to update the presentation:"
+    )
+  })
+
+  observeEvent(input$delete_presentation, {
+    ensure_presentation_library_loaded()
+    presentation_record <- selected_presentation_record()
+    req(!is.null(presentation_record))
+
+    run_with_status(
+      paste("Deleting presentation", presentation_record$title[[1]], "..."),
+      "Presentation removed from the library.",
+      {
+        updated_presentations <- delete_chart_presentation_record(
+          presentation_library_store(),
+          presentation_record$presentation_id[[1]]
+        )
+        presentation_library_store(updated_presentations)
+        write_chart_presentation_library(updated_presentations)
+      },
+      success_type = "warning",
+      failure_prefix = "Unable to delete the presentation:"
+    )
+  })
+
+  observeEvent(input$add_to_presentation, {
+    ensure_presentation_library_loaded()
+    presentation_record <- selected_presentation_record()
+    selected_records <- selected_chart_records()
+    req(!is.null(presentation_record), !is.null(selected_records), nrow(selected_records) > 0)
+
+    run_with_status(
+      sprintf("Adding %s selected chart%s to %s...", nrow(selected_records), if (nrow(selected_records) == 1) "" else "s", presentation_record$title[[1]]),
+      "Selected charts added to the presentation.",
+      {
+        updated_chart_ids <- c(
+          presentation_record$chart_ids[[1]] %||% character(),
+          selected_records$chart_id
+        )
+        updated_record <- update_presentation_charts(presentation_record, updated_chart_ids)
+
+        updated_presentations <- upsert_chart_presentation_record(presentation_library_store(), updated_record)
+        presentation_library_store(updated_presentations)
+        write_chart_presentation_library(updated_presentations)
+      },
+      failure_prefix = "Unable to add charts to the presentation:"
+    )
+  })
+
+  observeEvent(input$replace_presentation_charts, {
+    ensure_presentation_library_loaded()
+    presentation_record <- selected_presentation_record()
+    selected_records <- selected_chart_records()
+    req(!is.null(presentation_record), !is.null(selected_records), nrow(selected_records) > 0)
+
+    run_with_status(
+      sprintf("Replacing the charts in %s with %s selected chart%s...", presentation_record$title[[1]], nrow(selected_records), if (nrow(selected_records) == 1) "" else "s"),
+      "Presentation charts replaced from the current selection.",
+      {
+        updated_record <- update_presentation_charts(presentation_record, selected_records$chart_id)
+
+        updated_presentations <- upsert_chart_presentation_record(presentation_library_store(), updated_record)
+        presentation_library_store(updated_presentations)
+        write_chart_presentation_library(updated_presentations)
+      },
+      failure_prefix = "Unable to replace the presentation charts:"
+    )
+  })
+
+  observeEvent(input$presentation_chart_up, {
+    ensure_presentation_library_loaded()
+    presentation_record <- selected_presentation_record()
+    chart_id <- selected_presentation_chart_id()
+    req(!is.null(presentation_record), !is.null(chart_id))
+
+    run_with_status(
+      "Moving chart up in the presentation...",
+      "Chart order updated.",
+      {
+        updated_record <- update_presentation_charts(
+          presentation_record,
+          move_presentation_chart_ids(presentation_record$chart_ids[[1]], chart_id, "up")
+        )
+
+        updated_presentations <- upsert_chart_presentation_record(presentation_library_store(), updated_record)
+        presentation_library_store(updated_presentations)
+        write_chart_presentation_library(updated_presentations)
+      },
+      failure_prefix = "Unable to move the chart:"
+    )
+  })
+
+  observeEvent(input$presentation_chart_down, {
+    ensure_presentation_library_loaded()
+    presentation_record <- selected_presentation_record()
+    chart_id <- selected_presentation_chart_id()
+    req(!is.null(presentation_record), !is.null(chart_id))
+
+    run_with_status(
+      "Moving chart down in the presentation...",
+      "Chart order updated.",
+      {
+        updated_record <- update_presentation_charts(
+          presentation_record,
+          move_presentation_chart_ids(presentation_record$chart_ids[[1]], chart_id, "down")
+        )
+
+        updated_presentations <- upsert_chart_presentation_record(presentation_library_store(), updated_record)
+        presentation_library_store(updated_presentations)
+        write_chart_presentation_library(updated_presentations)
+      },
+      failure_prefix = "Unable to move the chart:"
+    )
+  })
+
+  observeEvent(input$presentation_chart_remove, {
+    ensure_presentation_library_loaded()
+    presentation_record <- selected_presentation_record()
+    chart_id <- selected_presentation_chart_id()
+    req(!is.null(presentation_record), !is.null(chart_id))
+
+    run_with_status(
+      "Removing chart from the presentation...",
+      "Chart removed from the presentation.",
+      {
+        updated_record <- update_presentation_charts(
+          presentation_record,
+          setdiff(presentation_record$chart_ids[[1]] %||% character(), chart_id)
+        )
+
+        updated_presentations <- upsert_chart_presentation_record(presentation_library_store(), updated_record)
+        presentation_library_store(updated_presentations)
+        write_chart_presentation_library(updated_presentations)
+      },
+      failure_prefix = "Unable to remove the chart from the presentation:"
+    )
   })
 
   available_series <- reactive({
@@ -807,9 +1710,11 @@ build_main_server <- function(input, output, session) {
 
     div(
       class = "summary-chip-row",
+      summary_chip("Model", result$metrics$model_label),
       summary_chip("Observations", result$metrics$observations),
       summary_chip("R-squared", round(result$metrics$r_squared, 3)),
-      summary_chip("Adj. R-squared", round(result$metrics$adjusted_r_squared, 3))
+      summary_chip("Adj. R-squared", round(result$metrics$adjusted_r_squared, 3)),
+      summary_chip(result$metrics$statistic_label, round(result$metrics$statistic_value, 3))
     )
   })
 
@@ -853,6 +1758,25 @@ build_main_server <- function(input, output, session) {
     )
   })
 
+  save_presentation_document <- function(title, subtitle = NULL, sections, file) {
+    document <- tags$html(
+      tags$head(
+        tags$title(title),
+        tags$style("body { font-family: 'Helvetica Neue', Arial, sans-serif; margin: 32px; } h1 { margin-bottom: 12px; } section:last-child { page-break-after: auto; } .deck-meta { color: #475569; margin-bottom: 24px; }")
+      ),
+      tags$body(
+        tags$h1(title),
+        if (!is.null(subtitle) && nzchar(trimws(subtitle))) tags$p(class = "deck-meta", subtitle),
+        sections
+      )
+    )
+
+    htmltools::save_html(
+      htmltools::browsable(document),
+      file = file
+    )
+  }
+
   output$export_saved_chart <- downloadHandler(
     filename = function() {
       selected_records <- selected_chart_records()
@@ -886,24 +1810,54 @@ build_main_server <- function(input, output, session) {
           style = "page-break-after: always; padding: 24px 0;",
           tags$h1(chart_record$title[[1]]),
           tags$p(chart_record$description[[1]] %||% ""),
-          build_chart_widget(chart_record$data_snapshot[[1]], chart_record$chart_state[[1]]$style)
+          htmltools::as.tags(build_chart_widget(chart_record$data_snapshot[[1]], chart_record$chart_state[[1]]$style))
         )
       })
 
-      htmltools::save_html(
-        htmltools::tagList(
-          tags$html(
-            tags$head(
-              tags$title("Chart Presentation"),
-              tags$style("body { font-family: 'Helvetica Neue', Arial, sans-serif; margin: 32px; } h1 { margin-bottom: 12px; } section:last-child { page-break-after: auto; }")
-            ),
-            tags$body(
-              tags$h1("Saved Charts Presentation"),
-              tags$p(paste("Generated on", format(Sys.time(), "%d %b %Y %H:%M"))),
-              presentation_sections
-            )
-          )
+      save_presentation_document(
+        title = "Saved Charts Presentation",
+        subtitle = paste("Generated on", format(Sys.time(), "%d %b %Y %H:%M")),
+        sections = presentation_sections,
+        file = file
+      )
+    }
+  )
+
+  output$export_selected_presentation <- downloadHandler(
+    filename = function() {
+      presentation_record <- selected_presentation_record()
+      req(!is.null(presentation_record))
+      paste0(str_replace_all(presentation_record$title[[1]], "[^A-Za-z0-9]+", "_"), ".html")
+    },
+    content = function(file) {
+      presentation_record <- selected_presentation_record()
+      presentation_records <- selected_presentation_charts()
+      req(!is.null(presentation_record), nrow(presentation_records) > 0)
+
+      presentation_sections <- lapply(seq_len(nrow(presentation_records)), function(row_index) {
+        chart_record <- presentation_records[row_index, , drop = FALSE]
+
+        tags$section(
+          style = "page-break-after: always; padding: 24px 0;",
+          tags$h1(chart_record$title[[1]]),
+          tags$p(chart_record$description[[1]] %||% ""),
+          htmltools::as.tags(build_chart_widget(chart_record$data_snapshot[[1]], chart_record$chart_state[[1]]$style))
+        )
+      })
+
+      save_presentation_document(
+        title = presentation_record$title[[1]],
+        subtitle = paste(
+          c(
+            trimws(presentation_record$description[[1]] %||% ""),
+            paste("Exported on", format(Sys.time(), "%d %b %Y %H:%M"))
+          )[nzchar(c(
+            trimws(presentation_record$description[[1]] %||% ""),
+            paste("Exported on", format(Sys.time(), "%d %b %Y %H:%M"))
+          ))],
+          collapse = " | "
         ),
+        sections = presentation_sections,
         file = file
       )
     }

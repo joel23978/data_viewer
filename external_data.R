@@ -160,7 +160,9 @@ library(readrba)
 # tmp <- browse_rba_tables()
 # rba_table_names <- paste(tmp$no, tmp$title)
 
-rba_table_meta <- browse_rba_series() %>%
+rba_browse_data <- browse_rba_series()
+
+rba_table_meta <- rba_browse_data %>%
   select(table_no, table_title) %>%
   distinct() %>%
   group_by(table_no) %>%
@@ -183,7 +185,7 @@ rba_table_choices <- stats::setNames(
   mapply(compact_rba_table_title, rba_table_meta$table_no, rba_table_meta$table_title, USE.NAMES = FALSE)
 )
 
-rba_desc_id <- browse_rba_series() %>%
+rba_desc_id <- rba_browse_data %>%
   select(c(table_no, description, series_id)) %>%
   unique()
 
@@ -273,4 +275,3 @@ abs_data <- function(
       drop_na()
   }
 }
-

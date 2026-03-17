@@ -55,6 +55,13 @@ robust_vcov <- function(model) {
   sandwich::vcovHC(model, type = "HC3")
 }
 
+weighted_regression_model <- function(pair_data) {
+  initial_model <- stats::lm(y ~ x, data = pair_data)
+  variance_model <- stats::lm(log(pmax(initial_model$residuals ^ 2, 1e-8)) ~ initial_model$fitted.values)
+  variance_estimate <- exp(stats::fitted(variance_model))
+  stats::lm(y ~ x, data = pair_data, weights = 1 / pmax(variance_estimate, 1e-8))
+}
+
 regression_analysis <- function(data, dependent, independent, error_assumption = "classical") {
   pair_data <- analysis_pair_data(data, independent, dependent)
 
@@ -62,12 +69,23 @@ regression_analysis <- function(data, dependent, independent, error_assumption =
     stop("Not enough overlapping observations to run a regression.", call. = FALSE)
   }
 
-  model <- stats::lm(y ~ x, data = pair_data)
+  model <- if (identical(error_assumption, "robust")) {
+    weighted_regression_model(pair_data)
+  } else {
+    stats::lm(y ~ x, data = pair_data)
+  }
 
   coefficient_table <- if (identical(error_assumption, "robust")) {
     lmtest::coeftest(model, vcov. = robust_vcov(model))
   } else {
     lmtest::coeftest(model)
+  }
+
+  model_summary <- summary(model)
+  model_statistic <- if (identical(error_assumption, "robust")) {
+    lmtest::waldtest(model, vcov = robust_vcov(model), test = "Chisq")[["Chisq"]][2]
+  } else {
+    unname(model_summary$fstatistic[["value"]])
   }
 
   list(
@@ -78,9 +96,12 @@ regression_analysis <- function(data, dependent, independent, error_assumption =
       tibble::rownames_to_column("term") %>%
       tibble::as_tibble(),
     metrics = list(
-      r_squared = summary(model)$r.squared,
-      adjusted_r_squared = summary(model)$adj.r.squared,
-      observations = nrow(pair_data)
+      r_squared = model_summary$r.squared,
+      adjusted_r_squared = model_summary$adj.r.squared,
+      observations = nrow(pair_data),
+      model_label = if (identical(error_assumption, "robust")) "Heteroskedastic-adjusted" else "Homoskedastic OLS",
+      statistic_label = if (identical(error_assumption, "robust")) "Wald chi-squared" else "F-statistic",
+      statistic_value = as.numeric(model_statistic)
     )
   )
 }
