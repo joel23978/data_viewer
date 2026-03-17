@@ -107,7 +107,7 @@ build_search_tab_ui <- function() {
           "Selected Result",
           class = "search-sidebar-card",
           uiOutput("search_selected_meta"),
-          plotOutput("search_preview_plot", height = "280px"),
+          plotOutput("search_preview_plot", height = "220px"),
           radioGroupButtons(
             "search_target_series",
             "Add to",
@@ -1401,6 +1401,9 @@ build_main_server <- function(input, output, session) {
     preview_style$legend <- "none"
     preview_style$note <- ""
     preview_style$y_axis_label <- ""
+    preview_style$x_labels <- 4
+    preview_style$y_breaks <- pretty(preview_payload$data$value, n = 4)
+    preview_style$auto_y_axis <- TRUE
 
     build_chart_plot(preview_payload$data, preview_style)
   })
