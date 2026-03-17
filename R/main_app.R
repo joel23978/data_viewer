@@ -107,7 +107,10 @@ build_search_tab_ui <- function() {
           "Selected Result",
           class = "search-sidebar-card",
           uiOutput("search_selected_meta"),
-          plotOutput("search_preview_plot", height = "250px", class = "search-preview-plot"),
+          div(
+            class = "search-preview-plot",
+            plotOutput("search_preview_plot", height = "250px")
+          ),
           radioGroupButtons(
             "search_target_series",
             "Add to",
@@ -320,6 +323,7 @@ build_main_ui <- function() {
                 class = "export-row",
                 downloadButton("exportPNG", "Download PNG"),
                 downloadButton("exportHTML", "Download HTML"),
+                downloadButton("exportSVG", "Download SVG"),
                 downloadButton("exportData", "Download CSV")
               )
             ),
@@ -1047,6 +1051,23 @@ build_main_server <- function(input, output, session) {
     build_chart_widget(chart_data(), builder_state()$style)
   })
 
+  export_widget <- reactive({
+    style <- builder_state()$style
+    width_px <- round((style$export_width %||% 8) * 160)
+    height_px <- round((style$export_height %||% 5) * 160)
+
+    current_widget() %>%
+      plotly::layout(
+        autosize = FALSE,
+        width = width_px,
+        height = height_px
+      ) %>%
+      plotly::config(
+        responsive = FALSE,
+        displayModeBar = TRUE
+      )
+  })
+
   chart_library_store <- reactiveVal(NULL)
   presentation_library_store <- reactiveVal(NULL)
   search_index_store <- reactiveVal(NULL)
@@ -1489,7 +1510,25 @@ build_main_server <- function(input, output, session) {
     },
     content = function(file) {
       req(nrow(chart_data()) > 0)
-      saveWidget(current_widget(), file, selfcontained = TRUE)
+      saveWidget(export_widget(), file, selfcontained = TRUE)
+    }
+  )
+
+  output$exportSVG <- downloadHandler(
+    filename = function() {
+      paste0(str_replace_all(builder_state()$style$title %||% "chart", "[^A-Za-z0-9]+", "_"), ".svg")
+    },
+    content = function(file) {
+      req(nrow(chart_data()) > 0)
+      grDevices::svg(
+        filename = file,
+        width = builder_state()$style$export_width,
+        height = builder_state()$style$export_height,
+        onefile = TRUE,
+        bg = "white"
+      )
+      on.exit(grDevices::dev.off(), add = TRUE)
+      print(current_plot())
     }
   )
 
