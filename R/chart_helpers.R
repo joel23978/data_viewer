@@ -1700,7 +1700,7 @@ build_chart_plot <- function(data, style) {
       plot.title = element_text(face = "bold", size = 16, hjust = 0, margin = margin(b = 12)),
       plot.subtitle = element_text(size = 11, colour = "#475569", hjust = 0, margin = margin(b = 10)),
       plot.caption = element_text(size = 9, colour = "#4b5563"),
-      plot.title.position = "plot",
+      plot.title.position = "panel",
       plot.caption.position = "plot",
       panel.grid.minor = element_blank(),
       panel.grid.major.x = element_blank(),
@@ -1776,7 +1776,7 @@ build_chart_widget <- function(data, style) {
     layout_args$annotations <- annotations
   }
 
-  layout_args$title <- list(x = 0, xanchor = "left")
+  layout_args$title <- list(x = 0.07, xanchor = "left")
 
   if (identical(style$legend, "none")) {
     layout_args$showlegend <- FALSE
