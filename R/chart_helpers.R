@@ -1620,7 +1620,7 @@ build_chart_plot <- function(data, style) {
     theme_minimal(base_size = 12) +
     theme(
       plot.tag = element_text(face = "plain", size = 16, colour = "#0f172a", hjust = 0),
-      plot.tag.position = c(0, 1),
+      plot.tag.position = c(0, 0.965),
       plot.title = element_text(face = "bold", size = 16, hjust = 0, margin = margin(b = 12)),
       plot.subtitle = element_text(size = 11, colour = "#475569", hjust = 0, margin = margin(b = 10)),
       plot.caption = element_text(size = 9, colour = "#4b5563"),
@@ -1679,12 +1679,12 @@ build_chart_widget <- function(data, style) {
 
   if (nzchar(y_axis_label)) {
     existing_margin <- layout_args$margin %||% list()
-    layout_args$margin <- modifyList(list(t = 80), existing_margin)
+    layout_args$margin <- modifyList(list(t = 92), existing_margin)
     annotations <- c(annotations, list(
       list(
         text = y_axis_label,
         x = 0,
-        y = 1.08,
+        y = 1.02,
         xref = "paper",
         yref = "paper",
         xanchor = "left",
