@@ -179,12 +179,7 @@ build_library_tab_ui <- function() {
           "Presentation Details",
           uiOutput("presentation_selected_meta"),
           DT::dataTableOutput("presentation_chart_table"),
-          div(
-            class = "library-actions",
-            actionButton("presentation_chart_up", "Move up"),
-            actionButton("presentation_chart_down", "Move down"),
-            actionButton("presentation_chart_remove", "Remove chart")
-          )
+          uiOutput("presentation_chart_actions")
         )
       )
     )
@@ -1601,6 +1596,20 @@ build_main_server <- function(input, output, session) {
       selection = "single",
       rownames = FALSE,
       options = list(dom = "tip", pageLength = 6, scrollX = TRUE)
+      )
+  })
+
+  output$presentation_chart_actions <- renderUI({
+    presentation_rows <- selected_presentation_charts()
+    if (nrow(presentation_rows) == 0) {
+      return(NULL)
+    }
+
+    div(
+      class = "library-actions",
+      actionButton("presentation_chart_up", "Move up"),
+      actionButton("presentation_chart_down", "Move down"),
+      actionButton("presentation_chart_remove", "Remove chart")
     )
   })
 
