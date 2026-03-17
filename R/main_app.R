@@ -1645,8 +1645,28 @@ build_main_server <- function(input, output, session) {
     presentation_rows$chart_id[[selected_row[1]]]
   })
 
+  selected_presentation_chart_record <- reactive({
+    selected_row <- input$presentation_chart_table_rows_selected
+    presentation_rows <- selected_presentation_charts()
+
+    if (length(selected_row) == 0 || nrow(presentation_rows) == 0) {
+      return(NULL)
+    }
+
+    presentation_rows[selected_row[1], , drop = FALSE]
+  })
+
+  selected_preview_chart_record <- reactive({
+    selected_presentation_record <- selected_presentation_chart_record()
+    if (!is.null(selected_presentation_record)) {
+      return(selected_presentation_record)
+    }
+
+    selected_chart_record()
+  })
+
   output$library_selected_meta <- renderUI({
-    chart_record <- selected_chart_record()
+    chart_record <- selected_preview_chart_record()
     selected_records <- selected_chart_records()
 
     if (is.null(chart_record)) {
@@ -1675,7 +1695,7 @@ build_main_server <- function(input, output, session) {
   })
 
   output$library_plot <- renderPlotly({
-    chart_record <- selected_chart_record()
+    chart_record <- selected_preview_chart_record()
     if (is.null(chart_record)) {
       return(empty_plotly_widget("Select a saved chart to preview it."))
     }
