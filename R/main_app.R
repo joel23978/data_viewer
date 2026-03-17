@@ -391,8 +391,22 @@ build_main_ui <- function() {
                 ),
                 column(
                   width = 4,
-                  numericInput("style_horizontal_shading_min", "Horizontal shaded band minimum", value = NA),
-                  numericInput("style_horizontal_shading_max", "Horizontal shaded band maximum", value = NA),
+                  tags$div(
+                    class = "paired-range-input",
+                    tags$label(class = "control-label", `for` = "style_horizontal_shading_min", "Horizontal shaded band"),
+                    tags$div(
+                      class = "paired-range-input__row",
+                      tags$div(
+                        class = "paired-range-input__field",
+                        numericInput("style_horizontal_shading_min", label = NULL, value = NA)
+                      ),
+                      tags$div(class = "paired-range-input__separator", "to"),
+                      tags$div(
+                        class = "paired-range-input__field",
+                        numericInput("style_horizontal_shading_max", label = NULL, value = NA)
+                      )
+                    )
+                  ),
                   selectInput("style_recession_shading", "Recession shading region", choices = c("none", rec_regions), selected = "none")
                 ),
                 column(

@@ -613,6 +613,61 @@ body {
   width: auto !important;
 }
 
+.paired-range-input {
+  margin-bottom: 16px;
+}
+
+.paired-range-input > .control-label {
+  display: block;
+  margin-bottom: 8px;
+}
+
+.paired-range-input__row {
+  align-items: stretch;
+  display: flex;
+  gap: 0;
+}
+
+.paired-range-input__field {
+  flex: 1 1 0;
+  min-width: 0;
+}
+
+.paired-range-input__field .form-group {
+  margin-bottom: 0;
+}
+
+.paired-range-input__field .form-control {
+  border-radius: 12px;
+}
+
+.paired-range-input__field:first-child .form-control {
+  border-bottom-right-radius: 0;
+  border-top-right-radius: 0;
+}
+
+.paired-range-input__field:last-child .form-control {
+  border-bottom-left-radius: 0;
+  border-top-left-radius: 0;
+}
+
+.paired-range-input__separator {
+  align-items: center;
+  background: #ffffff;
+  border-bottom: 1px solid #cbd5e1;
+  border-top: 1px solid #cbd5e1;
+  color: #334155;
+  display: flex;
+  flex: 0 0 64px;
+  font-size: 16px;
+  font-weight: 600;
+  justify-content: center;
+  margin-left: -1px;
+  margin-right: -1px;
+  position: relative;
+  z-index: 1;
+}
+
 @keyframes tab-loading-slide {
   0% {
     left: -35%;
@@ -651,6 +706,24 @@ body {
 
   .search-toolbar-card .app-card__body {
     padding: 16px;
+  }
+
+  .paired-range-input__row {
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  .paired-range-input__separator {
+    border: 0;
+    flex: 0 0 100%;
+    justify-content: flex-start;
+    margin: 0;
+    padding-left: 2px;
+  }
+
+  .paired-range-input__field:first-child .form-control,
+  .paired-range-input__field:last-child .form-control {
+    border-radius: 12px;
   }
 
   .search-toolbar__hero {
