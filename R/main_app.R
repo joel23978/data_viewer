@@ -237,6 +237,12 @@ build_main_ui <- function() {
   navbarPage(
     title = "Data Explorer",
     id = "main_tabs",
+    selected = "search",
+    tabPanel(
+      title = "Data Search",
+      value = "search",
+      uiOutput("search_tab_ui")
+    ),
     tabPanel(
       title = "Chart Builder",
       value = "builder",
@@ -533,11 +539,6 @@ build_main_ui <- function() {
       )
     ),
     tabPanel(
-      title = "Data Search",
-      value = "search",
-      uiOutput("search_tab_ui")
-    ),
-    tabPanel(
       title = "Saved Charts",
       value = "library",
       uiOutput("library_tab_ui")
@@ -552,7 +553,7 @@ build_main_ui <- function() {
 build_main_server <- function(input, output, session) {
   ensure_chart_library()
   session$userData$restored_series_specs <- list()
-  loaded_main_tabs <- reactiveVal(c("builder"))
+  loaded_main_tabs <- reactiveVal(c("search"))
   tab_load_state <- reactiveValues(search = "idle", library = "idle")
   tab_load_error <- reactiveValues(search = "", library = "")
 
@@ -639,7 +640,7 @@ build_main_server <- function(input, output, session) {
   }
 
   observeEvent(input$main_tabs, {
-    selected_tab <- input$main_tabs %||% "builder"
+    selected_tab <- input$main_tabs %||% "search"
     loaded_main_tabs(unique(c(loaded_main_tabs(), selected_tab)))
   }, ignoreInit = FALSE)
 
@@ -702,7 +703,7 @@ build_main_server <- function(input, output, session) {
 
   observeEvent(input$main_tabs, {
     if (
-      identical(input$main_tabs %||% "builder", "search") &&
+      identical(input$main_tabs %||% "search", "search") &&
       !fred_search_available() &&
       !isTRUE(fred_key_prompt_ignored())
     ) {
@@ -1092,7 +1093,7 @@ build_main_server <- function(input, output, session) {
 
   session$onFlushed(function() {
     showNotification(
-      "Opening the builder. Search metadata and libraries will load when needed.",
+      "Opening data search. Other tabs will load when needed.",
       type = "message",
       duration = 5
     )
@@ -1105,7 +1106,7 @@ build_main_server <- function(input, output, session) {
   }, once = TRUE)
 
   observeEvent(input$main_tabs, {
-    selected_tab <- input$main_tabs %||% "builder"
+    selected_tab <- input$main_tabs %||% "search"
 
     if (
       identical(selected_tab, "search") &&
