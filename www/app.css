@@ -607,13 +607,13 @@ textarea,
 .search-sidebar-card .shiny-input-container,
 .search-sidebar-card .form-group {
   clear: both;
-  margin-bottom: 18px;
+  margin-bottom: 12px;
   width: 100%;
 }
 
 .search-sidebar-card .control-label {
   display: block;
-  margin-bottom: 8px;
+  margin-bottom: 4px;
   width: 100%;
 }
 
