@@ -1695,17 +1695,19 @@ build_chart_plot <- function(data, style) {
     ) +
     theme_minimal(base_size = 12) +
     theme(
-      plot.tag = element_text(face = "plain", size = 12, colour = "#0f172a", hjust = 1),
+      plot.tag = element_text(face = "bold", size = 15, colour = "#0f172a", hjust = 1),
       plot.tag.position = c(1, 0.945),
       plot.title = element_text(face = "bold", size = 16, hjust = 0, margin = margin(b = 12)),
       plot.subtitle = element_text(size = 11, colour = "#475569", hjust = 0, margin = margin(b = 10)),
-      plot.caption = element_text(size = 9, colour = "#4b5563"),
+      plot.caption = element_text(size = 12, colour = "#4b5563"),
       plot.title.position = "plot",
       plot.caption.position = "plot",
+      axis.text = element_text(size = 14),
       panel.grid.minor = element_blank(),
       panel.grid.major.x = element_blank(),
       legend.position = style$legend,
       legend.title = element_blank(),
+      legend.text = element_text(size = 14),
       plot.background = element_rect(fill = "white", colour = NA)
     )
 
@@ -1752,7 +1754,7 @@ build_chart_widget <- function(data, style) {
         yanchor = "top",
         showarrow = FALSE,
         align = "left",
-        font = list(size = 12, color = "#4b5563")
+        font = list(size = 13, color = "#4b5563")
       )
     ))
   }
@@ -1771,7 +1773,7 @@ build_chart_widget <- function(data, style) {
         yanchor = "bottom",
         showarrow = FALSE,
         align = "right",
-        font = list(size = 12, color = "#0f172a")
+        font = list(size = 15, color = "#0f172a")
       )
     ))
   }
@@ -1780,17 +1782,23 @@ build_chart_widget <- function(data, style) {
     layout_args$annotations <- annotations
   }
 
+  title_markup <- if (nzchar(title_text)) {
+    paste0("<b>", htmltools::htmlEscape(title_text), "</b>")
+  } else {
+    ""
+  }
+
   if (nzchar(title_text) || nzchar(subtitle_text)) {
     layout_args$title <- list(
       text = if (nzchar(subtitle_text)) {
         paste0(
-          htmltools::htmlEscape(title_text),
+          title_markup,
           "<br><sup>",
           htmltools::htmlEscape(subtitle_text),
           "</sup>"
         )
       } else {
-        htmltools::htmlEscape(title_text)
+        title_markup
       },
       x = 0,
       xanchor = "left"
@@ -1805,7 +1813,8 @@ build_chart_widget <- function(data, style) {
     layout_args$showlegend <- FALSE
   } else {
     layout_args$legend <- list(
-      orientation = if (identical(style$legend, "bottom")) "h" else "v"
+      orientation = if (identical(style$legend, "bottom")) "h" else "v",
+      font = list(size = 14)
     )
   }
 
