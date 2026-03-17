@@ -627,11 +627,11 @@ build_main_server <- function(input, output, session) {
   output$search_tab_ui <- renderUI({
     req("search" %in% loaded_main_tabs())
     if (identical(tab_load_state$search, "loading")) {
-      return(build_tab_loading_ui("Search", "Loading search metadata..."))
+      return(build_tab_loading_ui("Data Search", "Loading search metadata..."))
     }
 
     if (identical(tab_load_state$search, "error")) {
-      return(build_tab_error_ui("Search", tab_load_error$search %||% "Unable to load search metadata."))
+      return(build_tab_error_ui("Data Search", tab_load_error$search %||% "Unable to load search metadata."))
     }
 
     build_search_tab_ui()
