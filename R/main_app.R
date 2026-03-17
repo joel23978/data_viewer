@@ -137,12 +137,8 @@ build_library_tab_ui <- function() {
             class = "library-actions",
             actionButton("load_chart", "Load into builder"),
             actionButton("update_chart", "Update selected"),
-            actionButton("delete_chart", "Delete saved chart")
-          ),
-          div(
-            class = "library-actions",
-            downloadButton("export_saved_chart", "Export selected chart"),
-            downloadButton("export_chart_presentation", "Export chart presentation")
+            actionButton("delete_chart", "Delete saved chart"),
+            downloadButton("export_saved_chart", "Export selected chart")
           )
         ),
         chart_card(
