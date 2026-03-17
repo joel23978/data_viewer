@@ -383,6 +383,10 @@ build_main_ui <- function() {
                 )
               ),
               tags$hr(),
+              tags$p(
+                class = "muted-copy",
+                "Use these controls to add reference lines, shaded bands, and date markers."
+              ),
               fluidRow(
                 column(
                   width = 4,
