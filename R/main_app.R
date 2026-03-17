@@ -294,10 +294,6 @@ build_main_ui <- function() {
             ),
             chart_card(
               "Save to Library",
-              tags$p(
-                class = "muted-copy",
-                "Save the current chart to the library."
-              ),
               textInput("library_title", "Library title", value = ""),
               textAreaInput("library_description", "Library description", value = "", rows = 3, resize = "vertical"),
               actionButton("save_chart", "Save chart to library", class = "btn-primary btn-block"),
