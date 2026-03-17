@@ -117,22 +117,23 @@ body {
   align-items: stretch;
   display: flex !important;
   flex-direction: row !important;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   gap: 6px;
   margin: 0 !important;
   max-width: 100%;
-  width: auto;
+  width: 100%;
 }
 
 .app-card__body .btn-group-container-sw .btn-group .btn,
 .app-card__body .btn-group-container-sw .btn-group-vertical .btn,
 .app-card__body .btn-group-container-sw .radioBtn {
   border-radius: 12px !important;
-  flex: 0 1 auto;
+  flex: 1 1 0;
   margin-left: 0 !important;
   max-width: 100%;
   min-width: 66px;
-  width: auto !important;
+  white-space: normal;
+  width: 100% !important;
 }
 
 .muted-copy {
