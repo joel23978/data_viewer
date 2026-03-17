@@ -35,22 +35,19 @@ build_search_tab_ui <- function() {
               checkIcon = list(yes = icon("check"))
             )
           ),
-          conditionalPanel(
-            condition = "input.search_source_filter === 'FRED' || input.search_source_filter === 'all'",
+          div(
+            class = "search-toolbar__group search-toolbar__group--compact",
             div(
-              class = "search-toolbar__group search-toolbar__group--compact",
-              div(
-                class = "search-toolbar__group-label",
-                "FRED mode"
-              ),
-              radioGroupButtons(
-                "search_fred_mode",
-                NULL,
-                choices = c("Text" = "full_text", "ID" = "series_id"),
-                selected = "full_text",
-                justified = FALSE,
-                checkIcon = list(yes = icon("check"))
-              )
+              class = "search-toolbar__group-label",
+              "FRED mode"
+            ),
+            radioGroupButtons(
+              "search_fred_mode",
+              NULL,
+              choices = c("Text" = "full_text", "ID" = "series_id"),
+              selected = "full_text",
+              justified = FALSE,
+              checkIcon = list(yes = icon("check"))
             )
           ),
           div(
