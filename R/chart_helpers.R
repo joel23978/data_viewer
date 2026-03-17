@@ -844,7 +844,7 @@ transform_profile_ui <- function(prefix, title, include_copy_button = FALSE) {
     ),
     textInput(
       transform_input_id(prefix, "expression"),
-      "Custom formula applied after the transformations above. Use X as the series value.",
+      "Custom formula (use X)",
       value = "X"
     )
   )

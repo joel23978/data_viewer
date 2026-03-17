@@ -134,6 +134,7 @@ build_library_tab_ui <- function() {
         width = 6,
         chart_card(
           "Chart Library",
+          header_actions = actionButton("clear_library_selection", "Clear", class = "app-card__header-chip"),
           textInput("library_search", "Search saved charts", value = "", placeholder = "Search by title, description, or source"),
           DT::dataTableOutput("library_table"),
           div(
@@ -169,6 +170,7 @@ build_library_tab_ui <- function() {
         ),
         chart_card(
           "Presentation Details",
+          header_actions = actionButton("clear_presentation_chart_selection", "Clear", class = "app-card__header-chip"),
           uiOutput("presentation_selected_meta"),
           DT::dataTableOutput("presentation_chart_table"),
           uiOutput("presentation_detail_actions"),
@@ -257,6 +259,7 @@ build_main_ui <- function() {
             class = "builder-left-rail",
             chart_card(
               "Data Window",
+              header_actions = actionButton("reset_builder", "Reset", class = "app-card__header-chip"),
               tags$p(
                 class = "muted-copy",
                 "Set the date window and choose whether to show the data table."
@@ -303,13 +306,6 @@ build_main_ui <- function() {
                   lapply(seq_len(MAX_SERIES), builder_series_ui)
                 )
               )
-            ),
-            chart_card(
-              "Save to Library",
-              header_actions = actionButton("reset_builder", "Reset", class = "app-card__header-chip"),
-              textInput("library_title", "Library title", value = ""),
-              textAreaInput("library_description", "Library description", value = "", rows = 3, resize = "vertical"),
-              actionButton("save_chart", "Save chart to library", class = "btn-primary btn-block")
             )
           ),
           column(
@@ -343,29 +339,29 @@ build_main_ui <- function() {
               ),
               fluidRow(
                 column(
-                  width = 4,
-                  textInput("style_title", "Chart title shown above the plot", value = "Custom data view"),
-                  textInput("style_subtitle", "Chart subtitle shown below the title", value = ""),
-                  textInput("style_y_axis_label", "Y-axis label", value = "%"),
-                  textInput("style_note", "Source note or caption shown below the chart", value = default_builder_state()$style$note),
-                  selectInput("style_font_family", "Chart font", choices = APP_CHART_FONTS, selected = APP_CHART_FONTS[[1]])
+                  width = 8,
+                  textInput("style_title", "Chart title shown above the plot", value = "Custom data view", width = "100%"),
+                  textInput("style_subtitle", "Chart subtitle shown below the title", value = "", width = "100%"),
+                  textInput("style_note", "Source note or caption shown below the chart", value = default_builder_state()$style$note, width = "100%")
                 ),
                 column(
                   width = 4,
+                  selectInput("style_font_family", "Chart font", choices = APP_CHART_FONTS, selected = APP_CHART_FONTS[[1]]),
                   selectInput("style_palette", "Colour palette", choices = APP_PALETTES, selected = APP_PALETTES[[1]]),
+                  textInput("style_y_axis_label", "Y-axis label", value = "%")
+                )
+              ),
+              fluidRow(
+                column(
+                  width = 4,
                   radioGroupButtons(
-                    "style_legend",
-                    "Legend position",
-                    choices = c("Below" = "bottom", "Right" = "right", "Hide" = "none"),
-                    selected = "bottom",
+                    "style_invert_y_axis",
+                    "Y-axis direction",
+                    choices = c("Standard" = "standard", "Inverted" = "inverted"),
+                    selected = "standard",
                     justified = TRUE,
                     checkIcon = list(yes = icon("check"))
                   ),
-                  selectInput("style_date_format", "Date label format on the x-axis", choices = APP_DATE_FORMATS, selected = APP_DATE_FORMATS[[2]]),
-                  numericInput("style_x_labels", "Approximate number of x-axis labels", value = 6, min = 2, step = 1)
-                ),
-                column(
-                  width = 4,
                   radioGroupButtons(
                     "style_auto_y_axis",
                     "Y-axis range mode",
@@ -376,20 +372,56 @@ build_main_ui <- function() {
                   ),
                   conditionalPanel(
                     condition = "input.style_auto_y_axis == 'manual'",
-                    numericInput("style_y_min", "Manual y-axis minimum", value = NA),
-                    numericInput("style_y_max", "Manual y-axis maximum", value = NA),
+                    tags$div(
+                      class = "paired-range-input",
+                      tags$label(class = "control-label", `for` = "style_y_min", "Manual y-axis range"),
+                      tags$div(
+                        class = "paired-range-input__row",
+                        tags$div(
+                          class = "paired-range-input__field",
+                          numericInput("style_y_min", label = NULL, value = NA)
+                        ),
+                        tags$div(class = "paired-range-input__separator", "to"),
+                        tags$div(
+                          class = "paired-range-input__field",
+                          numericInput("style_y_max", label = NULL, value = NA)
+                        )
+                      )
+                    ),
                     numericInput("style_y_breaks", "Manual y-axis interval", value = NA, min = 0.01)
-                  ),
+                  )
+                ),
+                column(
+                  width = 4,
+                  selectInput("style_date_format", "Date label format on the x-axis", choices = APP_DATE_FORMATS, selected = APP_DATE_FORMATS[[2]]),
+                  numericInput("style_x_labels", "X-axis labels", value = 6, min = 2, step = 1)
+                ),
+                column(
+                  width = 4,
                   radioGroupButtons(
-                    "style_invert_y_axis",
-                    "Y-axis direction",
-                    choices = c("Standard" = "standard", "Inverted" = "inverted"),
-                    selected = "standard",
+                    "style_legend",
+                    "Legend position",
+                    choices = c("Below" = "bottom", "Right" = "right", "Hide" = "none"),
+                    selected = "bottom",
                     justified = TRUE,
                     checkIcon = list(yes = icon("check"))
                   ),
-                  numericInput("export_width", "PNG export width", value = 7, min = 4, step = 0.5),
-                  numericInput("export_height", "PNG export height", value = 5, min = 3, step = 0.5)
+                  tags$div(
+                    class = "paired-range-input",
+                    tags$label(class = "control-label", `for` = "export_width", "PNG export size"),
+                    tags$div(
+                      class = "paired-range-input__row",
+                      tags$div(
+                        class = "paired-range-input__field",
+                        numericInput("export_width", label = NULL, value = 7, min = 4, step = 0.5)
+                      ),
+                      tags$div(class = "paired-range-input__separator", "x"),
+                      tags$div(
+                        class = "paired-range-input__field",
+                        numericInput("export_height", label = NULL, value = 5, min = 3, step = 0.5)
+                      )
+                    )
+                  )
                 )
               ),
               tags$hr(),
@@ -622,6 +654,12 @@ build_main_ui <- function() {
                   )
                 )
               )
+            ),
+            chart_card(
+              "Save to Library",
+              textInput("library_title", "Chart title", value = ""),
+              textAreaInput("library_description", "Library description", value = "", rows = 3, resize = "vertical"),
+              actionButton("save_chart", "Save chart to library", class = "btn-primary btn-block")
             )
           )
         )
@@ -2102,6 +2140,10 @@ build_main_server <- function(input, output, session) {
     )
   })
 
+  observeEvent(input$clear_library_selection, {
+    DT::selectRows(DT::dataTableProxy("library_table"), NULL)
+  })
+
   selected_chart_records <- reactive({
     selected_rows <- input$library_table_rows_selected
     library_rows <- filtered_library()
@@ -2198,6 +2240,10 @@ build_main_server <- function(input, output, session) {
       rownames = FALSE,
       options = list(dom = "tip", pageLength = 6, scrollX = TRUE)
       )
+  })
+
+  observeEvent(input$clear_presentation_chart_selection, {
+    DT::selectRows(DT::dataTableProxy("presentation_chart_table"), NULL)
   })
 
   output$presentation_chart_actions <- renderUI({
