@@ -422,7 +422,7 @@ build_main_ui <- function() {
                   tabsetPanel,
                   c(
                     list(id = "transform_tabs", type = "tabs"),
-                    list(transform_profile_ui("transform_all", "All series")),
+                    list(transform_profile_ui("transform_all", "All")),
                     lapply(seq_len(MAX_SERIES), function(index) {
                       transform_profile_ui(
                         paste0("transform_", index),
@@ -811,7 +811,7 @@ build_main_server <- function(input, output, session) {
 
     apply_builder_state(cleared_state, navigate_builder = FALSE)
     updateRadioGroupButtons(session, "side_panel_mode", selected = "transform")
-    updateTabsetPanel(session, "transform_tabs", selected = "All series")
+    updateTabsetPanel(session, "transform_tabs", selected = "All")
     updateTabsetPanel(session, "analysis_tabs", selected = "Correlations")
     updateNumericInput(session, "analysis_corr_window", value = 4)
     updateRadioGroupButtons(session, "analysis_reg_errors", selected = "classical")
