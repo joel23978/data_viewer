@@ -777,12 +777,33 @@ kalman_filter_analysis <- function(data, series_name, side = "two_sided", displa
 
   frequency_info <- analysis_series_frequency(series_data$date)
   ts_data <- stats::ts(series_data$value, frequency = frequency_info$frequency)
-  model_fit <- stats::StructTS(ts_data, type = "trend")
+
+  build_local_trend_model <- function(values) {
+    first_difference_variance <- stats::var(as.numeric(diff(values)), na.rm = TRUE)
+    second_difference_variance <- stats::var(as.numeric(diff(diff(values))), na.rm = TRUE)
+    base_variance <- max(first_difference_variance, stats::var(as.numeric(values), na.rm = TRUE) / 10, 1e-4)
+    observation_variance <- max(base_variance * 0.25, 1e-5)
+    level_variance <- max(base_variance * 0.05, 1e-6)
+    slope_variance <- max(second_difference_variance * 0.025, 1e-7)
+    diff_scale <- stats::sd(diff(values), na.rm = TRUE)
+    state_scale <- max(diff_scale, stats::sd(values, na.rm = TRUE) / 4, 1e-3)
+
+    list(
+      Z = c(1, 0),
+      a = c(values[[1]], 0),
+      P = diag(state_scale ^ 2, 2),
+      T = matrix(c(1, 0, 1, 1), nrow = 2),
+      V = diag(c(level_variance, slope_variance), 2),
+      h = observation_variance,
+      Pn = diag(1e7, 2)
+    )
+  }
+  model_fit <- build_local_trend_model(ts_data)
 
   trend_values <- if (identical(side, "one_sided")) {
-    as.numeric(stats::KalmanRun(ts_data, model_fit$model)$states[, 1])
+    as.numeric(stats::KalmanRun(ts_data, model_fit)$states[, 1])
   } else {
-    as.numeric(stats::KalmanSmooth(ts_data, model_fit$model)$smooth[, 1])
+    as.numeric(stats::KalmanSmooth(ts_data, model_fit)$smooth[, 1])
   }
 
   component_data <- series_data %>%
