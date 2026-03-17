@@ -1557,7 +1557,11 @@ build_main_server <- function(input, output, session) {
 
     build_chart_plot(preview_payload$data, preview_style) +
       theme(
-        plot.margin = margin(t = 0, r = 0, b = 0, l = 0),
+        plot.title = element_blank(),
+        plot.subtitle = element_blank(),
+        plot.caption = element_blank(),
+        plot.tag = element_blank(),
+        plot.margin = margin(t = -10, r = 0, b = -6, l = 0),
         axis.text.y.right = element_text(margin = margin(l = 10))
       )
   })
