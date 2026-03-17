@@ -717,6 +717,7 @@ build_main_server <- function(input, output, session) {
         input$transform_all_lagged_value,
         input$transform_all_lagged_pct,
         input$transform_all_lagged_ann,
+        input$transform_all_subtract_series,
         input$transform_all_expression
       )
     },
@@ -908,6 +909,7 @@ build_main_server <- function(input, output, session) {
           input$transform_all_lagged_value,
           input$transform_all_lagged_pct,
           input$transform_all_lagged_ann,
+          input$transform_all_subtract_series,
           input$transform_all_expression
         ),
         unlist(lapply(seq_len(MAX_SERIES), function(index) {
@@ -917,6 +919,7 @@ build_main_server <- function(input, output, session) {
             input[[transform_input_id(paste0("transform_", index), "lagged_value")]],
             input[[transform_input_id(paste0("transform_", index), "lagged_pct")]],
             input[[transform_input_id(paste0("transform_", index), "lagged_ann")]],
+            input[[transform_input_id(paste0("transform_", index), "subtract_series")]],
             input[[transform_input_id(paste0("transform_", index), "expression")]]
           )
         }), recursive = FALSE)

@@ -783,8 +783,13 @@ default_transform_profile <- function() {
     rolling_sum = 1,
     lagged_value = 0,
     lagged_pct = 0,
-    lagged_ann = 0
+    lagged_ann = 0,
+    subtract_series = "none"
   )
+}
+
+transform_difference_choices <- function() {
+  c("None" = "none", stats::setNames(as.character(seq_len(MAX_SERIES)), paste("Series", seq_len(MAX_SERIES))))
 }
 
 transform_profile_ui <- function(prefix, title, include_copy_button = FALSE) {
@@ -824,6 +829,12 @@ transform_profile_ui <- function(prefix, title, include_copy_button = FALSE) {
       min = 0,
       step = 1
     ),
+    selectInput(
+      transform_input_id(prefix, "subtract_series"),
+      "Subtract another series",
+      choices = transform_difference_choices(),
+      selected = "none"
+    ),
     textInput(
       transform_input_id(prefix, "expression"),
       "Custom formula applied after the transformations above. Use X as the series value.",
@@ -841,7 +852,8 @@ transform_profile_from_input <- function(input, prefix) {
     rolling_sum = as.numeric(input[[transform_input_id(prefix, "rolling_sum")]] %||% 1),
     lagged_value = as.numeric(input[[transform_input_id(prefix, "lagged_value")]] %||% 0),
     lagged_pct = as.numeric(input[[transform_input_id(prefix, "lagged_pct")]] %||% 0),
-    lagged_ann = as.numeric(input[[transform_input_id(prefix, "lagged_ann")]] %||% 0)
+    lagged_ann = as.numeric(input[[transform_input_id(prefix, "lagged_ann")]] %||% 0),
+    subtract_series = as.character(input[[transform_input_id(prefix, "subtract_series")]] %||% "none")
   )
 }
 
@@ -854,6 +866,7 @@ restore_transform_profile <- function(session, prefix, profile) {
   updateNumericInput(session, transform_input_id(prefix, "lagged_value"), value = profile$lagged_value %||% 0)
   updateNumericInput(session, transform_input_id(prefix, "lagged_pct"), value = profile$lagged_pct %||% 0)
   updateNumericInput(session, transform_input_id(prefix, "lagged_ann"), value = profile$lagged_ann %||% 0)
+  updateSelectInput(session, transform_input_id(prefix, "subtract_series"), selected = profile$subtract_series %||% "none")
 }
 
 series_spec_from_input <- function(input, index, transform_profile = default_transform_profile()) {
@@ -1002,7 +1015,8 @@ normalize_transform_profile <- function(profile) {
     rolling_sum = as.numeric(profile$rolling_sum %||% 1),
     lagged_value = as.numeric(profile$lagged_value %||% 0),
     lagged_pct = as.numeric(profile$lagged_pct %||% 0),
-    lagged_ann = as.numeric(profile$lagged_ann %||% 0)
+    lagged_ann = as.numeric(profile$lagged_ann %||% 0),
+    subtract_series = as.character(profile$subtract_series %||% "none")
   )
 }
 
@@ -1400,6 +1414,30 @@ apply_lagged_annualised <- function(data, periods) {
     drop_na(value)
 }
 
+apply_series_difference <- function(data, reference_data, reference_index) {
+  if (nrow(data) == 0) {
+    return(data)
+  }
+
+  if (is.null(reference_data) || nrow(reference_data) == 0) {
+    stop(sprintf("Series %s has no data to subtract.", reference_index), call. = FALSE)
+  }
+
+  if (dplyr::n_distinct(reference_data$name) != 1) {
+    stop(sprintf("Series %s must resolve to a single line before it can be subtracted.", reference_index), call. = FALSE)
+  }
+
+  reference_lookup <- reference_data %>%
+    group_by(date) %>%
+    summarise(reference_value = dplyr::last(value), .groups = "drop")
+
+  data %>%
+    left_join(reference_lookup, by = "date") %>%
+    mutate(value = value - reference_value) %>%
+    select(-reference_value) %>%
+    drop_na(value)
+}
+
 build_chart_data <- function(chart_state) {
   specs <- Filter(Negate(is.null), chart_state$series)
   messages <- character()
@@ -1439,6 +1477,44 @@ build_chart_data <- function(chart_state) {
 
   messages <- c(messages, vapply(series_results, function(result) result$message %||% "", character(1)))
   messages <- messages[nzchar(messages)]
+
+  series_data_by_index <- stats::setNames(
+    lapply(series_results, `[[`, "data"),
+    vapply(specs, function(spec) as.character(spec$index), character(1))
+  )
+
+  series_results <- lapply(seq_along(series_results), function(result_index) {
+    result <- series_results[[result_index]]
+    spec <- specs[[result_index]]
+    subtract_series <- spec$transform_profile$subtract_series %||% "none"
+
+    if (identical(subtract_series, "none")) {
+      return(result)
+    }
+
+    reference_data <- series_data_by_index[[subtract_series]]
+
+    tryCatch(
+      {
+        result$data <- apply_series_difference(result$data, reference_data, subtract_series)
+        result
+      },
+      error = function(error) {
+        result$data <- empty_chart_data()
+        result$message <- paste(
+          c(
+            result$message %||% "",
+            sprintf("Series %s difference vs Series %s: %s", spec$index, subtract_series, conditionMessage(error))
+          )[nzchar(c(result$message %||% "", sprintf("Series %s difference vs Series %s: %s", spec$index, subtract_series, conditionMessage(error))))],
+          collapse = " "
+        )
+        result
+      }
+    )
+  })
+
+  messages <- c(messages, vapply(series_results, function(result) result$message %||% "", character(1)))
+  messages <- unique(messages[nzchar(messages)])
 
   combined_data <- series_results %>%
     lapply(`[[`, "data") %>%
