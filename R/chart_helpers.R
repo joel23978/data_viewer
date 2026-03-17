@@ -1695,19 +1695,19 @@ build_chart_plot <- function(data, style) {
     ) +
     theme_minimal(base_size = 12) +
     theme(
-      plot.tag = element_text(face = "bold", size = 15, colour = "#0f172a", hjust = 1),
+      plot.tag = element_text(face = "bold", size = 16, colour = "#000000", hjust = 1),
       plot.tag.position = c(1, 0.945),
-      plot.title = element_text(face = "bold", size = 16, hjust = 0, margin = margin(b = 12)),
-      plot.subtitle = element_text(size = 11, colour = "#475569", hjust = 0, margin = margin(b = 10)),
-      plot.caption = element_text(size = 12, colour = "#4b5563"),
+      plot.title = element_text(face = "bold", size = 18, hjust = 0, margin = margin(b = 18)),
+      plot.subtitle = element_text(size = 16, colour = "#475569", hjust = 0, margin = margin(b = 10)),
+      plot.caption = element_text(size = 16, colour = "#4b5563"),
       plot.title.position = "plot",
       plot.caption.position = "plot",
-      axis.text = element_text(size = 14),
+      axis.text = element_text(size = 16),
       panel.grid.minor = element_blank(),
       panel.grid.major.x = element_blank(),
       legend.position = style$legend,
       legend.title = element_blank(),
-      legend.text = element_text(size = 14),
+      legend.text = element_text(size = 16),
       plot.background = element_rect(fill = "white", colour = NA)
     )
 
@@ -1754,7 +1754,7 @@ build_chart_widget <- function(data, style) {
         yanchor = "top",
         showarrow = FALSE,
         align = "left",
-        font = list(size = 13, color = "#4b5563")
+        font = list(size = 16, color = "#4b5563")
       )
     ))
   }
@@ -1773,7 +1773,7 @@ build_chart_widget <- function(data, style) {
         yanchor = "bottom",
         showarrow = FALSE,
         align = "right",
-        font = list(size = 15, color = "#0f172a")
+        font = list(size = 16, color = "#000000")
       )
     ))
   }
@@ -1793,9 +1793,9 @@ build_chart_widget <- function(data, style) {
       text = if (nzchar(subtitle_text)) {
         paste0(
           title_markup,
-          "<br><sup>",
+          "<br><span style='display:inline-block;margin-top:8px;font-size:16px;color:#475569;'>",
           htmltools::htmlEscape(subtitle_text),
-          "</sup>"
+          "</span>"
         )
       } else {
         title_markup
@@ -1807,14 +1807,24 @@ build_chart_widget <- function(data, style) {
     layout_args$title <- list(text = "", x = 0, xanchor = "left")
   }
 
-  layout_args$yaxis <- modifyList(layout_args$yaxis %||% list(), list(side = "right"))
+  layout_args$xaxis <- modifyList(
+    layout_args$xaxis %||% list(),
+    list(tickfont = list(size = 16))
+  )
+  layout_args$yaxis <- modifyList(
+    layout_args$yaxis %||% list(),
+    list(
+      side = "right",
+      tickfont = list(size = 16)
+    )
+  )
 
   if (identical(style$legend, "none")) {
     layout_args$showlegend <- FALSE
   } else {
     layout_args$legend <- list(
       orientation = if (identical(style$legend, "bottom")) "h" else "v",
-      font = list(size = 14)
+      font = list(size = 16)
     )
   }
 
@@ -1841,7 +1851,7 @@ empty_plotly_widget <- function(message) {
           xref = "paper",
           yref = "paper",
           showarrow = FALSE,
-          font = list(size = 16, color = "#64748b")
+          font = list(size = 18, color = "#64748b")
         )
       )
     )
