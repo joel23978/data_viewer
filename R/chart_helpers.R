@@ -325,11 +325,13 @@ builder_series_ui <- function(index) {
     ),
     conditionalPanel(
       condition = sprintf("input.%s == '1'", enabled_id),
-      selectInput(
+      radioGroupButtons(
         source_id,
         "Data source",
-        choices = c("ABS CPI", "FRED", "dbnomics", "rba", "abs"),
-        selected = "ABS CPI"
+        choices = c("ABS CPI" = "ABS CPI", "FRED" = "FRED", "DBnomics" = "dbnomics", "RBA" = "rba", "ABS" = "abs"),
+        selected = "ABS CPI",
+        justified = FALSE,
+        checkIcon = list(yes = icon("check"))
       ),
       uiOutput(series_source_controls_id(index)),
       textInput(series_input_id(index, "label"), "Chart label shown in the legend", value = ""),
@@ -1773,7 +1775,7 @@ restore_series_spec <- function(session, index, spec = NULL) {
     return(invisible(NULL))
   }
 
-  updateSelectInput(session, series_input_id(index, "source"), selected = spec$source)
+  updateRadioGroupButtons(session, series_input_id(index, "source"), selected = spec$source)
   updateTextInput(session, series_input_id(index, "label"), value = spec$label %||% "")
   updateRadioGroupButtons(session, series_input_id(index, "vis_type"), selected = spec$vis_type %||% "line")
 
@@ -1880,7 +1882,7 @@ restore_chart_state <- function(session, chart_state) {
   updateTextInput(session, "style_y_axis_label", value = chart_state$style$y_axis_label)
   updateTextInput(session, "style_note", value = chart_state$style$note)
   updateRadioGroupButtons(session, "style_legend", selected = chart_state$style$legend)
-  updateSelectInput(session, "style_palette", selected = chart_state$style$palette)
+  updateRadioGroupButtons(session, "style_palette", selected = chart_state$style$palette)
   updateSelectInput(session, "style_date_format", selected = chart_state$style$date_format)
   updateNumericInput(session, "style_x_labels", value = chart_state$style$x_labels)
   updateRadioGroupButtons(session, "style_auto_y_axis", selected = if (isTRUE(chart_state$style$auto_y_axis)) "auto" else "manual")

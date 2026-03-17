@@ -342,7 +342,14 @@ build_main_ui <- function() {
                 ),
                 column(
                   width = 4,
-                  selectInput("style_palette", "Colour palette", choices = APP_PALETTES, selected = APP_PALETTES[[1]]),
+                  radioGroupButtons(
+                    "style_palette",
+                    "Colour palette",
+                    choices = stats::setNames(APP_PALETTES, APP_PALETTES),
+                    selected = APP_PALETTES[[1]],
+                    justified = FALSE,
+                    checkIcon = list(yes = icon("check"))
+                  ),
                   radioGroupButtons(
                     "style_legend",
                     "Legend position",
