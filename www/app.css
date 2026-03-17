@@ -79,7 +79,12 @@ body {
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
-  margin-bottom: 16px;
+  margin-bottom: 10px;
+  padding-bottom: 0;
+}
+
+.app-card__body .nav-tabs > li {
+  margin-bottom: 0;
 }
 
 .app-card__body .nav-tabs > li > a {
@@ -89,6 +94,7 @@ body {
   color: #1e3a8a;
   font-weight: 600;
   margin-right: 0;
+  margin-bottom: 0;
   padding: 8px 12px;
 }
 
