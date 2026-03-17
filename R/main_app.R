@@ -106,7 +106,7 @@ build_search_tab_ui <- function() {
           "Selected Result",
           class = "search-sidebar-card",
           uiOutput("search_selected_meta"),
-          plotlyOutput("search_preview_plot", height = "280px"),
+          plotOutput("search_preview_plot", height = "280px"),
           radioGroupButtons(
             "search_target_series",
             "Add to",
@@ -1311,11 +1311,17 @@ build_main_server <- function(input, output, session) {
     )
   })
 
-  search_preview_widget <- reactive({
+  search_preview_plot <- reactive({
     search_row <- selected_search_result()
 
     if (is.null(search_row)) {
-      return(empty_plotly_widget("Select a result to preview it."))
+      return(
+        ggplot() +
+          annotate("text", x = 0.5, y = 0.5, label = "Select a result to preview it.", size = 5, colour = "#64748b") +
+          xlim(0, 1) +
+          ylim(0, 1) +
+          theme_void()
+      )
     }
 
     preview_spec <- search_result_series_spec(search_row, 1)
@@ -1326,14 +1332,20 @@ build_main_server <- function(input, output, session) {
     preview_payload <- build_chart_data(preview_state)
 
     if (nrow(preview_payload$data) == 0) {
-      return(empty_plotly_widget("No preview data is available for this result."))
+      return(
+        ggplot() +
+          annotate("text", x = 0.5, y = 0.5, label = "No preview data is available for this result.", size = 5, colour = "#64748b") +
+          xlim(0, 1) +
+          ylim(0, 1) +
+          theme_void()
+      )
     }
 
-    build_chart_widget(preview_payload$data, preview_state$style)
+    build_chart_plot(preview_payload$data, preview_state$style)
   })
 
-  output$search_preview_plot <- renderPlotly({
-    search_preview_widget()
+  output$search_preview_plot <- renderPlot({
+    search_preview_plot()
   })
 
   observeEvent(input$search_add_series, {

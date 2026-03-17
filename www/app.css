@@ -258,9 +258,9 @@ body {
 }
 
 .search-sidebar-card .library-meta h3 {
-  font-size: 24px;
-  line-height: 1.12;
-  margin-bottom: 12px;
+  font-size: 18px;
+  line-height: 1.18;
+  margin-bottom: 10px;
 }
 
 .search-sidebar-card .library-meta .muted-copy {
