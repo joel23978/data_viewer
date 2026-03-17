@@ -129,7 +129,7 @@ body {
 .app-card__body .radio-group-buttons > .btn-group-container-sw > .btn-group > .btn,
 .app-card__body .radio-group-buttons > .btn-group-container-sw > .btn-group-vertical > .btn,
 .app-card__body .radio-group-buttons > .btn-group-container-sw > .radioBtn {
-  border-radius: 16px !important;
+  border-radius: 14px !important;
   flex: 1 1 0;
   margin-left: 0 !important;
   max-width: 100%;
@@ -141,7 +141,7 @@ body {
 .app-card__body .form-control,
 .app-card__body .selectize-control.single .selectize-input,
 .app-card__body .selectize-input {
-  border-radius: 16px;
+  border-radius: 14px;
 }
 
 .muted-copy {
