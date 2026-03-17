@@ -258,6 +258,14 @@ build_main_ui <- function() {
                 class = "muted-copy",
                 "Set the date window and choose whether to show the data table."
               ),
+              radioGroupButtons(
+                "date_window_shortcut",
+                "Quick range",
+                choices = c("1Y" = "1", "3Y" = "3", "5Y" = "5", "10Y" = "10", "Max" = "max"),
+                selected = character(0),
+                justified = TRUE,
+                checkIcon = list(yes = icon("check"))
+              ),
               fluidRow(
                 column(
                   width = 6,
@@ -821,6 +829,37 @@ build_main_server <- function(input, output, session) {
     updateNumericInput(session, "analysis_forecast_horizon", value = 4)
     showNotification("Workspace tools cleared.", type = "message")
   })
+
+  apply_date_window_shortcut <- function(shortcut_value) {
+    shortcut_value <- as.character(shortcut_value %||% "")
+    if (!nzchar(shortcut_value)) {
+      return(invisible(NULL))
+    }
+
+    year_bounds <- default_year_bounds()
+    current_end_date <- as.Date(input$end_date %||% year_bounds$end_date)
+
+    shortcut_start_date <- if (identical(shortcut_value, "max")) {
+      year_bounds$min_date
+    } else {
+      max(year_bounds$min_date, current_end_date %m-% years(as.numeric(shortcut_value)))
+    }
+
+    updateDateInput(session, "start_date", value = shortcut_start_date)
+  }
+
+  observeEvent(input$date_window_shortcut, {
+    apply_date_window_shortcut(input$date_window_shortcut)
+  }, ignoreInit = TRUE)
+
+  observeEvent(input$end_date, {
+    shortcut_value <- input$date_window_shortcut %||% ""
+    if (!nzchar(as.character(shortcut_value))) {
+      return(invisible(NULL))
+    }
+
+    apply_date_window_shortcut(shortcut_value)
+  }, ignoreInit = TRUE)
 
   builder_state <- reactive({
     input_state <- normalize_chart_state(builder_state_from_input(input))
