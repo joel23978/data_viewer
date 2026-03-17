@@ -1375,7 +1375,14 @@ build_main_server <- function(input, output, session) {
       )
     }
 
-    build_chart_plot(preview_payload$data, preview_state$style)
+    preview_style <- preview_state$style
+    preview_style$title <- ""
+    preview_style$subtitle <- ""
+    preview_style$legend <- "none"
+    preview_style$note <- ""
+    preview_style$y_axis_label <- ""
+
+    build_chart_plot(preview_payload$data, preview_style)
   })
 
   output$search_preview_plot <- renderPlot({
