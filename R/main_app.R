@@ -125,7 +125,7 @@ build_search_tab_ui <- function() {
 
 build_library_tab_ui <- function() {
   div(
-    class = "page-shell",
+    class = "page-shell saved-charts-page",
     fluidRow(
       column(
         width = 6,
@@ -143,17 +143,15 @@ build_library_tab_ui <- function() {
         ),
         chart_card(
           "Presentations Library",
+          class = "presentation-library-card",
           textInput("presentation_search", "Search presentations", value = "", placeholder = "Search presentations"),
           textInput("presentation_title", "Presentation title", value = ""),
           textAreaInput("presentation_description", "Presentation notes", value = "", rows = 2, resize = "vertical"),
           DT::dataTableOutput("presentation_table"),
           div(
-            class = "library-actions",
+            class = "library-actions presentation-library-actions",
             actionButton("create_presentation", "Create presentation"),
-            actionButton("delete_presentation", "Delete presentation")
-          ),
-          div(
-            class = "library-actions",
+            actionButton("delete_presentation", "Delete presentation"),
             actionButton("add_to_presentation", "Add selected charts"),
             actionButton("replace_presentation_charts", "Replace with selected charts")
           )

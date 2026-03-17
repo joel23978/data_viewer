@@ -228,18 +228,47 @@ body {
   margin-top: 18px;
 }
 
+.export-row .btn,
+.export-row .btn-default,
+.export-row .btn-primary,
+.library-actions .btn,
+.library-actions .btn-default,
+.library-actions .btn-primary,
+.app-card__body > .btn-block,
+.app-card__body > .btn-primary.btn-block,
+.app-card__body > .btn-default.btn-block {
+  border-radius: 12px;
+  font-size: 14px;
+  font-weight: 600;
+  min-height: 44px;
+  padding: 10px 16px;
+}
+
 .library-actions {
   display: flex;
   gap: 10px;
   margin-top: 14px;
 }
 
-.library-actions .btn,
-.library-actions .btn-default,
-.library-actions .btn-primary {
-  border-radius: 999px;
-  font-weight: 600;
-  padding: 10px 16px;
+.presentation-library-actions {
+  flex-wrap: nowrap;
+  gap: 10px;
+}
+
+.presentation-library-actions .btn,
+.presentation-library-actions .btn-default,
+.presentation-library-actions .btn-primary {
+  flex: 1 1 0;
+  min-width: 0;
+  white-space: nowrap;
+}
+
+.saved-charts-page .library-actions .btn,
+.saved-charts-page .library-actions .btn-default,
+.saved-charts-page .library-actions .btn-primary {
+  font-size: 13px;
+  min-height: 40px;
+  padding: 8px 14px;
 }
 
 .empty-state {
