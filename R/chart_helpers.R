@@ -1606,6 +1606,17 @@ build_chart_plot <- function(data, style) {
 
   axis_settings <- pretty_axis_breaks(data, style)
   x_breaks <- scales::breaks_pretty(n = max(2, round(style$x_labels %||% 6)))
+  bottom_gridline_value <- if (length(axis_settings$breaks) > 0 && all(is.finite(axis_settings$breaks))) {
+    if (isTRUE(style$invert_y_axis)) {
+      max(axis_settings$breaks, na.rm = TRUE)
+    } else {
+      min(axis_settings$breaks, na.rm = TRUE)
+    }
+  } else if (isTRUE(style$invert_y_axis)) {
+    axis_settings$max
+  } else {
+    axis_settings$min
+  }
 
   chart_plot <- ggplot(data, aes(x = date, y = value, colour = name, fill = name))
 
@@ -1675,6 +1686,11 @@ build_chart_plot <- function(data, style) {
       )
   }
 
+  if (is.finite(bottom_gridline_value)) {
+    chart_plot <- chart_plot +
+      geom_hline(yintercept = bottom_gridline_value, colour = "#000000", linewidth = 0.5)
+  }
+
   chart_plot <- chart_plot +
     scale_colour_manual(values = palette_values(data, style$palette)) +
     scale_fill_manual(values = palette_values(data, style$palette)) +
@@ -1698,11 +1714,11 @@ build_chart_plot <- function(data, style) {
       plot.tag = element_text(face = "bold", size = 16, colour = "#000000", hjust = 1),
       plot.tag.position = c(1, 0.945),
       plot.title = element_text(face = "bold", size = 18, hjust = 0, margin = margin(b = 18)),
-      plot.subtitle = element_text(size = 16, colour = "#475569", hjust = 0, margin = margin(b = 10)),
-      plot.caption = element_text(size = 16, colour = "#4b5563"),
+      plot.subtitle = element_text(size = 16, colour = "#000000", hjust = 0, margin = margin(b = 10)),
+      plot.caption = element_text(size = 16, colour = "#000000"),
       plot.title.position = "plot",
       plot.caption.position = "plot",
-      axis.text = element_text(size = 16),
+      axis.text = element_text(size = 16, colour = "#000000"),
       panel.grid.minor = element_blank(),
       panel.grid.major.x = element_blank(),
       legend.position = style$legend,
@@ -1754,7 +1770,7 @@ build_chart_widget <- function(data, style) {
         yanchor = "top",
         showarrow = FALSE,
         align = "left",
-        font = list(size = 16, color = "#4b5563")
+        font = list(size = 16, color = "#000000")
       )
     ))
   }
@@ -1793,7 +1809,7 @@ build_chart_widget <- function(data, style) {
       text = if (nzchar(subtitle_text)) {
         paste0(
           title_markup,
-          "<br><span style='display:inline-block;margin-top:8px;font-size:16px;color:#475569;'>",
+          "<br><span style='display:inline-block;margin-top:8px;font-size:16px;color:#000000;'>",
           htmltools::htmlEscape(subtitle_text),
           "</span>"
         )
@@ -1809,13 +1825,13 @@ build_chart_widget <- function(data, style) {
 
   layout_args$xaxis <- modifyList(
     layout_args$xaxis %||% list(),
-    list(tickfont = list(size = 16))
+    list(tickfont = list(size = 16, color = "#000000"))
   )
   layout_args$yaxis <- modifyList(
     layout_args$yaxis %||% list(),
     list(
       side = "right",
-      tickfont = list(size = 16)
+      tickfont = list(size = 16, color = "#000000")
     )
   )
 
