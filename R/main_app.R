@@ -341,17 +341,17 @@ build_main_ui <- function() {
                 class = "muted-copy",
                 "Set titles, axes, guides, colours, and export options."
               ),
+              textInput("style_note", "Source note or caption shown below the chart", value = default_builder_state()$style$note),
               fluidRow(
                 column(
                   width = 4,
                   textInput("style_title", "Chart title shown above the plot", value = "Custom data view"),
                   textInput("style_subtitle", "Chart subtitle shown below the title", value = ""),
-                  textInput("style_y_axis_label", "Y-axis label", value = "%"),
-                  textInput("style_note", "Source note or caption shown below the chart", value = default_builder_state()$style$note),
-                  selectInput("style_font_family", "Chart font", choices = APP_CHART_FONTS, selected = APP_CHART_FONTS[[1]])
+                  textInput("style_y_axis_label", "Y-axis label", value = "%")
                 ),
                 column(
                   width = 4,
+                  selectInput("style_font_family", "Chart font", choices = APP_CHART_FONTS, selected = APP_CHART_FONTS[[1]]),
                   selectInput("style_palette", "Colour palette", choices = APP_PALETTES, selected = APP_PALETTES[[1]]),
                   radioGroupButtons(
                     "style_legend",
@@ -366,6 +366,8 @@ build_main_ui <- function() {
                 ),
                 column(
                   width = 4,
+                  selectInput("style_date_format", "Date label format on the x-axis", choices = APP_DATE_FORMATS, selected = APP_DATE_FORMATS[[2]]),
+                  numericInput("style_x_labels", "Approximate number of x-axis labels", value = 6, min = 2, step = 1),
                   radioGroupButtons(
                     "style_auto_y_axis",
                     "Y-axis range mode",
@@ -388,8 +390,16 @@ build_main_ui <- function() {
                     justified = TRUE,
                     checkIcon = list(yes = icon("check"))
                   ),
-                  numericInput("export_width", "PNG export width", value = 7, min = 4, step = 0.5),
-                  numericInput("export_height", "PNG export height", value = 5, min = 3, step = 0.5)
+                  fluidRow(
+                    column(
+                      width = 6,
+                      numericInput("export_width", "PNG export width", value = 7, min = 4, step = 0.5)
+                    ),
+                    column(
+                      width = 6,
+                      numericInput("export_height", "PNG export height", value = 5, min = 3, step = 0.5)
+                    )
+                  )
                 )
               ),
               tags$hr(),
