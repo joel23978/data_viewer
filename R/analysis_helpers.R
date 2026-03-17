@@ -463,7 +463,42 @@ seasonal_adjustment_analysis <- function(data, series_name, display_mode = "both
   }
 
   prepared_series <- seasonal_adjustment_series(series_data)
-  model <- seasonal::seas(prepared_series$ts_data, seats = "")
+  seasonal_attempts <- list(
+    function(series) seasonal::seas(series),
+    function(series) seasonal::seas(series, transform.function = "none"),
+    function(series) seasonal::seas(series, x11 = "")
+  )
+
+  model <- NULL
+  attempt_errors <- character()
+
+  for (attempt in seasonal_attempts) {
+    model <- tryCatch(
+      attempt(prepared_series$ts_data),
+      error = function(error) {
+        attempt_errors <<- c(attempt_errors, conditionMessage(error))
+        NULL
+      }
+    )
+
+    if (!is.null(model)) {
+      break
+    }
+  }
+
+  if (is.null(model)) {
+    stop(
+      paste(
+        c(
+          "X-13 seasonal adjustment could not be estimated for the selected series.",
+          unique(attempt_errors)
+        ),
+        collapse = " "
+      ),
+      call. = FALSE
+    )
+  }
+
   adjusted_values <- as.numeric(seasonal::final(model))
 
   adjusted_data <- prepared_series$regular_series %>%
