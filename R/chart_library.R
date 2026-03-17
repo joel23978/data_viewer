@@ -30,6 +30,46 @@ empty_chart_presentation_library <- function() {
   )
 }
 
+compact_chart_snapshot <- function(data_snapshot) {
+  if (is.null(data_snapshot) || !nrow(data_snapshot)) {
+    return(tibble::tibble(
+      date = integer(),
+      value = numeric(),
+      name = factor(),
+      plotting = factor()
+    ))
+  }
+
+  data_snapshot %>%
+    transmute(
+      date = as.integer(as.Date(date)),
+      value = as.numeric(value),
+      name = factor(as.character(name)),
+      plotting = factor(as.character(plotting))
+    )
+}
+
+restore_chart_snapshot <- function(data_snapshot) {
+  if (is.null(data_snapshot) || !nrow(data_snapshot)) {
+    return(empty_chart_data())
+  }
+
+  date_values <- data_snapshot$date
+  if (inherits(date_values, "Date")) {
+    restored_dates <- as.Date(date_values)
+  } else {
+    restored_dates <- as.Date(as.numeric(date_values), origin = "1970-01-01")
+  }
+
+  tibble::tibble(
+    date = restored_dates,
+    value = as.numeric(data_snapshot$value),
+    name = as.character(data_snapshot$name),
+    plotting = as.character(data_snapshot$plotting)
+  ) %>%
+    filter(!is.na(date), is.finite(value), nzchar(name), nzchar(plotting))
+}
+
 ensure_chart_library <- function() {
   path <- chart_library_path()
 
@@ -55,7 +95,11 @@ read_chart_library <- function() {
       mutate(saved_at = as.POSIXct(saved_at, tz = Sys.timezone()))
   }
 
-  library_data
+  library_data %>%
+    mutate(
+      chart_state = lapply(chart_state, normalize_chart_state),
+      data_snapshot = lapply(data_snapshot, restore_chart_snapshot)
+    )
 }
 
 write_chart_library <- function(chart_library) {
@@ -99,6 +143,7 @@ summarise_series_sources <- function(series_specs) {
 }
 
 new_chart_record <- function(chart_state, data_snapshot, title = NULL, description = "") {
+  chart_state <- normalize_chart_state(chart_state)
   chart_title <- title %||% chart_state$style$title
   chart_title <- trimws(chart_title)
 
@@ -114,7 +159,7 @@ new_chart_record <- function(chart_state, data_snapshot, title = NULL, descripti
     series_count = length(Filter(Negate(is.null), chart_state$series)),
     saved_at = Sys.time(),
     chart_state = list(chart_state),
-    data_snapshot = list(data_snapshot)
+    data_snapshot = list(compact_chart_snapshot(data_snapshot))
   )
 }
 

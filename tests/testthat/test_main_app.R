@@ -20,7 +20,7 @@ build_test_state <- function() {
         transform = "index",
         rebase_date = as.Date("2019-12-31"),
         label = "All groups CPI",
-        transform_profile = list(expression = "X", moving_average = 1, lagged_value = 0, lagged_pct = 0, lagged_ann = 0),
+        transform_profile = list(expression = "X", moving_average = 1, rolling_sum = 1, lagged_value = 0, lagged_pct = 0, lagged_ann = 0),
         vis_type = "line"
       ),
       list(
@@ -31,13 +31,13 @@ build_test_state <- function() {
         transform = "index",
         rebase_date = as.Date("2019-12-31"),
         label = "Housing CPI",
-        transform_profile = list(expression = "X", moving_average = 1, lagged_value = 0, lagged_pct = 0, lagged_ann = 0),
+        transform_profile = list(expression = "X", moving_average = 1, rolling_sum = 1, lagged_value = 0, lagged_pct = 0, lagged_ann = 0),
         vis_type = "line"
       ),
       NULL,
       NULL
     ),
-    all_series_transform = list(expression = "X", moving_average = 1, lagged_value = 0, lagged_pct = 0, lagged_ann = 0),
+    all_series_transform = list(expression = "X", moving_average = 1, rolling_sum = 1, lagged_value = 0, lagged_pct = 0, lagged_ann = 0),
     style = list(
       title = "Test chart",
       subtitle = "Test subtitle",
@@ -93,26 +93,119 @@ test_that("chart builder pipeline returns plottable data and widgets", {
   expect_true(length(widget_with_note$x$layoutAttrs[[1]]$annotations) >= 1)
 })
 
+test_that("rolling sum transformation is applied to chart data", {
+  state <- build_test_state()
+  state$series[[2]] <- NULL
+  state$series[[1]]$transform_profile$rolling_sum <- 3
+
+  base_state <- build_test_state()
+  base_state$series[[2]] <- NULL
+
+  rolling_payload <- build_chart_data(state)
+  base_payload <- build_chart_data(base_state)
+
+  expect_gt(nrow(rolling_payload$data), 0)
+  expect_lt(nrow(rolling_payload$data), nrow(base_payload$data))
+  expect_false(identical(rolling_payload$data$value, tail(base_payload$data$value, nrow(rolling_payload$data))))
+})
+
+test_that("default source notes include source names and series identifiers", {
+  generated_note <- default_source_note(list(
+    list(source = "abs", abs_id = c("A1837036T", "A1837037V")),
+    list(source = "FRED", fred_series = "UNRATE")
+  ))
+
+  expect_equal(generated_note, "Source: abs - A1837036T, A1837037V | FRED - UNRATE")
+  expect_true(grepl("ABS CPI", default_builder_state()$style$note, fixed = TRUE))
+  expect_true(grepl("All groups CPI", default_builder_state()$style$note, fixed = TRUE))
+})
+
 test_that("FRED source controls render the restored series ID", {
+  withr::local_envvar(FRED_API_KEY = "test-key")
+  original_fred_vintage_dates <- fred_vintage_dates
+  on.exit(assign("fred_vintage_dates", original_fred_vintage_dates, envir = .GlobalEnv), add = TRUE)
+
+  assign(
+    "fred_vintage_dates",
+    function(series, force = FALSE) {
+      as.Date(c("2019-01-01", "2020-01-01"))
+    },
+    envir = .GlobalEnv
+  )
+
   fred_ui <- series_source_controls_ui(
     input = list(),
     session = NULL,
     index = 2,
     source_value = "FRED",
-    restored_spec = list(source = "FRED", fred_series = "UNRATE")
+    restored_spec = list(
+      source = "FRED",
+      fred_series = "UNRATE",
+      fred_vintage_mode = "compare",
+      fred_vintage_date = as.Date("2020-01-01")
+    )
   )
 
   expect_true(grepl("UNRATE", as.character(fred_ui), fixed = TRUE))
+  expect_true(grepl("2020-01-01", as.character(fred_ui), fixed = TRUE))
+  expect_true(grepl("Vintage mode", as.character(fred_ui), fixed = TRUE))
 })
 
-test_that("presentation-style HTML export includes chart widgets", {
+test_that("FRED series supports current, historical, and compare vintage modes", {
+  original_fred_data <- fred_data
+  on.exit(assign("fred_data", original_fred_data, envir = .GlobalEnv), add = TRUE)
+
+  assign(
+    "fred_data",
+    function(series, start_date = NULL, end_date = NULL, realtime_start = NULL, realtime_end = NULL, vintage_dates = NULL, name_override = NULL) {
+      series_name <- if (!is.null(name_override) && nzchar(name_override)) name_override else series
+      tibble::tibble(
+        date = seq(as.Date("2020-01-01"), by = "month", length.out = 3),
+        value = seq_len(3),
+        name = series_name
+      )
+    },
+    envir = .GlobalEnv
+  )
+
+  current_spec <- list(
+    index = 1,
+    source = "FRED",
+    fred_series = "UNRATE",
+    fred_vintage_mode = "current",
+    transform_profile = default_transform_profile(),
+    vis_type = "line"
+  )
+  historical_spec <- current_spec
+  historical_spec$fred_vintage_mode <- "historical"
+  historical_spec$fred_vintage_date <- as.Date("2020-01-01")
+  compare_spec <- historical_spec
+  compare_spec$fred_vintage_mode <- "compare"
+
+  current_data <- query_series_history(current_spec)
+  historical_data <- query_series_history(historical_spec)
+  compare_data <- query_series_history(compare_spec)
+
+  expect_equal(unique(current_data$name), "UNRATE")
+  expect_true(any(grepl("2020-01-01 vintage", historical_data$name, fixed = TRUE)))
+  expect_equal(length(unique(compare_data$name)), 2)
+  expect_true(any(grepl("current", compare_data$name, fixed = TRUE)))
+  expect_true(any(grepl("2020-01-01 vintage", compare_data$name, fixed = TRUE)))
+})
+
+test_that("presentation export bundle includes chart HTML and widget assets", {
   state <- build_test_state()
   payload <- build_chart_data(state)
-  temp_file <- tempfile(fileext = ".html")
+  bundle_dir <- tempfile(pattern = "presentation_bundle_test_")
+  dir.create(bundle_dir, recursive = TRUE, showWarnings = FALSE)
+  on.exit(unlink(bundle_dir, recursive = TRUE, force = TRUE), add = TRUE)
+  html_file <- file.path(bundle_dir, "presentation.html")
+  zip_file <- tempfile(fileext = ".zip")
 
   htmltools::save_html(
     htmltools::browsable(
       tags$html(
+        tags$head(tags$title("Presentation test")),
         tags$body(
           tags$section(
             htmltools::as.tags(build_chart_widget(payload$data, state$style))
@@ -120,10 +213,21 @@ test_that("presentation-style HTML export includes chart widgets", {
         )
       )
     ),
-    file = temp_file
+    file = html_file,
+    libdir = "lib"
   )
 
-  exported_html <- paste(readLines(temp_file, warn = FALSE), collapse = "\n")
+  zip::zipr(
+    zipfile = zip_file,
+    files = c("presentation.html", "lib"),
+    root = bundle_dir
+  )
+
+  zipped_files <- unzip(zip_file, list = TRUE)$Name
+  exported_html <- paste(readLines(html_file, warn = FALSE), collapse = "\n")
+
+  expect_true("presentation.html" %in% zipped_files)
+  expect_true(any(startsWith(zipped_files, "lib/")))
   expect_true(grepl("plotly", exported_html, fixed = TRUE))
   expect_true(grepl("html-widget", exported_html, fixed = TRUE))
 })
@@ -153,7 +257,7 @@ test_that("series downloads are cached across date range changes", {
     source = "FRED",
     fred_series = "TEST_CACHE_SERIES",
     label = "Cached FRED",
-    transform_profile = list(expression = "X", moving_average = 1, lagged_value = 0, lagged_pct = 0, lagged_ann = 0),
+    transform_profile = list(expression = "X", moving_average = 1, rolling_sum = 1, lagged_value = 0, lagged_pct = 0, lagged_ann = 0),
     vis_type = "line"
   )
   state_one$series[[2]] <- NULL
@@ -226,6 +330,31 @@ test_that("data search index builds and returns relevant local metadata", {
   expect_equal(classify_location_code("Australia CPI", "", "ABS CPI"), "AUS")
   expect_equal(classify_location_code("Sydney CPI", "", "ABS CPI"), "STATE")
   expect_equal(classify_location_code("United States Industrial Production", "", "FRED"), "INTL")
+})
+
+test_that("saved-chart series are indexed as recent search results", {
+  temp_library <- tempfile(fileext = ".rds")
+  temp_presentation_library <- tempfile(fileext = ".rds")
+  old_option <- getOption("data_viewer.chart_library_path")
+  old_presentation_option <- getOption("data_viewer.chart_presentation_library_path")
+  options(data_viewer.chart_library_path = temp_library)
+  options(data_viewer.chart_presentation_library_path = temp_presentation_library)
+  on.exit(options(data_viewer.chart_library_path = old_option), add = TRUE)
+  on.exit(options(data_viewer.chart_presentation_library_path = old_presentation_option), add = TRUE)
+
+  ensure_chart_library()
+  payload <- build_chart_data(build_test_state())
+  record <- new_chart_record(build_test_state(), payload$data, title = "Saved chart", description = "Recent lookup test")
+  write_chart_library(upsert_chart_record(read_chart_library(), record))
+  invalidate_search_index_cache()
+
+  search_index <- build_search_index(force = TRUE)
+  recent_results <- filter_search_index(search_index, query = "saved chart", source_filter = "Recent", limit = Inf)
+
+  expect_gt(nrow(recent_results), 0)
+  expect_true(all(recent_results$source == "Recent"))
+  expect_true(any(grepl("Saved in Saved chart", recent_results$summary, fixed = TRUE)))
+  expect_true(all(vapply(recent_results$load_payload, function(payload) !is.null(payload$source), logical(1))))
 })
 
 test_that("FRED API search results are formatted and cached for the search tab", {
@@ -416,11 +545,18 @@ test_that("chart library uses the configured path and persists records", {
 
   payload <- build_chart_data(build_test_state())
   record <- new_chart_record(build_test_state(), payload$data, title = "Saved chart", description = "Test record")
+  expect_true(is.factor(record$data_snapshot[[1]]$name))
+  expect_true(is.factor(record$data_snapshot[[1]]$plotting))
+  expect_type(record$data_snapshot[[1]]$date, "integer")
   write_chart_library(upsert_chart_record(initial_library, record))
 
   updated_library <- read_chart_library()
   expect_equal(nrow(updated_library), 1)
   expect_equal(updated_library$title[[1]], "Saved chart")
+  expect_s3_class(updated_library$data_snapshot[[1]]$date, "Date")
+  expect_type(updated_library$data_snapshot[[1]]$value, "double")
+  expect_type(updated_library$data_snapshot[[1]]$name, "character")
+  expect_type(updated_library$data_snapshot[[1]]$plotting, "character")
 
   presentation_record <- new_chart_presentation_record(
     title = "Macro deck",
@@ -497,6 +633,17 @@ test_that("main server supports save and load flows with transform copying", {
     expect_equal(nrow(saved_library), 1)
     expect_equal(saved_library$title[[1]], "Saved from test")
 
+    session$setInputs(
+      search_source_filter = "Recent",
+      search_query = "Saved from test",
+      search_type_filter = "all",
+      search_location_filter = "all",
+      search_frequency_filter = "all"
+    )
+    session$flushReact()
+    expect_gt(nrow(search_results()), 0)
+    expect_true(all(search_results()$source == "Recent"))
+
     session$setInputs(transform_all_expression = "X * 4")
     session$flushReact()
     expect_equal(builder_state()$all_series_transform$expression, "X * 4")
@@ -523,10 +670,25 @@ test_that("main server supports save and load flows with transform copying", {
     expect_equal(nrow(chart_data()), nrow(saved_chart_data))
     expect_equal(sort(unique(chart_data()$name)), sort(unique(saved_chart_data$name)))
 
+    session$setInputs(
+      style_title = "Loaded chart retitled",
+      style_subtitle = "Loaded chart subtitle",
+      series_1_label = "Relabelled CPI",
+      transform_1_expression = "X * 1.5"
+    )
+    session$flushReact()
+
+    expect_equal(builder_state()$style$title, "Loaded chart retitled")
+    expect_equal(builder_state()$style$subtitle, "Loaded chart subtitle")
+    expect_equal(builder_state()$series[[1]]$label, "Relabelled CPI")
+    expect_equal(builder_state()$series[[1]]$transform_profile$expression, "X * 1.5")
+
+    session$setInputs(library_table_rows_selected = 1)
     session$setInputs(library_title = "Updated title")
     session$setInputs(update_chart = 1)
     session$flushReact()
-    expect_equal(read_chart_library()$title[[1]], "Updated title")
+    expect_equal(nrow(read_chart_library()), 1)
+    expect_equal(read_chart_library()$chart_id[[1]], saved_library$chart_id[[1]])
 
     session$setInputs(
       side_panel_mode = "analysis",
@@ -627,6 +789,136 @@ test_that("main server can reset the builder to its default state", {
   })
 })
 
+test_that("main server can clear series setup, presentation, and workspace panels", {
+  shiny::testServer(build_main_server, {
+    session$setInputs(
+      series_1_enabled = TRUE,
+      series_1_label = "CPI one",
+      series_2_enabled = TRUE,
+      series_2_source = "FRED",
+      series_2_fred_series = "UNRATE",
+      series_2_label = "Unemployment",
+      style_title = "Custom title",
+      style_subtitle = "Custom subtitle",
+      style_y_axis_label = "Index",
+      style_note = "Custom note",
+      transform_all_expression = "X * 2",
+      transform_1_rolling_sum = 4,
+      analysis_corr_window = 8,
+      analysis_forecast_horizon = 6
+    )
+    session$flushReact()
+
+    session$setInputs(clear_workspace_tools = 1)
+    session$flushReact()
+
+    expect_equal(builder_state()$all_series_transform, default_transform_profile())
+    active_profiles <- lapply(
+      Filter(Negate(is.null), builder_state()$series),
+      function(spec) spec$transform_profile
+    )
+    expect_true(all(vapply(active_profiles, identical, logical(1), default_transform_profile())))
+
+    session$setInputs(clear_presentation_panel = 1)
+    session$flushReact()
+
+    expect_equal(builder_state()$style, default_style_settings())
+
+    session$setInputs(clear_series_setup = 1)
+    session$flushReact()
+
+    expect_true(all(vapply(builder_state()$series, is.null, logical(1))))
+  })
+})
+
+test_that("main server restores saved FRED vintage settings", {
+  temp_library <- tempfile(fileext = ".rds")
+  temp_presentation_library <- tempfile(fileext = ".rds")
+  old_option <- getOption("data_viewer.chart_library_path")
+  old_presentation_option <- getOption("data_viewer.chart_presentation_library_path")
+  original_fred_data <- fred_data
+  on.exit(options(data_viewer.chart_library_path = old_option), add = TRUE)
+  on.exit(options(data_viewer.chart_presentation_library_path = old_presentation_option), add = TRUE)
+  on.exit(assign("fred_data", original_fred_data, envir = .GlobalEnv), add = TRUE)
+  options(data_viewer.chart_library_path = temp_library)
+  options(data_viewer.chart_presentation_library_path = temp_presentation_library)
+
+  assign(
+    "fred_data",
+    function(series, start_date = NULL, end_date = NULL, realtime_start = NULL, realtime_end = NULL, vintage_dates = NULL, name_override = NULL) {
+      series_name <- if (!is.null(name_override) && nzchar(name_override)) name_override else series
+      tibble::tibble(
+        date = seq(as.Date("2020-01-01"), by = "month", length.out = 24),
+        value = seq_len(24),
+        name = series_name
+      )
+    },
+    envir = .GlobalEnv
+  )
+
+  shiny::testServer(build_main_server, {
+    session$setInputs(
+      series_2_enabled = TRUE,
+      series_2_source = "FRED",
+      series_2_fred_series = "UNRATE",
+      series_2_fred_vintage_mode = "compare",
+      series_2_fred_vintage_date = "2020-01-01",
+      series_2_label = "Unemployment vintages",
+      library_title = "Vintage chart"
+    )
+    session$flushReact()
+
+    expect_equal(builder_state()$series[[2]]$fred_vintage_mode, "compare")
+    expect_equal(as.Date(builder_state()$series[[2]]$fred_vintage_date), as.Date("2020-01-01"))
+    expect_gt(nrow(chart_data()), 0)
+
+    session$setInputs(save_chart = 1)
+    session$flushReact()
+
+    session$setInputs(
+      series_2_fred_vintage_mode = "current",
+      style_title = "Mutated"
+    )
+    session$flushReact()
+
+    session$setInputs(library_table_rows_selected = 1)
+    suppressWarnings({
+      session$setInputs(load_chart = 1)
+      session$flushReact()
+    })
+
+    expect_equal(builder_state()$series[[2]]$fred_vintage_mode, "compare")
+    expect_equal(as.Date(builder_state()$series[[2]]$fred_vintage_date), as.Date("2020-01-01"))
+  })
+})
+
+test_that("ABS source controls render restored saved selections", {
+  abs_row <- abs_ref[[1]] %>%
+    filter(!is.na(series_id), nzchar(series_id), !is.na(series), !is.na(series_type), !is.na(table_title)) %>%
+    slice(1)
+
+  abs_ui <- series_source_controls_ui(
+    input = list(),
+    session = NULL,
+    index = 1,
+    source_value = "abs",
+    restored_spec = list(
+      source = "abs",
+      abs_catalogue = abs_cat[[1]],
+      abs_desc = abs_row$series[[1]],
+      abs_series_type = abs_row$series_type[[1]],
+      abs_table = abs_row$table_title[[1]],
+      abs_id = abs_row$series_id[[1]]
+    )
+  )
+
+  expect_true(grepl(abs_cat[[1]], as.character(abs_ui), fixed = TRUE))
+  expect_true(grepl(abs_row$series[[1]], as.character(abs_ui), fixed = TRUE))
+  expect_true(grepl(abs_row$series_type[[1]], as.character(abs_ui), fixed = TRUE))
+  expect_true(grepl(abs_row$table_title[[1]], as.character(abs_ui), fixed = TRUE))
+  expect_true(grepl(abs_row$series_id[[1]], as.character(abs_ui), fixed = TRUE))
+})
+
 test_that("main server can add a FRED search result to the builder", {
   withr::local_envvar(FRED_API_KEY = "test-key")
   original_fred_search_remote <- fred_search_remote
@@ -652,6 +944,7 @@ test_that("main server can add a FRED search result to the builder", {
 
   shiny::testServer(build_main_server, {
     session$setInputs(
+      main_tabs = "search",
       search_query = "UNRATE",
       search_source_filter = "FRED",
       search_type_filter = "all",
@@ -666,17 +959,31 @@ test_that("main server can add a FRED search result to the builder", {
     expect_true(all(search_results()$location_code == "INTL"))
 
     session$setInputs(search_results_table_rows_selected = 1, search_target_series = "2")
+    expect_s3_class(search_preview_widget(), "plotly")
     session$setInputs(search_add_series = 1)
     session$flushReact()
     session$flushReact()
 
+    expect_equal(input$main_tabs, "search")
     expect_equal(builder_state()$series[[2]]$source, "FRED")
     expect_equal(builder_state()$series[[2]]$fred_series, "UNRATE")
     expect_equal(builder_state()$series[[2]]$label, "Unemployment Rate")
 
+    session$setInputs(
+      series_2_enabled = TRUE,
+      series_2_source = "FRED",
+      series_2_fred_series = "UNRATE",
+      series_2_label = "Updated unemployment label",
+      style_title = "FRED builder state"
+    )
+    session$flushReact()
+
+    expect_equal(builder_state()$series[[2]]$label, "Updated unemployment label")
+    expect_equal(builder_state()$style$title, "FRED builder state")
+
     session$setInputs(start_date = as.Date("2020-01-01"), end_date = as.Date("2021-12-31"))
     session$flushReact()
-    expect_equal(builder_state()$date_range, as.Date(c("2020-01-01", "2021-12-31")))
+    expect_equal(as.Date(builder_state()$date_range, origin = "1970-01-01"), as.Date(c("2020-01-01", "2021-12-31")))
   })
 })
 
@@ -691,6 +998,28 @@ test_that("main server saves a FRED API key from the modal flow", {
 
     expect_equal(current_fred_api_key(), "session-key-123")
     expect_true(fred_search_available())
+  })
+})
+
+test_that("main server can ignore the FRED key prompt for the current session", {
+  withr::local_envvar(FRED_API_KEY = "")
+
+  shiny::testServer(build_main_server, {
+    session$setInputs(open_fred_api_key_modal = 1)
+    session$flushReact()
+
+    expect_true(isTRUE(fred_key_modal_open()))
+
+    session$setInputs(ignore_fred_api_key = 1)
+    session$flushReact()
+
+    expect_false(isTRUE(fred_key_modal_open()))
+    expect_true(isTRUE(fred_key_prompt_ignored()))
+
+    session$setInputs(search_source_filter = "FRED")
+    session$flushReact()
+
+    expect_false(isTRUE(fred_key_modal_open()))
   })
 })
 

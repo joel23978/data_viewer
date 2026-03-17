@@ -60,11 +60,43 @@ bbg_data <- function(
 library(fredr)
 Sys.getenv("FRED_API_KEY")
 
+fred_vintage_cache_env <- new.env(parent = emptyenv())
+
+fred_vintage_dates <- function(series, force = FALSE) {
+  cleaned_series <- trimws(if (is.null(series) || length(series) == 0) "" else as.character(series)[1])
+  if (!nzchar(cleaned_series)) {
+    return(as.Date(character()))
+  }
+
+  cache_key <- cleaned_series
+  if (!force && exists(cache_key, envir = fred_vintage_cache_env, inherits = FALSE)) {
+    return(get(cache_key, envir = fred_vintage_cache_env, inherits = FALSE))
+  }
+
+  vintage_dates <- tryCatch(
+    {
+      response <- fredr_series_vintagedates(series_id = cleaned_series)
+      matching_columns <- intersect(c("vintage_date", "date"), names(response))
+      date_column <- if (length(matching_columns) > 0) matching_columns[1] else names(response)[1]
+      as.Date(sort(unique(response[[date_column]])))
+    },
+    error = function(error) {
+      as.Date(character())
+    }
+  )
+
+  assign(cache_key, vintage_dates, envir = fred_vintage_cache_env)
+  vintage_dates
+}
 
 fred_data <- function(
     series = input$fred_series
     , start_date = NULL
     , end_date = NULL
+    , realtime_start = NULL
+    , realtime_end = NULL
+    , vintage_dates = NULL
+    , name_override = NULL
 ){
   query_args <- list(series_id = series)
   if (!is.null(start_date)) {
@@ -73,10 +105,26 @@ fred_data <- function(
   if (!is.null(end_date)) {
     query_args$observation_end <- end_date
   }
+  if (!is.null(realtime_start)) {
+    query_args$realtime_start <- realtime_start
+  }
+  if (!is.null(realtime_end)) {
+    query_args$realtime_end <- realtime_end
+  }
+  if (!is.null(vintage_dates)) {
+    query_args$vintage_dates <- vintage_dates
+  }
 
-  do.call(fredr, query_args) %>%
+  fred_result <- do.call(fredr_series_observations, query_args) %>%
     select(c(date, value, series_id)) %>%
     rename(name = series_id)
+
+  if (!is.null(name_override) && nzchar(trimws(name_override))) {
+    fred_result <- fred_result %>%
+      mutate(name = trimws(name_override))
+  }
+
+  fred_result
 }
 
 # recession shading ----

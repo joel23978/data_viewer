@@ -1,54 +1,115 @@
 build_search_tab_ui <- function() {
   div(
     class = "page-shell",
-    fluidRow(
-      column(
-        width = 3,
-        chart_card(
-          "Search",
-          class = "search-sidebar-card",
-          textInput("search_query", "Search terms", value = "", placeholder = "e.g. industrial AND production"),
-          radioGroupButtons(
-            "search_source_filter",
-            "Source",
-            choices = c("All" = "all", "CPI" = "ABS CPI", "FRED" = "FRED", "RBA" = "RBA", "ABS" = "ABS"),
-            selected = "all",
-            justified = FALSE,
-            checkIcon = list(yes = icon("check"))
+    chart_card(
+      "Search",
+      class = "search-toolbar-card",
+      div(
+        class = "search-toolbar",
+        div(
+          class = "search-toolbar__hero",
+          div(
+            class = "search-toolbar__hero-copy",
+            tags$p(class = "search-toolbar__eyebrow", "Search local metadata and live FRED"),
+            tags$h2(class = "search-toolbar__title", "Find a series")
           ),
-          conditionalPanel(
-            condition = "input.search_source_filter === 'FRED' || input.search_source_filter === 'all'",
+          div(
+            class = "search-toolbar__primary",
+            textInput("search_query", "Search terms", value = "", placeholder = "e.g. industrial AND production")
+          )
+        ),
+        div(
+          class = "search-toolbar__filters-grid",
+          div(
+            class = "search-toolbar__group search-toolbar__group--wide",
+            div(
+              class = "search-toolbar__group-label",
+              "Source"
+            ),
             radioGroupButtons(
-              "search_fred_mode",
-              "FRED mode",
-              choices = c("Text" = "full_text", "ID" = "series_id"),
-              selected = "full_text",
+              "search_source_filter",
+              NULL,
+              choices = c("All" = "all", "Recent" = "Recent", "CPI" = "ABS CPI", "FRED" = "FRED", "RBA" = "RBA", "ABS" = "ABS"),
+              selected = "all",
               justified = FALSE,
               checkIcon = list(yes = icon("check"))
             )
           ),
-          radioGroupButtons(
-            "search_type_filter",
-            "Type",
-            choices = search_type_choices(),
-            selected = "all",
-            justified = FALSE,
-            checkIcon = list(yes = icon("check"))
+          conditionalPanel(
+            condition = "input.search_source_filter === 'FRED' || input.search_source_filter === 'all'",
+            div(
+              class = "search-toolbar__group search-toolbar__group--compact",
+              div(
+                class = "search-toolbar__group-label",
+                "FRED mode"
+              ),
+              radioGroupButtons(
+                "search_fred_mode",
+                NULL,
+                choices = c("Text" = "full_text", "ID" = "series_id"),
+                selected = "full_text",
+                justified = FALSE,
+                checkIcon = list(yes = icon("check"))
+              )
+            )
           ),
-          radioGroupButtons(
-            "search_location_filter",
-            "Location",
-            choices = search_location_choices(),
-            selected = "all",
-            justified = FALSE,
-            checkIcon = list(yes = icon("check"))
+          div(
+            class = "search-toolbar__group",
+            div(
+              class = "search-toolbar__group-label",
+              "Type"
+            ),
+            radioGroupButtons(
+              "search_type_filter",
+              NULL,
+              choices = search_type_choices(),
+              selected = "all",
+              justified = FALSE,
+              checkIcon = list(yes = icon("check"))
+            )
           ),
-          uiOutput("search_frequency_filter")
-        ),
+          div(
+            class = "search-toolbar__group",
+            div(
+              class = "search-toolbar__group-label",
+              "Location"
+            ),
+            radioGroupButtons(
+              "search_location_filter",
+              NULL,
+              choices = search_location_choices(),
+              selected = "all",
+              justified = FALSE,
+              checkIcon = list(yes = icon("check"))
+            )
+          ),
+          div(
+            class = "search-toolbar__group search-toolbar__group--select",
+            div(
+              class = "search-toolbar__group-label",
+              "Frequency"
+            ),
+            uiOutput("search_frequency_filter")
+          )
+        )
+      ),
+      uiOutput("search_status")
+    ),
+    fluidRow(
+      column(
+        width = 9,
+        chart_card(
+          "Search Results",
+          DT::dataTableOutput("search_results_table")
+        )
+      ),
+      column(
+        width = 3,
         chart_card(
           "Selected Result",
           class = "search-sidebar-card",
           uiOutput("search_selected_meta"),
+          plotlyOutput("search_preview_plot", height = "280px"),
           radioGroupButtons(
             "search_target_series",
             "Add to",
@@ -60,14 +121,6 @@ build_search_tab_ui <- function() {
           actionButton("search_add_series", "Add result to builder", class = "btn-primary btn-block"),
           actionButton("open_fred_api_key_modal", "Enter FRED key", class = "btn-block")
         )
-      ),
-      column(
-        width = 9,
-        uiOutput("search_status"),
-        chart_card(
-          "Search Results",
-          DT::dataTableOutput("search_results_table")
-        )
       )
     )
   )
@@ -78,7 +131,7 @@ build_library_tab_ui <- function() {
     class = "page-shell",
     fluidRow(
       column(
-        width = 4,
+        width = 6,
         chart_card(
           "Chart Library",
           textInput("library_search", "Search saved charts", value = "", placeholder = "Search by title, description, or source"),
@@ -119,7 +172,7 @@ build_library_tab_ui <- function() {
         )
       ),
       column(
-        width = 8,
+        width = 6,
         chart_card(
           "Selected Preview",
           uiOutput("library_selected_meta"),
@@ -141,6 +194,61 @@ build_library_tab_ui <- function() {
   )
 }
 
+build_tab_loading_ui <- function(title, message) {
+  div(
+    class = "page-shell tab-loading-shell",
+    div(
+      class = "tab-loading-card",
+      div(
+        class = "tab-loading-state",
+        tags$p(class = "tab-loading-eyebrow", title),
+        tags$h2(class = "tab-loading-title", "Loading level"),
+        tags$p(class = "tab-loading-subtitle", message),
+        div(
+          class = "tab-loading-frame",
+          div(
+            class = "tab-loading-bar",
+            div(class = "tab-loading-bar__fill")
+          )
+        )
+      )
+    )
+  )
+}
+
+build_tab_error_ui <- function(title, message) {
+  div(
+    class = "page-shell",
+    chart_card(
+      title,
+      div(
+        class = "message-banner",
+        message
+      )
+    )
+  )
+}
+
+search_activity_message <- function(source_filter = "all", query_text = "") {
+  cleaned_query <- trimws(query_text %||% "")
+  targets <- switch(
+    source_filter %||% "all",
+    "FRED" = "FRED",
+    "Recent" = "recent saved series",
+    "ABS CPI" = "local CPI metadata",
+    "RBA" = "local RBA metadata",
+    "ABS" = "local ABS metadata",
+    "all" = if (nzchar(cleaned_query)) "recent series, local metadata, and FRED" else "recent series and local metadata",
+    "search sources"
+  )
+
+  if (nzchar(cleaned_query)) {
+    sprintf("Searching %s for \"%s\"...", targets, cleaned_query)
+  } else {
+    sprintf("Refreshing %s...", targets)
+  }
+}
+
 build_main_ui <- function() {
   year_bounds <- default_year_bounds()
 
@@ -155,6 +263,7 @@ build_main_ui <- function() {
         fluidRow(
           column(
             width = 3,
+            class = "builder-left-rail",
             chart_card(
               "Data Window",
               tags$p(
@@ -182,6 +291,7 @@ build_main_ui <- function() {
             ),
             chart_card(
               "Series Setup",
+              header_actions = actionButton("clear_series_setup", "Clear", class = "app-card__header-chip"),
               tags$p(
                 class = "muted-copy",
                 "Choose the source, series, and chart style. Use the right panel for transforms."
@@ -229,6 +339,7 @@ build_main_ui <- function() {
             ),
             chart_card(
               "Presentation",
+              header_actions = actionButton("clear_presentation_panel", "Clear", class = "app-card__header-chip"),
               tags$p(
                 class = "muted-copy",
                 "Set titles, axes, guides, colours, and export options."
@@ -239,7 +350,7 @@ build_main_ui <- function() {
                   textInput("style_title", "Chart title shown above the plot", value = "Custom data view"),
                   textInput("style_subtitle", "Chart subtitle shown below the title", value = ""),
                   textInput("style_y_axis_label", "Y-axis label", value = "%"),
-                  textInput("style_note", "Source note or caption shown below the chart", value = "Source: custom query")
+                  textInput("style_note", "Source note or caption shown below the chart", value = default_builder_state()$style$note)
                 ),
                 column(
                   width = 4,
@@ -298,8 +409,8 @@ build_main_ui <- function() {
                 ),
                 column(
                   width = 4,
-                  dateInput("style_vertical_1", "Vertical marker date 1", value = NULL),
-                  dateInput("style_vertical_2", "Vertical marker date 2", value = NULL)
+                  suppressWarnings(dateInput("style_vertical_1", "Vertical marker date 1", value = as.Date(NA))),
+                  suppressWarnings(dateInput("style_vertical_2", "Vertical marker date 2", value = as.Date(NA)))
                 )
               )
             )
@@ -308,6 +419,7 @@ build_main_ui <- function() {
             width = 3,
             chart_card(
               "Workspace Tools",
+              header_actions = actionButton("clear_workspace_tools", "Clear", class = "app-card__header-chip"),
               radioGroupButtons(
                 "side_panel_mode",
                 "Right-hand workspace",
@@ -326,7 +438,7 @@ build_main_ui <- function() {
                     lapply(seq_len(MAX_SERIES), function(index) {
                       transform_profile_ui(
                         paste0("transform_", index),
-                        paste("Series", c("one", "two", "three", "four")[index])
+                        paste("Series", index)
                       )
                     })
                   )
@@ -434,23 +546,24 @@ build_main_server <- function(input, output, session) {
   ensure_chart_library()
   session$userData$restored_series_specs <- list()
   loaded_main_tabs <- reactiveVal(c("builder"))
+  tab_load_state <- reactiveValues(search = "idle", library = "idle")
+  tab_load_error <- reactiveValues(search = "", library = "")
 
   fred_key_modal_open <- reactiveVal(FALSE)
+  fred_key_prompt_ignored <- reactiveVal(FALSE)
 
   run_with_status <- function(working_message, success_message, expr, success_type = "message", failure_prefix = NULL) {
     notification_id <- paste0("status-", format(Sys.time(), "%H%M%OS3"), "-", sample.int(9999, 1))
+    progress <- shiny::Progress$new(session, min = 0, max = 1)
+    progress$set(message = working_message, detail = "Starting...", value = 0.05)
 
-    showNotification(
-      working_message,
-      id = notification_id,
-      duration = NULL,
-      closeButton = FALSE,
-      type = "message"
-    )
+    on.exit(progress$close(), add = TRUE)
 
     tryCatch(
       {
+        progress$set(message = working_message, detail = "Working...", value = 0.35)
         result <- force(expr)
+        progress$set(message = success_message, detail = "Done.", value = 1)
         showNotification(
           success_message,
           id = notification_id,
@@ -467,6 +580,8 @@ build_main_server <- function(input, output, session) {
           paste(failure_prefix, conditionMessage(error))
         }
 
+        progress$set(message = working_message, detail = "Failed.", value = 1)
+
         showNotification(
           error_message,
           id = notification_id,
@@ -479,8 +594,12 @@ build_main_server <- function(input, output, session) {
     )
   }
 
-  show_fred_key_modal <- function() {
+  show_fred_key_modal <- function(force = FALSE) {
     if (isTRUE(fred_key_modal_open())) {
+      return(invisible(NULL))
+    }
+
+    if (!isTRUE(force) && isTRUE(fred_key_prompt_ignored()) && !fred_search_available()) {
       return(invisible(NULL))
     }
 
@@ -499,6 +618,7 @@ build_main_server <- function(input, output, session) {
           "This key is used for the current app session so live FRED search and downloads can run."
         ),
         footer = tagList(
+          actionButton("ignore_fred_api_key", "Ignore"),
           actionButton("cancel_fred_api_key", "Cancel"),
           actionButton("save_fred_api_key", "Save key", class = "btn-primary")
         ),
@@ -518,21 +638,44 @@ build_main_server <- function(input, output, session) {
 
   output$search_tab_ui <- renderUI({
     req("search" %in% loaded_main_tabs())
+    if (identical(tab_load_state$search, "loading")) {
+      return(build_tab_loading_ui("Search", "Loading search metadata..."))
+    }
+
+    if (identical(tab_load_state$search, "error")) {
+      return(build_tab_error_ui("Search", tab_load_error$search %||% "Unable to load search metadata."))
+    }
+
     build_search_tab_ui()
   })
 
   output$library_tab_ui <- renderUI({
     req("library" %in% loaded_main_tabs())
+    if (identical(tab_load_state$library, "loading")) {
+      return(build_tab_loading_ui("Saved Charts", "Loading saved charts and presentations..."))
+    }
+
+    if (identical(tab_load_state$library, "error")) {
+      return(build_tab_error_ui("Saved Charts", tab_load_error$library %||% "Unable to load saved charts."))
+    }
+
     build_library_tab_ui()
   })
 
   observeEvent(input$open_fred_api_key_modal, {
-    show_fred_key_modal()
+    show_fred_key_modal(force = TRUE)
   })
 
   observeEvent(input$cancel_fred_api_key, {
     fred_key_modal_open(FALSE)
     removeModal()
+  })
+
+  observeEvent(input$ignore_fred_api_key, {
+    fred_key_prompt_ignored(TRUE)
+    fred_key_modal_open(FALSE)
+    removeModal()
+    showNotification("FRED key prompt ignored for this app session.", type = "message")
   })
 
   observeEvent(input$save_fred_api_key, {
@@ -544,13 +687,24 @@ build_main_server <- function(input, output, session) {
     }
 
     set_fred_api_key(entered_key)
+    fred_key_prompt_ignored(FALSE)
     fred_key_modal_open(FALSE)
     removeModal()
     showNotification("FRED API key saved for this app session.", type = "message")
   })
 
+  observeEvent(input$main_tabs, {
+    if (
+      identical(input$main_tabs %||% "builder", "search") &&
+      !fred_search_available() &&
+      !isTRUE(fred_key_prompt_ignored())
+    ) {
+      show_fred_key_modal()
+    }
+  }, ignoreInit = TRUE)
+
   observeEvent(input$search_source_filter, {
-    if (identical(input$search_source_filter %||% "all", "FRED") && !fred_search_available()) {
+    if ((input$search_source_filter %||% "all") %in% c("all", "FRED") && !fred_search_available()) {
       show_fred_key_modal()
     }
   }, ignoreInit = TRUE)
@@ -571,6 +725,7 @@ build_main_server <- function(input, output, session) {
     {
       list(
         input$transform_all_moving_average,
+        input$transform_all_rolling_sum,
         input$transform_all_lagged_value,
         input$transform_all_lagged_pct,
         input$transform_all_lagged_ann,
@@ -589,6 +744,7 @@ build_main_server <- function(input, output, session) {
 
   restored_state <- reactiveVal(NULL)
   synced_library_title <- reactiveVal("")
+  synced_source_note <- reactiveVal(default_builder_state()$style$note)
 
   apply_builder_state <- function(chart_state, selected_series_index = NULL, navigate_builder = FALSE) {
     normalized_state <- normalize_chart_state(chart_state)
@@ -596,7 +752,7 @@ build_main_server <- function(input, output, session) {
     restore_chart_state(session, normalized_state)
 
     if (!is.null(selected_series_index)) {
-      updateTabsetPanel(session, "series_tabs", selected = paste("Series", c("one", "two", "three", "four")[selected_series_index]))
+      updateTabsetPanel(session, "series_tabs", selected = paste("Series", selected_series_index))
     }
 
     if (isTRUE(navigate_builder)) {
@@ -615,13 +771,70 @@ build_main_server <- function(input, output, session) {
     }
   })
 
+  observe({
+    generated_source_note <- default_source_note(normalize_chart_state(builder_state_from_input(input))$series)
+    current_source_note <- trimws(input$style_note %||% "")
+    prior_synced_note <- trimws(synced_source_note() %||% "")
+
+    if (!nzchar(current_source_note) || identical(current_source_note, prior_synced_note)) {
+      updateTextInput(session, "style_note", value = generated_source_note)
+      synced_source_note(generated_source_note)
+    }
+  })
+
   observeEvent(input$reset_builder, {
     default_state <- normalize_chart_state(default_builder_state())
     apply_builder_state(default_state, selected_series_index = 1, navigate_builder = TRUE)
     updateTextInput(session, "library_title", value = default_state$style$title)
     updateTextAreaInput(session, "library_description", value = "")
     synced_library_title(default_state$style$title)
+    synced_source_note(default_state$style$note)
     showNotification("Builder reset to the default view.", type = "message")
+  })
+
+  observeEvent(input$clear_series_setup, {
+    cleared_state <- builder_state()
+    cleared_state$series <- rep(list(NULL), MAX_SERIES)
+    apply_builder_state(cleared_state, selected_series_index = 1, navigate_builder = FALSE)
+    updateTabsetPanel(session, "series_tabs", selected = "Series 1")
+    showNotification("Series setup cleared.", type = "message")
+  })
+
+  observeEvent(input$clear_presentation_panel, {
+    cleared_state <- builder_state()
+    cleared_state$style <- default_style_settings()
+    cleared_state$style$note <- default_source_note(cleared_state$series)
+    apply_builder_state(cleared_state, navigate_builder = FALSE)
+    synced_source_note(cleared_state$style$note)
+    showNotification("Presentation inputs cleared.", type = "message")
+  })
+
+  observeEvent(input$clear_workspace_tools, {
+    cleared_state <- builder_state()
+    cleared_state$all_series_transform <- default_transform_profile()
+    cleared_state$series <- lapply(cleared_state$series, function(spec) {
+      if (is.null(spec)) {
+        return(NULL)
+      }
+
+      spec$transform_profile <- default_transform_profile()
+      spec
+    })
+
+    apply_builder_state(cleared_state, navigate_builder = FALSE)
+    updateRadioGroupButtons(session, "side_panel_mode", selected = "transform")
+    updateTabsetPanel(session, "transform_tabs", selected = "All series")
+    updateTabsetPanel(session, "analysis_tabs", selected = "Correlations")
+    updateNumericInput(session, "analysis_corr_window", value = 4)
+    updateRadioGroupButtons(session, "analysis_reg_errors", selected = "classical")
+    updateRadioGroupButtons(session, "analysis_forecast_family", selected = "AR")
+    updateRadioGroupButtons(session, "analysis_forecast_window_mode", selected = "expanding")
+    updateNumericInput(session, "analysis_forecast_window_size", value = 12)
+    updateNumericInput(session, "analysis_forecast_ar", value = 1)
+    updateNumericInput(session, "analysis_forecast_ma", value = 0)
+    updateNumericInput(session, "analysis_forecast_holdout", value = 0)
+    updateNumericInput(session, "analysis_forecast_horizon", value = 4)
+    showNotification("Workspace tools cleared.", type = "message")
   })
 
   builder_state <- reactive({
@@ -629,13 +842,7 @@ build_main_server <- function(input, output, session) {
     loaded_state <- restored_state()
 
     if (!is.null(loaded_state)) {
-      normalized_loaded_state <- normalize_chart_state(loaded_state)
-
-      if (chart_states_equal(input_state, normalized_loaded_state)) {
-        restored_state(NULL)
-      } else {
-        return(normalized_loaded_state)
-      }
+      return(normalize_chart_state(loaded_state))
     }
 
     input_state$date_range <- sort(c(max(1900, input_state$date_range[[1]]), max(1900, input_state$date_range[[2]])))
@@ -657,6 +864,124 @@ build_main_server <- function(input, output, session) {
       loaded_range <- normalize_date_range(loaded_state$date_range)
 
       if (!identical(requested_range, loaded_range)) {
+        restored_state(NULL)
+      }
+    },
+    ignoreInit = TRUE
+  )
+
+  observeEvent(
+    {
+      list(
+        input$style_title,
+        input$style_subtitle,
+        input$style_y_axis_label,
+        input$style_note,
+        input$style_legend,
+        input$style_palette,
+        input$style_date_format,
+        input$style_x_labels,
+        input$style_auto_y_axis,
+        input$style_y_min,
+        input$style_y_max,
+        input$style_y_breaks,
+        input$style_invert_y_axis,
+        input$style_horizontal_1,
+        input$style_horizontal_2,
+        input$style_horizontal_shading_min,
+        input$style_horizontal_shading_max,
+        input$style_vertical_1,
+        input$style_vertical_2,
+        input$style_recession_shading,
+        input$export_width,
+        input$export_height
+      )
+    },
+    {
+      loaded_state <- restored_state()
+      req(!is.null(loaded_state))
+
+      if (!identical(
+        normalize_style_settings(style_settings_from_input(input)),
+        normalize_style_settings(loaded_state$style)
+      )) {
+        restored_state(NULL)
+      }
+    },
+    ignoreInit = TRUE
+  )
+
+  observeEvent(
+    {
+      c(
+        list(
+          input$transform_all_moving_average,
+          input$transform_all_rolling_sum,
+          input$transform_all_lagged_value,
+          input$transform_all_lagged_pct,
+          input$transform_all_lagged_ann,
+          input$transform_all_expression
+        ),
+        unlist(lapply(seq_len(MAX_SERIES), function(index) {
+          list(
+            input[[transform_input_id(paste0("transform_", index), "moving_average")]],
+            input[[transform_input_id(paste0("transform_", index), "rolling_sum")]],
+            input[[transform_input_id(paste0("transform_", index), "lagged_value")]],
+            input[[transform_input_id(paste0("transform_", index), "lagged_pct")]],
+            input[[transform_input_id(paste0("transform_", index), "lagged_ann")]],
+            input[[transform_input_id(paste0("transform_", index), "expression")]]
+          )
+        }), recursive = FALSE)
+      )
+    },
+    {
+      loaded_state <- restored_state()
+      req(!is.null(loaded_state))
+
+      current_series_profiles <- lapply(
+        seq_len(MAX_SERIES),
+        function(index) transform_profile_from_input(input, paste0("transform_", index))
+      )
+      loaded_series_profiles <- lapply(
+        seq_len(MAX_SERIES),
+        function(index) normalize_transform_profile((loaded_state$series[[index]] %||% list())$transform_profile)
+      )
+
+      if (
+        !identical(
+          normalize_transform_profile(transform_profile_from_input(input, "transform_all")),
+          normalize_transform_profile(loaded_state$all_series_transform)
+        ) ||
+        !identical(current_series_profiles, loaded_series_profiles)
+      ) {
+        restored_state(NULL)
+      }
+    },
+    ignoreInit = TRUE
+  )
+
+  observeEvent(
+    {
+      unlist(lapply(seq_len(MAX_SERIES), function(index) {
+        list(input[[series_input_id(index, "label")]])
+      }), recursive = FALSE)
+    },
+    {
+      loaded_state <- restored_state()
+      req(!is.null(loaded_state))
+
+      current_labels <- vapply(
+        seq_len(MAX_SERIES),
+        function(index) trimws(input[[series_input_id(index, "label")]] %||% ""),
+        character(1)
+      )
+      loaded_labels <- vapply(
+        seq_len(MAX_SERIES),
+        function(index) trimws(((loaded_state$series[[index]] %||% list())$label) %||% ""),
+        character(1)
+      )
+
+      if (!identical(current_labels, loaded_labels)) {
         restored_state(NULL)
       }
     },
@@ -688,29 +1013,39 @@ build_main_server <- function(input, output, session) {
   search_query_debounced <- debounce(search_query_text, millis = 350)
 
   ensure_chart_library_loaded <- function() {
-    if (is.null(chart_library_store())) {
+    if (is.null(shiny::isolate(chart_library_store()))) {
       chart_library_store(read_chart_library())
     }
 
-    invisible(chart_library_store())
+    invisible(shiny::isolate(chart_library_store()))
   }
 
   ensure_presentation_library_loaded <- function() {
-    if (is.null(presentation_library_store())) {
+    if (is.null(shiny::isolate(presentation_library_store()))) {
       presentation_library_store(read_chart_presentation_library())
     }
 
-    invisible(presentation_library_store())
+    invisible(shiny::isolate(presentation_library_store()))
   }
 
   ensure_search_index_loaded <- function(force = FALSE) {
-    if (force || is.null(search_index_store())) {
+    if (force || is.null(shiny::isolate(search_index_store()))) {
       search_loading_message("Loading local metadata index...")
       on.exit(search_loading_message(""), add = TRUE)
       search_index_store(build_search_index(force = force))
     }
 
-    invisible(search_index_store())
+    invisible(shiny::isolate(search_index_store()))
+  }
+
+  refresh_search_index_after_library_change <- function() {
+    invalidate_search_index_cache()
+
+    if (!is.null(shiny::isolate(search_index_store()))) {
+      search_index_store(build_search_index(force = TRUE))
+    }
+
+    invisible(NULL)
   }
 
   session$onFlushed(function() {
@@ -721,7 +1056,7 @@ build_main_server <- function(input, output, session) {
     )
 
     later::later(function() {
-      if (is.null(search_index_store())) {
+      if (is.null(shiny::isolate(search_index_store()))) {
         try(ensure_search_index_loaded(), silent = TRUE)
       }
     }, delay = 1.5)
@@ -730,27 +1065,51 @@ build_main_server <- function(input, output, session) {
   observeEvent(input$main_tabs, {
     selected_tab <- input$main_tabs %||% "builder"
 
-    if (identical(selected_tab, "search") && is.null(search_index_store())) {
-      run_with_status(
-        "Loading search metadata...",
-        "Search metadata ready.",
-        {
-          ensure_search_index_loaded()
-        },
-        failure_prefix = "Unable to load the search metadata:"
-      )
+    if (
+      identical(selected_tab, "search") &&
+      is.null(search_index_store()) &&
+      !identical(tab_load_state$search, "loading")
+    ) {
+      tab_load_state$search <- "loading"
+      tab_load_error$search <- ""
+
+      session$onFlushed(function() {
+        tryCatch(
+          {
+            ensure_search_index_loaded()
+            tab_load_state$search <- "ready"
+            showNotification("Search metadata ready.", type = "message", duration = 3)
+          },
+          error = function(error) {
+            tab_load_state$search <- "error"
+            tab_load_error$search <- paste("Unable to load the search metadata:", conditionMessage(error))
+          }
+        )
+      }, once = TRUE)
     }
 
-    if (identical(selected_tab, "library") && (is.null(chart_library_store()) || is.null(presentation_library_store()))) {
-      run_with_status(
-        "Loading saved charts and presentations...",
-        "Saved charts ready.",
-        {
-          ensure_chart_library_loaded()
-          ensure_presentation_library_loaded()
-        },
-        failure_prefix = "Unable to load the saved charts:"
-      )
+    if (
+      identical(selected_tab, "library") &&
+      (is.null(chart_library_store()) || is.null(presentation_library_store())) &&
+      !identical(tab_load_state$library, "loading")
+    ) {
+      tab_load_state$library <- "loading"
+      tab_load_error$library <- ""
+
+      session$onFlushed(function() {
+        tryCatch(
+          {
+            ensure_chart_library_loaded()
+            ensure_presentation_library_loaded()
+            tab_load_state$library <- "ready"
+            showNotification("Saved charts ready.", type = "message", duration = 3)
+          },
+          error = function(error) {
+            tab_load_state$library <- "error"
+            tab_load_error$library <- paste("Unable to load the saved charts:", conditionMessage(error))
+          }
+        )
+      }, once = TRUE)
     }
   }, ignoreInit = TRUE)
 
@@ -807,7 +1166,7 @@ build_main_server <- function(input, output, session) {
 
     search_messages <- c(
       loading_message,
-      if (is.null(search_index_store()) && source_filter %in% c("all", "ABS CPI", "RBA", "ABS")) "Local metadata will load when search runs." else "",
+      if (is.null(search_index_store()) && source_filter %in% c("all", "Recent", "ABS CPI", "RBA", "ABS")) "Local metadata will load when search runs." else "",
       if (isTRUE(include_remote_status)) fred_search_response()$status %||% "" else "",
       if (isTRUE(include_remote_status)) dbnomics_search_response()$status %||% "" else ""
     )
@@ -839,7 +1198,10 @@ build_main_server <- function(input, output, session) {
       notification_id <- "search-query-status"
       search_query_notification_id(notification_id)
       showNotification(
-        "Refreshing search results...",
+        search_activity_message(
+          source_filter = input$search_source_filter %||% "all",
+          query_text = search_query_debounced()
+        ),
         id = notification_id,
         duration = NULL,
         closeButton = FALSE,
@@ -850,7 +1212,7 @@ build_main_server <- function(input, output, session) {
   )
 
   search_results <- reactive({
-    if ((input$search_source_filter %||% "all") %in% c("all", "ABS CPI", "RBA", "ABS") && is.null(search_index_store())) {
+    if ((input$search_source_filter %||% "all") %in% c("all", "Recent", "ABS CPI", "RBA", "ABS") && is.null(search_index_store())) {
       ensure_search_index_loaded()
     }
 
@@ -961,6 +1323,31 @@ build_main_server <- function(input, output, session) {
     )
   })
 
+  search_preview_widget <- reactive({
+    search_row <- selected_search_result()
+
+    if (is.null(search_row)) {
+      return(empty_plotly_widget("Select a result to preview it."))
+    }
+
+    preview_spec <- search_result_series_spec(search_row, 1)
+    preview_state <- preview_chart_state(
+      preview_spec,
+      date_range = c(search_row$start_date[[1]], search_row$end_date[[1]])
+    )
+    preview_payload <- build_chart_data(preview_state)
+
+    if (nrow(preview_payload$data) == 0) {
+      return(empty_plotly_widget("No preview data is available for this result."))
+    }
+
+    build_chart_widget(preview_payload$data, preview_state$style)
+  })
+
+  output$search_preview_plot <- renderPlotly({
+    search_preview_widget()
+  })
+
   observeEvent(input$search_add_series, {
     search_row <- selected_search_result()
     req(!is.null(search_row))
@@ -969,7 +1356,7 @@ build_main_server <- function(input, output, session) {
     series_spec <- search_result_series_spec(search_row, target_index)
     updated_state <- builder_state()
     updated_state$series[[target_index]] <- normalize_series_spec(series_spec)
-    apply_builder_state(updated_state, selected_series_index = target_index, navigate_builder = TRUE)
+    apply_builder_state(updated_state, selected_series_index = target_index, navigate_builder = FALSE)
 
     showNotification("Search result added to the builder.", type = "message")
   })
@@ -1073,6 +1460,7 @@ build_main_server <- function(input, output, session) {
         updated_library <- upsert_chart_record(chart_library_store(), chart_record)
         chart_library_store(updated_library)
         write_chart_library(updated_library)
+        refresh_search_index_after_library_change()
       },
       failure_prefix = "Unable to save the chart:"
     )
@@ -1289,6 +1677,12 @@ build_main_server <- function(input, output, session) {
   observeEvent(input$update_chart, {
     ensure_chart_library_loaded()
     selected_records <- selected_chart_records()
+    if (is.null(selected_records) || nrow(selected_records) == 0) {
+      fallback_records <- filtered_chart_library()
+      if (nrow(fallback_records) == 1) {
+        selected_records <- fallback_records[1, , drop = FALSE]
+      }
+    }
     req(!is.null(selected_records), nrow(selected_records) == 1)
 
     current_data <- chart_data()
@@ -1321,6 +1715,7 @@ build_main_server <- function(input, output, session) {
         updated_library <- upsert_chart_record(chart_library_store(), updated_record)
         chart_library_store(updated_library)
         write_chart_library(updated_library)
+        refresh_search_index_after_library_change()
         apply_builder_state(chart_state)
       },
       failure_prefix = "Unable to update the saved chart:"
@@ -1346,6 +1741,7 @@ build_main_server <- function(input, output, session) {
         )
         chart_library_store(updated_library)
         write_chart_library(updated_library)
+        refresh_search_index_after_library_change()
 
         updated_presentations <- remove_chart_ids_from_presentations(
           presentation_library_store(),
@@ -1771,9 +2167,22 @@ build_main_server <- function(input, output, session) {
       )
     )
 
+    bundle_dir <- tempfile(pattern = "presentation_bundle_")
+    dir.create(bundle_dir, recursive = TRUE, showWarnings = FALSE)
+    on.exit(unlink(bundle_dir, recursive = TRUE, force = TRUE), add = TRUE)
+
+    html_path <- file.path(bundle_dir, "presentation.html")
+
     htmltools::save_html(
       htmltools::browsable(document),
-      file = file
+      file = html_path,
+      libdir = "lib"
+    )
+
+    zip::zipr(
+      zipfile = file,
+      files = c("presentation.html", "lib"),
+      root = bundle_dir
     )
   }
 
@@ -1797,7 +2206,7 @@ build_main_server <- function(input, output, session) {
 
   output$export_chart_presentation <- downloadHandler(
     filename = function() {
-      paste0("chart_presentation_", format(Sys.time(), "%Y%m%d_%H%M%S"), ".html")
+      paste0("chart_presentation_", format(Sys.time(), "%Y%m%d_%H%M%S"), ".zip")
     },
     content = function(file) {
       selected_records <- selected_chart_records()
@@ -1827,7 +2236,7 @@ build_main_server <- function(input, output, session) {
     filename = function() {
       presentation_record <- selected_presentation_record()
       req(!is.null(presentation_record))
-      paste0(str_replace_all(presentation_record$title[[1]], "[^A-Za-z0-9]+", "_"), ".html")
+      paste0(str_replace_all(presentation_record$title[[1]], "[^A-Za-z0-9]+", "_"), ".zip")
     },
     content = function(file) {
       presentation_record <- selected_presentation_record()

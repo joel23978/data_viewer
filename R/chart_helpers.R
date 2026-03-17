@@ -19,10 +19,14 @@ series_enabled <- function(input, index) {
   isTRUE(enabled_value) || identical(as.character(enabled_value), "1")
 }
 
-chart_card <- function(title, ..., class = "") {
+chart_card <- function(title, ..., class = "", header_actions = NULL) {
   div(
     class = paste("app-card", class),
-    div(class = "app-card__header", title),
+    div(
+      class = "app-card__header",
+      div(class = "app-card__title", title),
+      if (!is.null(header_actions)) div(class = "app-card__header-actions", header_actions)
+    ),
     div(class = "app-card__body", ...)
   )
 }
@@ -33,6 +37,60 @@ summary_chip <- function(label, value) {
     tags$span(class = "summary-chip__label", label),
     tags$strong(class = "summary-chip__value", value)
   )
+}
+
+series_source_note_value <- function(spec) {
+  if (is.null(spec)) {
+    return(NULL)
+  }
+
+  source_label <- spec$source %||% "Unknown"
+  id_values <- character()
+
+  if (identical(source_label, "ABS CPI")) {
+    id_values <- as.character(spec$text %||% character())
+  }
+
+  if (identical(source_label, "FRED")) {
+    id_values <- as.character(spec$fred_series %||% character())
+  }
+
+  if (identical(source_label, "dbnomics")) {
+    id_values <- as.character(spec$dbnomics_series %||% character())
+  }
+
+  if (identical(source_label, "rba")) {
+    id_values <- as.character(spec$rba_desc %||% character())
+  }
+
+  if (identical(source_label, "abs")) {
+    id_values <- as.character(spec$abs_id %||% character())
+  }
+
+  id_values <- unique(trimws(id_values[nzchar(trimws(id_values))]))
+
+  if (length(id_values) == 0) {
+    source_label
+  } else {
+    paste0(source_label, " - ", paste(id_values, collapse = ", "))
+  }
+}
+
+default_source_note <- function(series_specs = NULL) {
+  active_specs <- Filter(Negate(is.null), series_specs %||% list())
+
+  if (length(active_specs) == 0) {
+    return("Source: custom query")
+  }
+
+  note_parts <- unique(vapply(active_specs, series_source_note_value, character(1)))
+  note_parts <- note_parts[nzchar(note_parts)]
+
+  if (length(note_parts) == 0) {
+    "Source: custom query"
+  } else {
+    paste("Source:", paste(note_parts, collapse = " | "))
+  }
 }
 
 compact_single_choice_input <- function(input_id, label, choices, selected = NULL) {
@@ -57,19 +115,60 @@ compact_single_choice_input <- function(input_id, label, choices, selected = NUL
   )
 }
 
+fred_vintage_mode_choices <- function() {
+  c("Current" = "current", "Vintage" = "historical", "Compare" = "compare")
+}
+
+parse_vintage_date <- function(value) {
+  parsed_date <- suppressWarnings(as.Date(value))
+  if (length(parsed_date) == 0 || all(is.na(parsed_date))) {
+    as.Date(NA)
+  } else {
+    parsed_date[1]
+  }
+}
+
+fred_vintage_choice_values <- function(series_id, selected_date = NULL) {
+  cleaned_series <- trimws(series_id %||% "")
+  cleaned_selected <- trimws(as.character(selected_date %||% ""))
+
+  available_dates <- if (nzchar(cleaned_series) && nzchar(trimws(Sys.getenv("FRED_API_KEY")))) {
+    fred_vintage_dates(cleaned_series)
+  } else {
+    as.Date(character())
+  }
+
+  if (length(available_dates) > 250) {
+    available_dates <- tail(available_dates, 250)
+  }
+
+  if (nzchar(cleaned_selected)) {
+    selected_as_date <- parse_vintage_date(cleaned_selected)
+    if (!is.na(selected_as_date) && !selected_as_date %in% available_dates) {
+      available_dates <- sort(unique(c(available_dates, selected_as_date)))
+    }
+  }
+
+  if (!length(available_dates)) {
+    return(character())
+  }
+
+  stats::setNames(format(available_dates, "%Y-%m-%d"), format(available_dates, "%Y-%m-%d"))
+}
+
 default_year_bounds <- function() {
   min_date <- as.Date(min(cpi_data_all$date))
   max_date <- as.Date(max(cpi_data_all$date))
   year_min <- as.numeric(lubridate::year(min_date))
   year_max <- as.numeric(lubridate::year(max_date))
-  start_year <- max(year_min, year_max - 12)
+  default_start_date <- max(min_date, as.Date("2019-01-01"))
 
   list(
     min = year_min,
     max = year_max,
     min_date = min_date,
     max_date = max_date,
-    start_date = as.Date(sprintf("%s-01-01", start_year)),
+    start_date = default_start_date,
     end_date = max_date
   )
 }
@@ -102,28 +201,31 @@ default_style_settings <- function() {
 
 default_builder_state <- function() {
   year_bounds <- default_year_bounds()
+  default_series <- c(
+    list(
+      list(
+        index = 1,
+        source = "ABS CPI",
+        text = "All groups CPI",
+        region = region_list[[1]],
+        transform = "index",
+        rebase_date = as.Date("2019-12-31"),
+        label = "",
+        transform_profile = default_transform_profile(),
+        vis_type = "line"
+      )
+    ),
+    rep(list(NULL), MAX_SERIES - 1)
+  )
+  default_style <- default_style_settings()
+  default_style$note <- default_source_note(default_series)
 
   list(
     date_range = c(year_bounds$start_date, year_bounds$end_date),
     show_table = FALSE,
-    series = c(
-      list(
-        list(
-          index = 1,
-          source = "ABS CPI",
-          text = "All groups CPI",
-          region = region_list[[1]],
-          transform = "index",
-          rebase_date = as.Date("2019-12-31"),
-          label = "",
-          transform_profile = default_transform_profile(),
-          vis_type = "line"
-        )
-      ),
-      rep(list(NULL), MAX_SERIES - 1)
-    ),
+    series = default_series,
     all_series_transform = default_transform_profile(),
-    style = default_style_settings()
+    style = default_style
   )
 }
 
@@ -179,6 +281,8 @@ series_cache_key <- function(spec) {
     cache_key_value(spec$transform),
     cache_key_value(spec$rebase_date),
     cache_key_value(spec$fred_series),
+    cache_key_value(spec$fred_vintage_mode),
+    cache_key_value(spec$fred_vintage_date),
     cache_key_value(spec$dbnomics_series),
     cache_key_value(spec$rba_table),
     cache_key_value(spec$rba_desc),
@@ -210,7 +314,7 @@ builder_series_ui <- function(index) {
   source_id <- series_input_id(index, "source")
 
   tabPanel(
-    title = paste("Series", c("one", "two", "three", "four")[index]),
+    title = paste("Series", index),
     radioGroupButtons(
       enabled_id,
       "Include this series in the chart",
@@ -250,11 +354,46 @@ series_source_controls_ui <- function(input, session, index, source_value = "ABS
   default_cpi_series <- if (index == 1) "All groups CPI" else character()
 
   if (identical(source_value, "FRED")) {
+    current_series <- input[[series_input_id(index, "fred_series")]] %||% restored_spec$fred_series %||% "UNRATE"
+    vintage_mode <- input[[series_input_id(index, "fred_vintage_mode")]] %||% restored_spec$fred_vintage_mode %||% "current"
+    selected_vintage <- input[[series_input_id(index, "fred_vintage_date")]] %||%
+      if (!is.null(restored_spec$fred_vintage_date) && !is.na(restored_spec$fred_vintage_date)) format(as.Date(restored_spec$fred_vintage_date), "%Y-%m-%d") else ""
+    vintage_choices <- fred_vintage_choice_values(current_series, selected_vintage)
+    default_vintage <- if (nzchar(trimws(selected_vintage %||% ""))) {
+      trimws(selected_vintage)
+    } else if (length(vintage_choices) > 0) {
+      unname(tail(vintage_choices, 1))
+    } else {
+      NULL
+    }
+
     return(
-      textInput(
-        series_input_id(index, "fred_series"),
-        "FRED series ID",
-        value = input[[series_input_id(index, "fred_series")]] %||% restored_spec$fred_series %||% "UNRATE"
+      tagList(
+        textInput(
+          series_input_id(index, "fred_series"),
+          "FRED series ID",
+          value = current_series
+        ),
+        radioGroupButtons(
+          series_input_id(index, "fred_vintage_mode"),
+          "Vintage mode",
+          choices = fred_vintage_mode_choices(),
+          selected = vintage_mode,
+          justified = TRUE,
+          checkIcon = list(yes = icon("check"))
+        ),
+        if (!identical(vintage_mode, "current")) {
+          selectizeInput(
+            series_input_id(index, "fred_vintage_date"),
+            "Vintage date",
+            choices = vintage_choices,
+            selected = default_vintage,
+            options = list(
+              create = TRUE,
+              placeholder = "YYYY-MM-DD"
+            )
+          )
+        }
       )
     )
   }
@@ -414,6 +553,48 @@ register_series_dependencies <- function(input, output, session, index) {
     series_source_controls_ui(input, session, index, source_value, restored_spec_value)
   })
 
+  choose_single_restore_value <- function(current_value, restored_value, choices) {
+    valid_choices <- as.character(choices %||% character())
+
+    if (length(valid_choices) == 0) {
+      return(character())
+    }
+
+    current_choice <- as.character(current_value %||% character())
+    restored_choice <- as.character(restored_value %||% character())
+
+    if (length(current_choice) > 0 && current_choice[1] %in% valid_choices) {
+      return(current_choice[1])
+    }
+
+    if (length(restored_choice) > 0 && restored_choice[1] %in% valid_choices) {
+      return(restored_choice[1])
+    }
+
+    valid_choices[1]
+  }
+
+  choose_multi_restore_value <- function(current_value, restored_value, choices) {
+    valid_choices <- as.character(choices %||% character())
+
+    if (length(valid_choices) == 0) {
+      return(character())
+    }
+
+    current_choices <- intersect(as.character(current_value %||% character()), valid_choices)
+    restored_choices <- intersect(as.character(restored_value %||% character()), valid_choices)
+
+    if (length(current_choices) > 0) {
+      return(current_choices)
+    }
+
+    if (length(restored_choices) > 0) {
+      return(restored_choices)
+    }
+
+    valid_choices[1]
+  }
+
   observeEvent(input[[series_input_id(index, "rba_table")]], {
     table_value <- input[[series_input_id(index, "rba_table")]]
     series_choices <- rba_series[[table_value]] %||% character()
@@ -441,12 +622,18 @@ register_series_dependencies <- function(input, output, session, index) {
       pull(series) %>%
       unique() %>%
       na.omit()
+    restored_spec_value <- restored_series_spec(session, index)
+    selected_desc <- choose_single_restore_value(
+      input[[series_input_id(index, "abs_desc")]],
+      restored_spec_value$abs_desc %||% character(),
+      desc_choices
+    )
 
     updateSelectizeInput(
       session,
       series_input_id(index, "abs_desc"),
       choices = desc_choices,
-      selected = desc_choices[1],
+      selected = selected_desc,
       server = TRUE
     )
   }, ignoreInit = FALSE)
@@ -475,12 +662,18 @@ register_series_dependencies <- function(input, output, session, index) {
         pull(series_type) %>%
         unique() %>%
         na.omit()
+      restored_spec_value <- restored_series_spec(session, index)
+      selected_type <- choose_single_restore_value(
+        input[[series_input_id(index, "abs_series_type")]],
+        restored_spec_value$abs_series_type %||% character(),
+        type_choices
+      )
 
       updateSelectInput(
         session,
         series_input_id(index, "abs_series_type"),
         choices = type_choices,
-        selected = type_choices[1]
+        selected = selected_type
       )
     },
     ignoreInit = FALSE
@@ -512,12 +705,18 @@ register_series_dependencies <- function(input, output, session, index) {
         pull(table_title) %>%
         unique() %>%
         na.omit()
+      restored_spec_value <- restored_series_spec(session, index)
+      selected_table <- choose_single_restore_value(
+        input[[series_input_id(index, "abs_table")]],
+        restored_spec_value$abs_table %||% character(),
+        table_choices
+      )
 
       updateSelectInput(
         session,
         series_input_id(index, "abs_table"),
         choices = table_choices,
-        selected = table_choices[1]
+        selected = selected_table
       )
     },
     ignoreInit = FALSE
@@ -554,12 +753,18 @@ register_series_dependencies <- function(input, output, session, index) {
         ) %>%
         pull(series_id) %>%
         na.omit()
+      restored_spec_value <- restored_series_spec(session, index)
+      selected_ids <- choose_multi_restore_value(
+        input[[series_input_id(index, "abs_id")]],
+        restored_spec_value$abs_id %||% character(),
+        id_choices
+      )
 
       updateSelectizeInput(
         session,
         series_input_id(index, "abs_id"),
         choices = id_choices,
-        selected = id_choices[1],
+        selected = selected_ids,
         server = TRUE
       )
     },
@@ -575,6 +780,7 @@ default_transform_profile <- function() {
   list(
     expression = "X",
     moving_average = 1,
+    rolling_sum = 1,
     lagged_value = 0,
     lagged_pct = 0,
     lagged_ann = 0
@@ -586,6 +792,13 @@ transform_profile_ui <- function(prefix, title, include_copy_button = FALSE) {
     numericInput(
       transform_input_id(prefix, "moving_average"),
       "Rolling average window length (observations)",
+      value = 1,
+      min = 1,
+      step = 1
+    ),
+    numericInput(
+      transform_input_id(prefix, "rolling_sum"),
+      "Rolling sum window length (observations)",
       value = 1,
       min = 1,
       step = 1
@@ -625,6 +838,7 @@ transform_profile_from_input <- function(input, prefix) {
   list(
     expression = trimws(input[[transform_input_id(prefix, "expression")]] %||% "X"),
     moving_average = as.numeric(input[[transform_input_id(prefix, "moving_average")]] %||% 1),
+    rolling_sum = as.numeric(input[[transform_input_id(prefix, "rolling_sum")]] %||% 1),
     lagged_value = as.numeric(input[[transform_input_id(prefix, "lagged_value")]] %||% 0),
     lagged_pct = as.numeric(input[[transform_input_id(prefix, "lagged_pct")]] %||% 0),
     lagged_ann = as.numeric(input[[transform_input_id(prefix, "lagged_ann")]] %||% 0)
@@ -636,6 +850,7 @@ restore_transform_profile <- function(session, prefix, profile) {
 
   updateTextInput(session, transform_input_id(prefix, "expression"), value = profile$expression %||% "X")
   updateNumericInput(session, transform_input_id(prefix, "moving_average"), value = profile$moving_average %||% 1)
+  updateNumericInput(session, transform_input_id(prefix, "rolling_sum"), value = profile$rolling_sum %||% 1)
   updateNumericInput(session, transform_input_id(prefix, "lagged_value"), value = profile$lagged_value %||% 0)
   updateNumericInput(session, transform_input_id(prefix, "lagged_pct"), value = profile$lagged_pct %||% 0)
   updateNumericInput(session, transform_input_id(prefix, "lagged_ann"), value = profile$lagged_ann %||% 0)
@@ -672,6 +887,8 @@ series_spec_from_input <- function(input, index, transform_profile = default_tra
     if (!nzchar(spec$fred_series)) {
       return(NULL)
     }
+    spec$fred_vintage_mode <- input[[series_input_id(index, "fred_vintage_mode")]] %||% "current"
+    spec$fred_vintage_date <- parse_vintage_date(input[[series_input_id(index, "fred_vintage_date")]] %||% NA)
   }
 
   if (identical(source_value, "dbnomics")) {
@@ -782,6 +999,7 @@ normalize_transform_profile <- function(profile) {
   list(
     expression = trimws(profile$expression %||% "X"),
     moving_average = as.numeric(profile$moving_average %||% 1),
+    rolling_sum = as.numeric(profile$rolling_sum %||% 1),
     lagged_value = as.numeric(profile$lagged_value %||% 0),
     lagged_pct = as.numeric(profile$lagged_pct %||% 0),
     lagged_ann = as.numeric(profile$lagged_ann %||% 0)
@@ -845,6 +1063,8 @@ normalize_series_spec <- function(spec) {
 
   if (identical(normalized_spec$source, "FRED")) {
     normalized_spec$fred_series <- trimws(spec$fred_series %||% "")
+    normalized_spec$fred_vintage_mode <- spec$fred_vintage_mode %||% "current"
+    normalized_spec$fred_vintage_date <- parse_vintage_date(spec$fred_vintage_date %||% NA)
   }
 
   if (identical(normalized_spec$source, "dbnomics")) {
@@ -905,6 +1125,7 @@ apply_transform_profile <- function(data, transform_profile, label) {
   transformed <- data
 
   transformed <- apply_moving_average(transformed, transform_profile$moving_average)
+  transformed <- apply_rolling_sum(transformed, transform_profile$rolling_sum)
   transformed <- apply_lagged_value(transformed, transform_profile$lagged_value)
   transformed <- apply_lagged_pct(transformed, transform_profile$lagged_pct)
   transformed <- apply_lagged_annualised(transformed, transform_profile$lagged_ann)
@@ -948,6 +1169,43 @@ query_series_history <- function(spec) {
   }
 
   if (identical(spec$source, "FRED")) {
+    vintage_mode <- spec$fred_vintage_mode %||% "current"
+    vintage_date <- parse_vintage_date(spec$fred_vintage_date %||% NA)
+
+    if (identical(vintage_mode, "historical")) {
+      if (is.na(vintage_date)) {
+        stop("Choose a FRED vintage date.", call. = FALSE)
+      }
+
+      return(
+        fred_data(
+          series = spec$fred_series,
+          realtime_start = vintage_date,
+          realtime_end = vintage_date,
+          name_override = sprintf("%s (%s vintage)", spec$fred_series, format(vintage_date, "%Y-%m-%d"))
+        )
+      )
+    }
+
+    if (identical(vintage_mode, "compare")) {
+      if (is.na(vintage_date)) {
+        stop("Choose a FRED vintage date.", call. = FALSE)
+      }
+
+      return(bind_rows(
+        fred_data(
+          series = spec$fred_series,
+          name_override = sprintf("%s (current)", spec$fred_series)
+        ),
+        fred_data(
+          series = spec$fred_series,
+          realtime_start = vintage_date,
+          realtime_end = vintage_date,
+          name_override = sprintf("%s (%s vintage)", spec$fred_series, format(vintage_date, "%Y-%m-%d"))
+        )
+      ))
+    }
+
     return(fred_data(series = spec$fred_series))
   }
 
@@ -1022,6 +1280,35 @@ latest_chart_observation_date <- function(chart_state) {
   }
 }
 
+preview_chart_state <- function(series_spec, date_range = NULL) {
+  state <- default_builder_state()
+  normalized_spec <- normalize_series_spec(series_spec)
+  state$series[[1]] <- normalized_spec
+  state$series[seq(2, MAX_SERIES)] <- rep(list(NULL), MAX_SERIES - 1)
+
+  resolved_range <- if (!is.null(date_range) && length(date_range) >= 2 && all(!is.na(date_range[seq_len(2)]))) {
+    normalize_date_range(date_range)
+  } else {
+    series_data <- tryCatch(query_series_data(normalized_spec), error = function(error) NULL)
+
+    if (!is.null(series_data) && nrow(series_data) > 0) {
+      min_date <- min(as.Date(series_data$date), na.rm = TRUE)
+      max_date <- max(as.Date(series_data$date), na.rm = TRUE)
+      lookback_start <- max_date %m-% years(12)
+      normalize_date_range(c(max(min_date, lookback_start), max_date))
+    } else {
+      default_builder_state()$date_range
+    }
+  }
+
+  state$date_range <- resolved_range
+  state$style$title <- normalized_spec$label %||% state$style$title
+  state$style$subtitle <- ""
+  state$style$note <- "Preview"
+
+  normalize_chart_state(state)
+}
+
 make_unique_series_names <- function(data) {
   if (nrow(data) == 0) {
     return(data)
@@ -1053,6 +1340,19 @@ apply_moving_average <- function(data, periods) {
     group_by(name) %>%
     arrange(date, .by_group = TRUE) %>%
     mutate(value = zoo::rollmean(value, periods, fill = NA, align = "right")) %>%
+    ungroup() %>%
+    drop_na(value)
+}
+
+apply_rolling_sum <- function(data, periods) {
+  if (is.na(periods) || periods <= 1) {
+    return(data)
+  }
+
+  data %>%
+    group_by(name) %>%
+    arrange(date, .by_group = TRUE) %>%
+    mutate(value = zoo::rollsum(value, periods, fill = NA, align = "right")) %>%
     ungroup() %>%
     drop_na(value)
 }
@@ -1310,14 +1610,17 @@ build_chart_plot <- function(data, style) {
     labs(
       title = style$title,
       subtitle = style$subtitle,
+      tag = style$y_axis_label,
       x = NULL,
-      y = style$y_axis_label,
+      y = NULL,
       caption = style$note,
       colour = NULL,
       fill = NULL
     ) +
     theme_minimal(base_size = 12) +
     theme(
+      plot.tag = element_text(face = "plain", size = 16, colour = "#0f172a", hjust = 0),
+      plot.tag.position = c(0, 1),
       plot.title = element_text(face = "bold", size = 16, margin = margin(b = 12)),
       plot.subtitle = element_text(size = 11, colour = "#475569", margin = margin(b = 10)),
       plot.caption = element_text(size = 9, colour = "#4b5563"),
@@ -1350,11 +1653,13 @@ build_chart_plot <- function(data, style) {
 build_chart_widget <- function(data, style) {
   widget <- ggplotly(build_chart_plot(data, style), tooltip = c("x", "y", "colour"))
   note_text <- trimws(style$note %||% "")
+  y_axis_label <- trimws(style$y_axis_label %||% "")
   layout_args <- list()
+  annotations <- list()
 
   if (nzchar(note_text)) {
     layout_args$margin <- list(b = 90)
-    layout_args$annotations <- list(
+    annotations <- c(annotations, list(
       list(
         text = note_text,
         x = 0,
@@ -1367,7 +1672,30 @@ build_chart_widget <- function(data, style) {
         align = "left",
         font = list(size = 12, color = "#4b5563")
       )
-    )
+    ))
+  }
+
+  if (nzchar(y_axis_label)) {
+    existing_margin <- layout_args$margin %||% list()
+    layout_args$margin <- modifyList(list(t = 80), existing_margin)
+    annotations <- c(annotations, list(
+      list(
+        text = y_axis_label,
+        x = 0,
+        y = 1.08,
+        xref = "paper",
+        yref = "paper",
+        xanchor = "left",
+        yanchor = "bottom",
+        showarrow = FALSE,
+        align = "left",
+        font = list(size = 16, color = "#0f172a")
+      )
+    ))
+  }
+
+  if (length(annotations) > 0) {
+    layout_args$annotations <- annotations
   }
 
   if (identical(style$legend, "none")) {
@@ -1455,6 +1783,16 @@ restore_series_spec <- function(session, index, spec = NULL) {
 
     if (identical(spec$source, "FRED")) {
       updateTextInput(session, series_input_id(index, "fred_series"), value = spec$fred_series %||% "")
+      updateRadioGroupButtons(session, series_input_id(index, "fred_vintage_mode"), selected = spec$fred_vintage_mode %||% "current")
+      if (!identical(spec$fred_vintage_mode %||% "current", "current")) {
+        updateSelectizeInput(
+          session,
+          series_input_id(index, "fred_vintage_date"),
+          choices = fred_vintage_choice_values(spec$fred_series %||% "", spec$fred_vintage_date),
+          selected = if (!is.null(spec$fred_vintage_date) && !is.na(spec$fred_vintage_date)) format(as.Date(spec$fred_vintage_date), "%Y-%m-%d") else NULL,
+          server = TRUE
+        )
+      }
     }
 
     if (identical(spec$source, "dbnomics")) {

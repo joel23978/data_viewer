@@ -14,7 +14,19 @@ empty_search_index <- function() {
   )
 }
 
+empty_recent_search_index <- function() {
+  empty_search_index()
+}
+
 data_search_env <- new.env(parent = emptyenv())
+
+invalidate_search_index_cache <- function() {
+  if (exists("index", envir = data_search_env, inherits = FALSE)) {
+    rm("index", envir = data_search_env)
+  }
+
+  invisible(NULL)
+}
 
 SEARCH_TYPE_CODES <- c(
   "All" = "all",
@@ -159,6 +171,68 @@ location_code_label <- function(location_code) {
     location_code == "STATE" ~ "States / Cities",
     TRUE ~ "Other"
   )
+}
+
+recent_series_title <- function(spec) {
+  if (nzchar(trimws(spec$label %||% ""))) {
+    return(trimws(spec$label))
+  }
+
+  if (identical(spec$source, "ABS CPI")) {
+    cpi_text <- paste(spec$text %||% character(), collapse = ", ")
+    cpi_region <- paste(spec$region %||% character(), collapse = ", ")
+    return(trimws(paste(cpi_region, "CPI", cpi_text)))
+  }
+
+  if (identical(spec$source, "FRED")) {
+    base_title <- trimws(spec$fred_series %||% "FRED series")
+    vintage_mode <- spec$fred_vintage_mode %||% "current"
+    vintage_date <- spec$fred_vintage_date
+
+    if (identical(vintage_mode, "historical") && !is.na(as.Date(vintage_date))) {
+      return(sprintf("%s (%s vintage)", base_title, format(as.Date(vintage_date), "%Y-%m-%d")))
+    }
+
+    if (identical(vintage_mode, "compare") && !is.na(as.Date(vintage_date))) {
+      return(sprintf("%s current vs %s vintage", base_title, format(as.Date(vintage_date), "%Y-%m-%d")))
+    }
+
+    return(base_title)
+  }
+
+  if (identical(spec$source, "rba")) {
+    return(paste(spec$rba_desc %||% character(), collapse = ", "))
+  }
+
+  if (identical(spec$source, "abs")) {
+    return(trimws(spec$abs_desc %||% spec$abs_id %||% "ABS series"))
+  }
+
+  if (identical(spec$source, "dbnomics")) {
+    return(trimws(spec$dbnomics_series %||% "DBnomics series"))
+  }
+
+  trimws(spec$source %||% "Saved series")
+}
+
+recent_series_frequency <- function(spec) {
+  if (identical(spec$source, "ABS CPI")) {
+    return("Quarterly")
+  }
+
+  if (identical(spec$source, "FRED")) {
+    return("Unknown")
+  }
+
+  if (identical(spec$source, "rba")) {
+    return("Unknown")
+  }
+
+  if (identical(spec$source, "abs")) {
+    return("Unknown")
+  }
+
+  "Unknown"
 }
 
 classify_location_code <- function(title = "", summary = "", source = "") {
@@ -670,12 +744,84 @@ build_abs_search_index <- function() {
   })
 }
 
+build_recent_search_index <- function() {
+  if (!exists("read_chart_library", mode = "function")) {
+    return(empty_recent_search_index())
+  }
+
+  chart_library <- tryCatch(
+    read_chart_library(),
+    error = function(error) NULL
+  )
+
+  if (is.null(chart_library) || nrow(chart_library) == 0) {
+    return(empty_recent_search_index())
+  }
+
+  recent_series <- purrr::map_dfr(seq_len(nrow(chart_library)), function(row_index) {
+    chart_record <- chart_library[row_index, , drop = FALSE]
+    chart_state <- normalize_chart_state(chart_record$chart_state[[1]])
+    saved_title <- trimws(chart_record$title[[1]] %||% "")
+    saved_at <- chart_record$saved_at[[1]]
+    date_range <- normalize_date_range(chart_state$date_range)
+
+    purrr::map_dfr(Filter(Negate(is.null), chart_state$series), function(spec) {
+      normalized_spec <- normalize_series_spec(spec)
+      series_title <- recent_series_title(normalized_spec)
+      summary_text <- paste(
+        c(
+          sprintf("Saved in %s", if (nzchar(saved_title)) saved_title else "Untitled chart"),
+          sprintf("Source: %s", normalized_spec$source %||% "Unknown"),
+          format(saved_at, "%Y-%m-%d %H:%M")
+        ),
+        collapse = " | "
+      )
+
+      tibble::tibble(
+        recent_key = series_cache_key(normalized_spec),
+        search_id = paste("recent", chart_record$chart_id[[1]], normalized_spec$index, sep = "::"),
+        title = series_title,
+        source = "Recent",
+        type_code = classify_data_type(series_title, summary_text, normalized_spec$source %||% "Recent"),
+        location_code = classify_location_code(series_title, summary_text, normalized_spec$source %||% "Recent"),
+        frequency = recent_series_frequency(normalized_spec),
+        start_date = date_range[[1]],
+        end_date = date_range[[2]],
+        summary = summary_text,
+        search_text = clean_search_text(paste(
+          "recent",
+          saved_title,
+          normalized_spec$source %||% "",
+          series_title,
+          summary_text
+        )),
+        load_payload = list({
+          spec_payload <- normalized_spec
+          spec_payload$index <- NULL
+          spec_payload
+        }),
+        saved_at = saved_at
+      )
+    })
+  })
+
+  if (nrow(recent_series) == 0) {
+    return(empty_recent_search_index())
+  }
+
+  recent_series %>%
+    arrange(desc(saved_at)) %>%
+    distinct(recent_key, .keep_all = TRUE) %>%
+    select(-recent_key, -saved_at)
+}
+
 build_search_index <- function(force = FALSE) {
   if (!force && exists("index", envir = data_search_env, inherits = FALSE)) {
     return(get("index", envir = data_search_env, inherits = FALSE))
   }
 
   search_index <- bind_rows(
+    build_recent_search_index(),
     build_cpi_search_index(),
     build_rba_search_index(),
     build_abs_search_index()
