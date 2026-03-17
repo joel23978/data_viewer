@@ -1695,12 +1695,12 @@ build_chart_plot <- function(data, style) {
     ) +
     theme_minimal(base_size = 12) +
     theme(
-      plot.tag = element_text(face = "plain", size = 16, colour = "#0f172a", hjust = 0),
-      plot.tag.position = c(0, 0.965),
+      plot.tag = element_text(face = "plain", size = 16, colour = "#0f172a", hjust = 1),
+      plot.tag.position = c(1, 0.965),
       plot.title = element_text(face = "bold", size = 16, hjust = 0, margin = margin(b = 12)),
       plot.subtitle = element_text(size = 11, colour = "#475569", hjust = 0, margin = margin(b = 10)),
       plot.caption = element_text(size = 9, colour = "#4b5563"),
-      plot.title.position = "panel",
+      plot.title.position = "plot",
       plot.caption.position = "plot",
       panel.grid.minor = element_blank(),
       panel.grid.major.x = element_blank(),
@@ -1714,14 +1714,16 @@ build_chart_plot <- function(data, style) {
       scale_y_reverse(
         limits = c(axis_settings$max, axis_settings$min),
         breaks = rev(axis_settings$breaks),
-        expand = expansion(mult = c(0.02, 0.08))
+        expand = expansion(mult = c(0.02, 0.08)),
+        position = "right"
       )
   } else {
     chart_plot <- chart_plot +
       scale_y_continuous(
         limits = c(axis_settings$min, axis_settings$max),
         breaks = axis_settings$breaks,
-        expand = expansion(mult = c(0.02, 0.08))
+        expand = expansion(mult = c(0.02, 0.08)),
+        position = "right"
       )
   }
 
@@ -1757,18 +1759,18 @@ build_chart_widget <- function(data, style) {
 
   if (nzchar(y_axis_label)) {
     existing_margin <- layout_args$margin %||% list()
-    layout_args$margin <- modifyList(list(t = 92), existing_margin)
+    layout_args$margin <- modifyList(list(t = 92, r = 70), existing_margin)
     annotations <- c(annotations, list(
       list(
         text = y_axis_label,
-        x = 0,
+        x = 1,
         y = 1.02,
         xref = "paper",
         yref = "paper",
-        xanchor = "left",
+        xanchor = "right",
         yanchor = "bottom",
         showarrow = FALSE,
-        align = "left",
+        align = "right",
         font = list(size = 16, color = "#0f172a")
       )
     ))
@@ -1790,12 +1792,14 @@ build_chart_widget <- function(data, style) {
       } else {
         htmltools::htmlEscape(title_text)
       },
-      x = 0.07,
+      x = 0,
       xanchor = "left"
     )
   } else {
-    layout_args$title <- list(text = "", x = 0.07, xanchor = "left")
+    layout_args$title <- list(text = "", x = 0, xanchor = "left")
   }
+
+  layout_args$yaxis <- modifyList(layout_args$yaxis %||% list(), list(side = "right"))
 
   if (identical(style$legend, "none")) {
     layout_args$showlegend <- FALSE
