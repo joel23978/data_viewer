@@ -20,16 +20,15 @@ MAX_SERIES <- 4L
 APP_DATE_FORMATS <- c("%d-%b", "%b-%y", "%b-%Y", "%m-%Y", "%d-%m-%Y", "%Y")
 APP_PALETTES <- c("Okabe-Ito", "Tableau 10", "Set 2", "Dark 3", "R4")
 APP_CHART_FONTS <- c(
-  "Plus Jakarta Sans",
-  "Inter",
-  "DM Sans",
-  "Source Sans 3",
-  "IBM Plex Sans",
-  "Roboto",
-  "Libre Franklin",
-  "Public Sans",
-  "Barlow",
-  "Atkinson Hyperlegible",
-  "Noto Sans"
+  "Avenir Next",
+  "Avenir",
+  "Helvetica Neue",
+  "Arial",
+  "Verdana",
+  "Gill Sans",
+  "PT Sans",
+  "Trebuchet MS",
+  "Arial Narrow",
+  "PT Sans Narrow"
 )
 APP_LEGEND_POSITIONS <- c("bottom", "right", "none")
