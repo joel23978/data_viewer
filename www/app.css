@@ -9,7 +9,7 @@ body {
 
 .navbar::after {
   color: #64748b;
-  content: "\00A9 2026 Joel Findlay";
+  content: "Copyright Joel Findlay, 2026";
   font-size: 12px;
   font-weight: 600;
   letter-spacing: 0.02em;
