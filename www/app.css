@@ -407,6 +407,16 @@ textarea,
   font-size: 13px;
 }
 
+.search-sidebar-card .search-preview-plot {
+  margin: -4px 0 6px;
+}
+
+.search-sidebar-card .search-preview-plot img,
+.search-sidebar-card .search-preview-plot svg,
+.search-sidebar-card .search-preview-plot canvas {
+  display: block;
+}
+
 .btn-block {
   width: 100%;
 }
@@ -607,7 +617,7 @@ textarea,
 .search-sidebar-card .shiny-input-container,
 .search-sidebar-card .form-group {
   clear: both;
-  margin-bottom: 12px;
+  margin-bottom: 8px;
   width: 100%;
 }
 

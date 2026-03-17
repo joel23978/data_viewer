@@ -107,7 +107,7 @@ build_search_tab_ui <- function() {
           "Selected Result",
           class = "search-sidebar-card",
           uiOutput("search_selected_meta"),
-          plotOutput("search_preview_plot", height = "190px"),
+          plotOutput("search_preview_plot", height = "250px", class = "search-preview-plot"),
           radioGroupButtons(
             "search_target_series",
             "Add to",
