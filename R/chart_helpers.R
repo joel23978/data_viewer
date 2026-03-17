@@ -206,22 +206,7 @@ default_style_settings <- function() {
 
 default_builder_state <- function() {
   year_bounds <- default_year_bounds()
-  default_series <- c(
-    list(
-      list(
-        index = 1,
-        source = "ABS CPI",
-        text = "All groups CPI",
-        region = region_list[[1]],
-        transform = "index",
-        rebase_date = as.Date("2019-12-31"),
-        label = "",
-        transform_profile = default_transform_profile(),
-        vis_type = "line"
-      )
-    ),
-    rep(list(NULL), MAX_SERIES - 1)
-  )
+  default_series <- rep(list(NULL), MAX_SERIES)
   default_style <- default_style_settings()
   default_style$note <- default_source_note(default_series)
 
