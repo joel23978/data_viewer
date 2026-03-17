@@ -179,6 +179,7 @@ default_style_settings <- function() {
     subtitle = "",
     y_axis_label = "%",
     note = "Source: custom query",
+    font_family = APP_CHART_FONTS[[1]],
     legend = "bottom",
     palette = APP_PALETTES[[1]],
     date_format = APP_DATE_FORMATS[[2]],
@@ -960,6 +961,7 @@ style_settings_from_input <- function(input) {
     subtitle = trimws(input$style_subtitle %||% ""),
     y_axis_label = trimws(input$style_y_axis_label %||% "%"),
     note = trimws(input$style_note %||% "Source: custom query"),
+    font_family = input$style_font_family %||% APP_CHART_FONTS[[1]],
     legend = input$style_legend %||% "bottom",
     palette = input$style_palette %||% APP_PALETTES[[1]],
     date_format = input$style_date_format %||% APP_DATE_FORMATS[[2]],
@@ -1028,6 +1030,7 @@ normalize_style_settings <- function(style) {
     subtitle = trimws(style$subtitle %||% ""),
     y_axis_label = trimws(style$y_axis_label %||% "%"),
     note = trimws(style$note %||% "Source: custom query"),
+    font_family = style$font_family %||% APP_CHART_FONTS[[1]],
     legend = style$legend %||% "bottom",
     palette = style$palette %||% APP_PALETTES[[1]],
     date_format = style$date_format %||% APP_DATE_FORMATS[[2]],
@@ -1606,6 +1609,7 @@ build_chart_plot <- function(data, style) {
 
   axis_settings <- pretty_axis_breaks(data, style)
   x_breaks <- scales::breaks_pretty(n = max(2, round(style$x_labels %||% 6)))
+  chart_font <- style$font_family %||% APP_CHART_FONTS[[1]]
   bottom_gridline_value <- if (length(axis_settings$breaks) > 0 && all(is.finite(axis_settings$breaks))) {
     if (isTRUE(style$invert_y_axis)) {
       max(axis_settings$breaks, na.rm = TRUE)
@@ -1709,8 +1713,9 @@ build_chart_plot <- function(data, style) {
       colour = NULL,
       fill = NULL
     ) +
-    theme_minimal(base_size = 12) +
+    theme_minimal(base_size = 12, base_family = chart_font) +
     theme(
+      text = element_text(family = chart_font),
       plot.tag = element_text(face = "bold", size = 16, colour = "#000000", hjust = 1),
       plot.tag.position = c(1, 0.945),
       plot.title = element_text(face = "bold", size = 18, hjust = 0, margin = margin(b = 18)),
@@ -1756,6 +1761,7 @@ build_chart_widget <- function(data, style) {
   subtitle_text <- trimws(style$subtitle %||% "")
   note_text <- trimws(style$note %||% "")
   y_axis_label <- trimws(style$y_axis_label %||% "")
+  chart_font <- style$font_family %||% APP_CHART_FONTS[[1]]
   layout_args <- list()
   annotations <- list()
 
@@ -1772,7 +1778,7 @@ build_chart_widget <- function(data, style) {
         yanchor = "top",
         showarrow = FALSE,
         align = "left",
-        font = list(size = 16, color = "#000000")
+        font = list(size = 16, color = "#000000", family = chart_font)
       )
     ))
   }
@@ -1791,7 +1797,7 @@ build_chart_widget <- function(data, style) {
         yanchor = "bottom",
         showarrow = FALSE,
         align = "right",
-        font = list(size = 16, color = "#000000")
+        font = list(size = 16, color = "#000000", family = chart_font)
       )
     ))
   }
@@ -1801,7 +1807,13 @@ build_chart_widget <- function(data, style) {
   }
 
   title_markup <- if (nzchar(title_text)) {
-    paste0("<b>", htmltools::htmlEscape(title_text), "</b>")
+    paste0(
+      "<span style='font-family:",
+      htmltools::htmlEscape(chart_font),
+      ";'><b>",
+      htmltools::htmlEscape(title_text),
+      "</b></span>"
+    )
   } else {
     ""
   }
@@ -1811,7 +1823,9 @@ build_chart_widget <- function(data, style) {
       text = if (nzchar(subtitle_text)) {
         paste0(
           title_markup,
-          "<br><span style='display:inline-block;margin-top:8px;font-size:16px;color:#000000;'>",
+          "<br><span style='display:inline-block;margin-top:8px;font-size:16px;color:#000000;font-family:",
+          htmltools::htmlEscape(chart_font),
+          ";'>",
           htmltools::htmlEscape(subtitle_text),
           "</span>"
         )
@@ -1827,14 +1841,19 @@ build_chart_widget <- function(data, style) {
 
   layout_args$xaxis <- modifyList(
     layout_args$xaxis %||% list(),
-    list(tickfont = list(size = 16, color = "#000000"))
+    list(tickfont = list(size = 16, color = "#000000", family = chart_font))
   )
   layout_args$yaxis <- modifyList(
     layout_args$yaxis %||% list(),
     list(
       side = "right",
-      tickfont = list(size = 16, color = "#000000")
+      tickfont = list(size = 16, color = "#000000", family = chart_font)
     )
+  )
+
+  layout_args$font <- modifyList(
+    layout_args$font %||% list(),
+    list(family = chart_font, color = "#000000")
   )
 
   if (identical(style$legend, "none")) {
@@ -1842,7 +1861,7 @@ build_chart_widget <- function(data, style) {
   } else {
     layout_args$legend <- list(
       orientation = if (identical(style$legend, "bottom")) "h" else "v",
-      font = list(size = 16)
+      font = list(size = 16, family = chart_font, color = "#000000")
     )
   }
 
@@ -2015,6 +2034,7 @@ restore_chart_state <- function(session, chart_state) {
   updateTextInput(session, "style_subtitle", value = chart_state$style$subtitle)
   updateTextInput(session, "style_y_axis_label", value = chart_state$style$y_axis_label)
   updateTextInput(session, "style_note", value = chart_state$style$note)
+  updateSelectInput(session, "style_font_family", selected = chart_state$style$font_family)
   updateRadioGroupButtons(session, "style_legend", selected = chart_state$style$legend)
   updateSelectInput(session, "style_palette", selected = chart_state$style$palette)
   updateSelectInput(session, "style_date_format", selected = chart_state$style$date_format)

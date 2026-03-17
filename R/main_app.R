@@ -338,7 +338,8 @@ build_main_ui <- function() {
                   textInput("style_title", "Chart title shown above the plot", value = "Custom data view"),
                   textInput("style_subtitle", "Chart subtitle shown below the title", value = ""),
                   textInput("style_y_axis_label", "Y-axis label", value = "%"),
-                  textInput("style_note", "Source note or caption shown below the chart", value = default_builder_state()$style$note)
+                  textInput("style_note", "Source note or caption shown below the chart", value = default_builder_state()$style$note),
+                  selectInput("style_font_family", "Chart font", choices = APP_CHART_FONTS, selected = APP_CHART_FONTS[[1]])
                 ),
                 column(
                   width = 4,
@@ -911,6 +912,7 @@ build_main_server <- function(input, output, session) {
         input$style_subtitle,
         input$style_y_axis_label,
         input$style_note,
+        input$style_font_family,
         input$style_legend,
         input$style_palette,
         input$style_date_format,
