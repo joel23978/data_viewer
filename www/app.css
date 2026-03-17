@@ -2,6 +2,25 @@ body {
   background: #f4f6fb;
 }
 
+.navbar {
+  padding-right: 180px;
+  position: relative;
+}
+
+.navbar::after {
+  color: #64748b;
+  content: "\00A9 2026 Joel Findlay";
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  opacity: 0.9;
+  pointer-events: none;
+  position: absolute;
+  right: 18px;
+  top: 50%;
+  transform: translateY(-50%);
+}
+
 .page-shell {
   padding: 8px 12px 24px;
 }
