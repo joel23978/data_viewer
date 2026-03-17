@@ -410,7 +410,7 @@ build_main_ui <- function() {
               header_actions = actionButton("clear_workspace_tools", "Clear", class = "app-card__header-chip"),
               radioGroupButtons(
                 "side_panel_mode",
-                "Right-hand workspace",
+                NULL,
                 choices = c("Transformations" = "transform", "Analysis" = "analysis"),
                 selected = "transform",
                 justified = TRUE,
