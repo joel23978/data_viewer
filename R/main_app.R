@@ -1566,11 +1566,300 @@ build_main_server <- function(input, output, session) {
     }
   )
 
+  build_analysis_save_context <- function(chart_state, data) {
+    active_tab <- input$analysis_tabs %||% "Correlations"
+
+    if (identical(active_tab, "Correlations")) {
+      series_x <- input$analysis_corr_x %||% ""
+      series_y <- input$analysis_corr_y %||% ""
+      window <- max(2L, as.integer(input$analysis_corr_window %||% 4))
+
+      if (!nzchar(series_x) || !nzchar(series_y) || identical(series_x, series_y)) {
+        return(NULL)
+      }
+
+      result <- tryCatch(
+        rolling_correlation_data(data, series_x, series_y, window),
+        error = function(error) NULL
+      )
+
+      if (is.null(result) || nrow(result) == 0) {
+        return(NULL)
+      }
+
+      return(list(
+        chart_kind = "correlation",
+        title = paste("Rolling correlation:", series_x, "vs", series_y),
+        chart_state = chart_state,
+        data_snapshot = empty_chart_data(),
+        analysis_spec = list(
+          tab = "Correlations",
+          series_x = series_x,
+          series_y = series_y,
+          window = window
+        ),
+        analysis_payload = result
+      ))
+    }
+
+    if (identical(active_tab, "Regression")) {
+      dependent <- input$analysis_reg_y %||% ""
+      independent <- input$analysis_reg_x %||% ""
+      error_assumption <- input$analysis_reg_errors %||% "classical"
+
+      if (!nzchar(dependent) || !nzchar(independent) || identical(dependent, independent)) {
+        return(NULL)
+      }
+
+      result <- tryCatch(
+        regression_analysis(
+          data,
+          dependent = dependent,
+          independent = independent,
+          error_assumption = error_assumption
+        ),
+        error = function(error) NULL
+      )
+
+      if (is.null(result)) {
+        return(NULL)
+      }
+
+      return(list(
+        chart_kind = "regression",
+        title = paste("Regression:", dependent, "on", independent),
+        chart_state = chart_state,
+        data_snapshot = empty_chart_data(),
+        analysis_spec = list(
+          tab = "Regression",
+          dependent = dependent,
+          independent = independent,
+          error_assumption = error_assumption
+        ),
+        analysis_payload = result
+      ))
+    }
+
+    if (identical(active_tab, "Forecast")) {
+      series_name <- input$analysis_forecast_series %||% ""
+
+      if (!nzchar(series_name)) {
+        return(NULL)
+      }
+
+      result <- tryCatch(
+        forecast_analysis(
+          data,
+          series_name = series_name,
+          model_family = input$analysis_forecast_family,
+          ar_lag = max(0, as.integer(input$analysis_forecast_ar)),
+          ma_lag = max(0, as.integer(input$analysis_forecast_ma)),
+          horizon = max(1, as.integer(input$analysis_forecast_horizon)),
+          window_mode = input$analysis_forecast_window_mode %||% "expanding",
+          window_size = as.integer(input$analysis_forecast_window_size %||% NA),
+          holdout_size = max(0, as.integer(input$analysis_forecast_holdout %||% 0))
+        ),
+        error = function(error) NULL
+      )
+
+      if (is.null(result)) {
+        return(NULL)
+      }
+
+      return(list(
+        chart_kind = "forecast",
+        title = paste("Forecast for", series_name),
+        chart_state = chart_state,
+        data_snapshot = empty_chart_data(),
+        analysis_spec = list(
+          tab = "Forecast",
+          series_name = series_name,
+          model_family = input$analysis_forecast_family %||% "AR",
+          ar_lag = max(0, as.integer(input$analysis_forecast_ar)),
+          ma_lag = max(0, as.integer(input$analysis_forecast_ma)),
+          horizon = max(1, as.integer(input$analysis_forecast_horizon)),
+          window_mode = input$analysis_forecast_window_mode %||% "expanding",
+          window_size = as.integer(input$analysis_forecast_window_size %||% NA),
+          holdout_size = max(0, as.integer(input$analysis_forecast_holdout %||% 0))
+        ),
+        analysis_payload = result
+      ))
+    }
+
+    if (identical(active_tab, "Seasonal Adjust")) {
+      series_name <- input$analysis_seasonal_series %||% ""
+      display_mode <- input$analysis_seasonal_view %||% "both"
+
+      if (!nzchar(series_name)) {
+        return(NULL)
+      }
+
+      result <- tryCatch(
+        seasonal_adjustment_analysis(
+          data,
+          series_name = series_name,
+          display_mode = display_mode
+        ),
+        error = function(error) NULL
+      )
+
+      if (is.null(result)) {
+        return(NULL)
+      }
+
+      return(list(
+        chart_kind = "seasonal_adjustment",
+        title = if (identical(display_mode, "adjusted")) {
+          paste("Seasonally adjusted:", series_name)
+        } else {
+          paste("Seasonal adjustment:", series_name)
+        },
+        chart_state = chart_state,
+        data_snapshot = empty_chart_data(),
+        analysis_spec = list(
+          tab = "Seasonal Adjust",
+          series_name = series_name,
+          display_mode = display_mode
+        ),
+        analysis_payload = result
+      ))
+    }
+
+    NULL
+  }
+
+  build_current_save_context <- function(chart_state, data) {
+    if (identical(input$side_panel_mode %||% "transform", "analysis")) {
+      return(build_analysis_save_context(chart_state, data))
+    }
+
+    if (nrow(data) == 0) {
+      return(NULL)
+    }
+
+    list(
+      chart_kind = "builder",
+      title = trimws(chart_state$style$title %||% ""),
+      chart_state = chart_state,
+      data_snapshot = data,
+      analysis_spec = NULL,
+      analysis_payload = NULL
+    )
+  }
+
+  build_saved_chart_widget <- function(chart_record, width = NULL, height = NULL) {
+    if (is.null(chart_record) || nrow(chart_record) == 0) {
+      return(empty_plotly_widget("Select a saved chart to preview it."))
+    }
+
+    chart_kind <- chart_record$chart_kind[[1]] %||% "builder"
+    chart_state <- chart_record$chart_state[[1]]
+    analysis_spec <- chart_record$analysis_spec[[1]] %||% list()
+    analysis_payload <- chart_record$analysis_payload[[1]] %||% NULL
+
+    widget <- if (identical(chart_kind, "builder") || is.null(analysis_payload)) {
+      build_chart_widget(chart_record$data_snapshot[[1]], chart_state$style)
+    } else if (identical(chart_kind, "correlation")) {
+      ggplotly(
+        build_correlation_plot(
+          analysis_payload,
+          analysis_spec$series_x %||% "",
+          analysis_spec$series_y %||% "",
+          analysis_spec$window %||% 4
+        ),
+        tooltip = c("x", "y")
+      )
+    } else if (identical(chart_kind, "regression")) {
+      ggplotly(
+        build_regression_plot(
+          analysis_payload,
+          analysis_spec$dependent %||% "",
+          analysis_spec$independent %||% ""
+        ),
+        tooltip = c("x", "y")
+      )
+    } else if (identical(chart_kind, "forecast")) {
+      ggplotly(
+        build_forecast_plot(
+          analysis_payload,
+          analysis_spec$series_name %||% "Series"
+        ),
+        tooltip = c("x", "y")
+      )
+    } else if (identical(chart_kind, "seasonal_adjustment")) {
+      ggplotly(
+        build_seasonal_adjustment_plot(
+          analysis_payload,
+          analysis_spec$series_name %||% "Series",
+          analysis_spec$display_mode %||% "both"
+        ),
+        tooltip = c("x", "y", "colour")
+      )
+    } else {
+      build_chart_widget(chart_record$data_snapshot[[1]], chart_state$style)
+    }
+
+    if (!is.null(width) || !is.null(height)) {
+      widget <- widget %>%
+        plotly::layout(
+          autosize = FALSE,
+          width = width,
+          height = height
+        ) %>%
+        plotly::config(
+          responsive = FALSE,
+          displayModeBar = TRUE
+        )
+    }
+
+    widget
+  }
+
+  restore_saved_analysis_state <- function(chart_record) {
+    chart_kind <- chart_record$chart_kind[[1]] %||% "builder"
+    analysis_spec <- chart_record$analysis_spec[[1]] %||% list()
+
+    if (identical(chart_kind, "builder")) {
+      updateRadioGroupButtons(session, "side_panel_mode", selected = "transform")
+      return(invisible(NULL))
+    }
+
+    updateRadioGroupButtons(session, "side_panel_mode", selected = "analysis")
+    updateTabsetPanel(session, "analysis_tabs", selected = analysis_spec$tab %||% "Correlations")
+
+    session$onFlushed(function() {
+      if (identical(chart_kind, "correlation")) {
+        updateSelectInput(session, "analysis_corr_x", selected = analysis_spec$series_x %||% "")
+        updateSelectInput(session, "analysis_corr_y", selected = analysis_spec$series_y %||% "")
+        updateNumericInput(session, "analysis_corr_window", value = analysis_spec$window %||% 4)
+      } else if (identical(chart_kind, "regression")) {
+        updateSelectInput(session, "analysis_reg_y", selected = analysis_spec$dependent %||% "")
+        updateSelectInput(session, "analysis_reg_x", selected = analysis_spec$independent %||% "")
+        updateRadioGroupButtons(session, "analysis_reg_errors", selected = analysis_spec$error_assumption %||% "classical")
+      } else if (identical(chart_kind, "forecast")) {
+        updateSelectInput(session, "analysis_forecast_series", selected = analysis_spec$series_name %||% "")
+        updateRadioGroupButtons(session, "analysis_forecast_family", selected = analysis_spec$model_family %||% "AR")
+        updateRadioGroupButtons(session, "analysis_forecast_window_mode", selected = analysis_spec$window_mode %||% "expanding")
+        updateNumericInput(session, "analysis_forecast_window_size", value = analysis_spec$window_size %||% 12)
+        updateNumericInput(session, "analysis_forecast_ar", value = analysis_spec$ar_lag %||% 1)
+        updateNumericInput(session, "analysis_forecast_ma", value = analysis_spec$ma_lag %||% 0)
+        updateNumericInput(session, "analysis_forecast_holdout", value = analysis_spec$holdout_size %||% 0)
+        updateNumericInput(session, "analysis_forecast_horizon", value = analysis_spec$horizon %||% 4)
+      } else if (identical(chart_kind, "seasonal_adjustment")) {
+        updateSelectInput(session, "analysis_seasonal_series", selected = analysis_spec$series_name %||% "")
+        updateRadioGroupButtons(session, "analysis_seasonal_view", selected = analysis_spec$display_mode %||% "both")
+      }
+    }, once = TRUE)
+
+    invisible(NULL)
+  }
+
   observeEvent(input$save_chart, {
     ensure_chart_library_loaded()
-    current_data <- chart_data()
-    if (nrow(current_data) == 0) {
-      showNotification("Build a chart before saving it.", type = "error")
+    save_context <- build_current_save_context(builder_state(), chart_data())
+
+    if (is.null(save_context)) {
+      showNotification("Build a valid chart before saving it.", type = "error")
       return(invisible(NULL))
     }
 
@@ -1578,15 +1867,17 @@ build_main_server <- function(input, output, session) {
       "Saving chart to the library...",
       "Chart saved to the library.",
       {
-        chart_state <- builder_state()
         save_title <- trimws(input$library_title %||% "")
         save_description <- trimws(input$library_description %||% "")
 
         chart_record <- new_chart_record(
-          chart_state = chart_state,
-          data_snapshot = current_data,
-          title = if (nzchar(save_title)) save_title else chart_state$style$title,
-          description = save_description
+          chart_state = save_context$chart_state,
+          data_snapshot = save_context$data_snapshot,
+          title = if (nzchar(save_title)) save_title else save_context$title,
+          description = save_description,
+          chart_kind = save_context$chart_kind,
+          analysis_spec = save_context$analysis_spec,
+          analysis_payload = save_context$analysis_payload
         )
 
         updated_library <- upsert_chart_record(chart_library_store(), chart_record)
@@ -1832,7 +2123,7 @@ build_main_server <- function(input, output, session) {
       return(empty_plotly_widget("Select a saved chart to preview it."))
     }
 
-    build_chart_widget(chart_record$data_snapshot[[1]], chart_record$chart_state[[1]]$style)
+    build_saved_chart_widget(chart_record)
   })
 
   observeEvent(input$load_chart, {
@@ -1846,6 +2137,7 @@ build_main_server <- function(input, output, session) {
       "Saved chart loaded into the builder.",
       {
         apply_builder_state(chart_record$chart_state[[1]], navigate_builder = TRUE)
+        restore_saved_analysis_state(chart_record)
         updateTextInput(session, "library_title", value = chart_record$title[[1]])
         updateTextAreaInput(session, "library_description", value = chart_record$description[[1]] %||% "")
       },
@@ -1857,18 +2149,12 @@ build_main_server <- function(input, output, session) {
     ensure_chart_library_loaded()
     selected_records <- selected_chart_records()
     if (is.null(selected_records) || nrow(selected_records) == 0) {
-      fallback_records <- filtered_chart_library()
+      fallback_records <- filtered_library()
       if (nrow(fallback_records) == 1) {
         selected_records <- fallback_records[1, , drop = FALSE]
       }
     }
     req(!is.null(selected_records), nrow(selected_records) == 1)
-
-    current_data <- chart_data()
-    if (nrow(current_data) == 0) {
-      showNotification("Build a chart before updating a saved chart.", type = "error")
-      return(invisible(NULL))
-    }
 
     chart_record <- selected_records[1, , drop = FALSE]
 
@@ -1883,11 +2169,19 @@ build_main_server <- function(input, output, session) {
         }
 
         refreshed_payload <- build_chart_data(chart_state)
+        save_context <- build_current_save_context(chart_state, refreshed_payload$data)
+        if (is.null(save_context)) {
+          stop("Build a valid chart before updating the saved chart.", call. = FALSE)
+        }
+
         updated_record <- new_chart_record(
-          chart_state = chart_state,
-          data_snapshot = refreshed_payload$data,
-          title = trimws(input$library_title %||% chart_state$style$title),
-          description = trimws(input$library_description %||% "")
+          chart_state = save_context$chart_state,
+          data_snapshot = save_context$data_snapshot,
+          title = trimws(input$library_title %||% save_context$title),
+          description = trimws(input$library_description %||% ""),
+          chart_kind = save_context$chart_kind,
+          analysis_spec = save_context$analysis_spec,
+          analysis_payload = save_context$analysis_payload
         )
         updated_record$chart_id <- chart_record$chart_id
 
@@ -2421,13 +2715,8 @@ build_main_server <- function(input, output, session) {
     )
   })
 
-  build_presentation_export_widget <- function(data, style) {
-    build_chart_widget(data, style) %>%
-      plotly::layout(
-        autosize = FALSE,
-        width = 960,
-        height = 540
-      )
+  build_presentation_export_widget <- function(chart_record) {
+    build_saved_chart_widget(chart_record, width = 960, height = 540)
   }
 
   save_presentation_document <- function(title, subtitle = NULL, sections, file) {
@@ -2467,7 +2756,7 @@ build_main_server <- function(input, output, session) {
       req(!is.null(selected_records), nrow(selected_records) == 1)
       chart_record <- selected_records[1, , drop = FALSE]
       saveWidget(
-        build_chart_widget(chart_record$data_snapshot[[1]], chart_record$chart_state[[1]]$style),
+        build_saved_chart_widget(chart_record),
         file,
         selfcontained = TRUE
       )
@@ -2491,7 +2780,7 @@ build_main_server <- function(input, output, session) {
           tags$p(chart_record$description[[1]] %||% ""),
           div(
             class = "deck-chart",
-            htmltools::as.tags(build_presentation_export_widget(chart_record$data_snapshot[[1]], chart_record$chart_state[[1]]$style))
+            htmltools::as.tags(build_presentation_export_widget(chart_record))
           )
         )
       })
@@ -2525,7 +2814,7 @@ build_main_server <- function(input, output, session) {
           tags$p(chart_record$description[[1]] %||% ""),
           div(
             class = "deck-chart",
-            htmltools::as.tags(build_presentation_export_widget(chart_record$data_snapshot[[1]], chart_record$chart_state[[1]]$style))
+            htmltools::as.tags(build_presentation_export_widget(chart_record))
           )
         )
       })

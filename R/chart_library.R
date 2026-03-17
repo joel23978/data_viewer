@@ -14,8 +14,11 @@ empty_chart_library <- function() {
     source_summary = character(),
     series_count = integer(),
     saved_at = as.POSIXct(character()),
+    chart_kind = character(),
     chart_state = list(),
-    data_snapshot = list()
+    data_snapshot = list(),
+    analysis_spec = list(),
+    analysis_payload = list()
   )
 }
 
@@ -90,6 +93,18 @@ read_chart_library <- function() {
 
   library_data <- readRDS(chart_library_path())
 
+  if (!"chart_kind" %in% names(library_data)) {
+    library_data$chart_kind <- rep("builder", nrow(library_data))
+  }
+
+  if (!"analysis_spec" %in% names(library_data)) {
+    library_data$analysis_spec <- rep(list(NULL), nrow(library_data))
+  }
+
+  if (!"analysis_payload" %in% names(library_data)) {
+    library_data$analysis_payload <- rep(list(NULL), nrow(library_data))
+  }
+
   if (!inherits(library_data$saved_at, "POSIXct")) {
     library_data <- library_data %>%
       mutate(saved_at = as.POSIXct(saved_at, tz = Sys.timezone()))
@@ -97,8 +112,11 @@ read_chart_library <- function() {
 
   library_data %>%
     mutate(
+      chart_kind = coalesce(as.character(chart_kind), "builder"),
       chart_state = lapply(chart_state, normalize_chart_state),
-      data_snapshot = lapply(data_snapshot, restore_chart_snapshot)
+      data_snapshot = lapply(data_snapshot, restore_chart_snapshot),
+      analysis_spec = lapply(analysis_spec, function(spec) spec %||% NULL),
+      analysis_payload = lapply(analysis_payload, function(payload) payload %||% NULL)
     )
 }
 
@@ -142,7 +160,41 @@ summarise_series_sources <- function(series_specs) {
     paste(collapse = ", ")
 }
 
-new_chart_record <- function(chart_state, data_snapshot, title = NULL, description = "") {
+compact_analysis_payload <- function(chart_kind = "builder", analysis_payload = NULL) {
+  if (is.null(analysis_payload)) {
+    return(NULL)
+  }
+
+  if (identical(chart_kind, "regression")) {
+    regression_payload <- analysis_payload
+    regression_payload$model <- NULL
+    return(regression_payload)
+  }
+
+  if (identical(chart_kind, "forecast")) {
+    forecast_payload <- analysis_payload
+    forecast_payload$model <- NULL
+    return(forecast_payload)
+  }
+
+  if (identical(chart_kind, "seasonal_adjustment")) {
+    seasonal_payload <- analysis_payload
+    seasonal_payload$model <- NULL
+    return(seasonal_payload)
+  }
+
+  analysis_payload
+}
+
+new_chart_record <- function(
+  chart_state,
+  data_snapshot,
+  title = NULL,
+  description = "",
+  chart_kind = "builder",
+  analysis_spec = NULL,
+  analysis_payload = NULL
+) {
   chart_state <- normalize_chart_state(chart_state)
   chart_title <- title %||% chart_state$style$title
   chart_title <- trimws(chart_title)
@@ -158,8 +210,11 @@ new_chart_record <- function(chart_state, data_snapshot, title = NULL, descripti
     source_summary = summarise_series_sources(chart_state$series),
     series_count = length(Filter(Negate(is.null), chart_state$series)),
     saved_at = Sys.time(),
+    chart_kind = chart_kind %||% "builder",
     chart_state = list(chart_state),
-    data_snapshot = list(compact_chart_snapshot(data_snapshot))
+    data_snapshot = list(compact_chart_snapshot(data_snapshot)),
+    analysis_spec = list(analysis_spec %||% NULL),
+    analysis_payload = list(compact_analysis_payload(chart_kind, analysis_payload))
   )
 }
 
