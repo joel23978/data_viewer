@@ -1610,6 +1610,8 @@ build_chart_plot <- function(data, style) {
   axis_settings <- pretty_axis_breaks(data, style)
   x_breaks <- scales::breaks_pretty(n = max(2, round(style$x_labels %||% 6)))
   chart_font <- style$font_family %||% APP_CHART_FONTS[[1]]
+  caption_top_margin <- if (identical(style$legend, "bottom")) 28 else 4
+  legend_bottom_margin <- if (identical(style$legend, "bottom")) 18 else 0
   bottom_gridline_value <- if (length(axis_settings$breaks) > 0 && all(is.finite(axis_settings$breaks))) {
     if (isTRUE(style$invert_y_axis)) {
       max(axis_settings$breaks, na.rm = TRUE)
@@ -1720,15 +1722,21 @@ build_chart_plot <- function(data, style) {
       plot.tag.position = c(1, 0.945),
       plot.title = element_text(face = "bold", size = 18, hjust = 0, margin = margin(b = 18)),
       plot.subtitle = element_text(size = 16, colour = "#000000", hjust = 0, margin = margin(b = 10)),
-      plot.caption = element_text(size = 16, colour = "#000000", hjust = 0),
+      plot.caption = element_text(size = 16, colour = "#000000", hjust = 0, margin = margin(t = caption_top_margin)),
       plot.title.position = "plot",
       plot.caption.position = "plot",
       axis.text = element_text(size = 16, colour = "#000000"),
+      axis.text.y.right = element_text(margin = margin(l = 52)),
       panel.grid.minor = element_blank(),
+      panel.grid.major.y = element_line(colour = "#d1d5db", linewidth = 0.45),
       panel.grid.major.x = element_blank(),
+      axis.line.x = element_line(colour = "#000000", linewidth = 0.5),
+      axis.ticks.x = element_line(colour = "#000000", linewidth = 0.45),
+      axis.ticks.length.x = grid::unit(6, "pt"),
       legend.position = style$legend,
       legend.justification = "left",
       legend.box.just = "left",
+      legend.box.margin = margin(b = legend_bottom_margin),
       legend.title = element_blank(),
       legend.text = element_text(size = 16),
       plot.background = element_rect(fill = "white", colour = NA)
@@ -1739,7 +1747,7 @@ build_chart_plot <- function(data, style) {
       scale_y_reverse(
         limits = c(axis_settings$max, axis_settings$min),
         breaks = rev(axis_settings$breaks),
-        expand = expansion(mult = c(0.02, 0.08)),
+        expand = expansion(mult = c(0, 0.08)),
         position = "right"
       )
   } else {
@@ -1747,7 +1755,7 @@ build_chart_plot <- function(data, style) {
       scale_y_continuous(
         limits = c(axis_settings$min, axis_settings$max),
         breaks = axis_settings$breaks,
-        expand = expansion(mult = c(0.02, 0.08)),
+        expand = expansion(mult = c(0, 0.08)),
         position = "right"
       )
   }
@@ -1762,16 +1770,18 @@ build_chart_widget <- function(data, style) {
   note_text <- trimws(style$note %||% "")
   y_axis_label <- trimws(style$y_axis_label %||% "")
   chart_font <- style$font_family %||% APP_CHART_FONTS[[1]]
+  note_y <- if (identical(style$legend, "bottom")) -0.24 else -0.07
+  bottom_margin <- if (identical(style$legend, "bottom")) 108 else 42
   layout_args <- list()
   annotations <- list()
 
   if (nzchar(note_text)) {
-    layout_args$margin <- list(b = 90)
+    layout_args$margin <- list(b = bottom_margin)
     annotations <- c(annotations, list(
       list(
         text = note_text,
         x = 0,
-        y = -0.2,
+        y = note_y,
         xref = "paper",
         yref = "paper",
         xanchor = "left",
@@ -1785,11 +1795,11 @@ build_chart_widget <- function(data, style) {
 
   if (nzchar(y_axis_label)) {
     existing_margin <- layout_args$margin %||% list()
-    layout_args$margin <- modifyList(list(t = 92, r = 70), existing_margin)
+    layout_args$margin <- modifyList(list(t = 92, r = 82), existing_margin)
     annotations <- c(annotations, list(
       list(
         text = y_axis_label,
-        x = 1,
+        x = 1.02,
         y = 0.985,
         xref = "paper",
         yref = "paper",
@@ -1841,13 +1851,30 @@ build_chart_widget <- function(data, style) {
 
   layout_args$xaxis <- modifyList(
     layout_args$xaxis %||% list(),
-    list(tickfont = list(size = 16, color = "#000000", family = chart_font))
+    list(
+      tickfont = list(size = 16, color = "#000000", family = chart_font),
+      tickprefix = "\u2002",
+      showline = TRUE,
+      linecolor = "#000000",
+      linewidth = 1,
+      ticks = "outside",
+      ticklen = 6,
+      tickwidth = 1,
+      tickcolor = "#000000"
+    )
   )
   layout_args$yaxis <- modifyList(
     layout_args$yaxis %||% list(),
     list(
       side = "right",
-      tickfont = list(size = 16, color = "#000000", family = chart_font)
+      tickprefix = "\u2002\u2002\u2002",
+      tickfont = list(size = 16, color = "#000000", family = chart_font),
+      ticklabelstandoff = 34,
+      ticklen = 10,
+      tickwidth = 1,
+      tickcolor = "rgba(0,0,0,0)",
+      gridcolor = "#d1d5db",
+      gridwidth = 1
     )
   )
 
