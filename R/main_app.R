@@ -4,6 +4,7 @@ build_search_tab_ui <- function() {
     chart_card(
       "Search",
       class = "search-toolbar-card",
+      header_actions = actionButton("open_fred_api_key_modal", "Enter FRED key", class = "app-card__header-chip"),
       div(
         class = "search-toolbar",
         div(
@@ -115,8 +116,7 @@ build_search_tab_ui <- function() {
             justified = FALSE,
             checkIcon = list(yes = icon("check"))
           ),
-          actionButton("search_add_series", "Add result to builder", class = "btn-primary btn-block"),
-          actionButton("open_fred_api_key_modal", "Enter FRED key", class = "btn-block")
+          actionButton("search_add_series", "Add result to builder", class = "btn-primary btn-block")
         )
       )
     )
