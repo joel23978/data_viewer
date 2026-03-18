@@ -98,7 +98,7 @@ build_search_tab_ui <- function() {
         width = 9,
         chart_card(
           "Search Results",
-          DT::dataTableOutput("search_results_table")
+          uiOutput("search_results_panel")
         )
       ),
       column(
@@ -199,6 +199,17 @@ build_tab_loading_ui <- function(title, message) {
           )
         )
       )
+    )
+  )
+}
+
+build_panel_loading_ui <- function(message) {
+  div(
+    class = "search-results-loading",
+    div(class = "search-results-loading__label", message),
+    div(
+      class = "search-results-loading__track",
+      div(class = "search-results-loading__bar")
     )
   )
 }
@@ -843,14 +854,6 @@ build_main_server <- function(input, output, session) {
 
   output$search_tab_ui <- renderUI({
     req("search" %in% loaded_main_tabs())
-    if (identical(tab_load_state$search, "loading")) {
-      return(build_tab_loading_ui("Data Search", "Loading search metadata..."))
-    }
-
-    if (identical(tab_load_state$search, "error")) {
-      return(build_tab_error_ui("Data Search", tab_load_error$search %||% "Unable to load search metadata."))
-    }
-
     build_search_tab_ui()
   })
 
@@ -1270,6 +1273,7 @@ build_main_server <- function(input, output, session) {
   presentation_library_store <- reactiveVal(NULL)
   search_index_store <- reactiveVal(NULL)
   search_loading_message <- reactiveVal("")
+  search_runtime_status <- reactiveVal("")
   search_query_notification_id <- reactiveVal(NULL)
   search_query_text <- reactive(input$search_query %||% "")
   search_query_debounced <- debounce(search_query_text, millis = 350)
@@ -1292,9 +1296,21 @@ build_main_server <- function(input, output, session) {
 
   ensure_search_index_loaded <- function(force = FALSE) {
     if (force || is.null(shiny::isolate(search_index_store()))) {
+      load_started_at <- Sys.time()
       search_loading_message("Loading local metadata index...")
       on.exit(search_loading_message(""), add = TRUE)
       search_index_store(build_search_index(force = force))
+      load_elapsed_ms <- round(as.numeric(difftime(Sys.time(), load_started_at, units = "secs")) * 1000)
+      message(sprintf(
+        "Local search metadata loaded: %s rows in %sms.",
+        scales::comma(nrow(shiny::isolate(search_index_store()))),
+        load_elapsed_ms
+      ))
+      search_runtime_status(sprintf(
+        "Local metadata ready: %s rows loaded in %sms.",
+        scales::comma(nrow(shiny::isolate(search_index_store()))),
+        load_elapsed_ms
+      ))
     }
 
     invisible(shiny::isolate(search_index_store()))
@@ -1304,7 +1320,11 @@ build_main_server <- function(input, output, session) {
     invalidate_search_index_cache()
 
     if (!is.null(shiny::isolate(search_index_store()))) {
-      search_index_store(build_search_index(force = TRUE))
+      refresh_started_at <- Sys.time()
+      search_index_store(build_search_index(force = FALSE))
+      refresh_elapsed_ms <- round(as.numeric(difftime(Sys.time(), refresh_started_at, units = "secs")) * 1000)
+      message(sprintf("Recent search overlay refreshed in %sms.", refresh_elapsed_ms))
+      search_runtime_status(sprintf("Recent series refreshed in %sms.", refresh_elapsed_ms))
     }
 
     invisible(NULL)
@@ -1319,9 +1339,21 @@ build_main_server <- function(input, output, session) {
 
     later::later(function() {
       if (is.null(shiny::isolate(search_index_store()))) {
-        try(ensure_search_index_loaded(), silent = TRUE)
+        tab_load_state$search <- "loading"
+        tab_load_error$search <- ""
+
+        tryCatch(
+          {
+            ensure_search_index_loaded()
+            tab_load_state$search <- "ready"
+          },
+          error = function(error) {
+            tab_load_state$search <- "error"
+            tab_load_error$search <- paste("Unable to load the search metadata:", conditionMessage(error))
+          }
+        )
       }
-    }, delay = 1.5)
+    }, delay = 0.15)
   }, once = TRUE)
 
   observeEvent(input$main_tabs, {
@@ -1384,6 +1416,20 @@ build_main_server <- function(input, output, session) {
     )
   })
 
+  output$search_results_panel <- renderUI({
+    local_source_selected <- (input$search_source_filter %||% "all") %in% c("all", "Recent", "ABS CPI", "RBA", "ABS")
+
+    if (identical(tab_load_state$search, "error")) {
+      return(div(class = "message-banner", tab_load_error$search %||% "Unable to load local search metadata."))
+    }
+
+    if (local_source_selected && is.null(search_index_store())) {
+      return(build_panel_loading_ui(search_loading_message() %||% "Loading local metadata..."))
+    }
+
+    DT::dataTableOutput("search_results_table")
+  })
+
   fred_search_response <- reactive({
     if (!(input$search_source_filter %||% "all") %in% c("all", "FRED")) {
       return(empty_search_response())
@@ -1429,6 +1475,7 @@ build_main_server <- function(input, output, session) {
     search_messages <- c(
       loading_message,
       if (is.null(search_index_store()) && source_filter %in% c("all", "Recent", "ABS CPI", "RBA", "ABS")) "Local metadata will load when search runs." else "",
+      search_runtime_status() %||% "",
       if (isTRUE(include_remote_status)) fred_search_response()$status %||% "" else "",
       if (isTRUE(include_remote_status)) dbnomics_search_response()$status %||% "" else ""
     )
@@ -1474,39 +1521,66 @@ build_main_server <- function(input, output, session) {
   )
 
   search_results <- reactive({
-    if ((input$search_source_filter %||% "all") %in% c("all", "Recent", "ABS CPI", "RBA", "ABS") && is.null(search_index_store())) {
-      ensure_search_index_loaded()
-    }
+    source_filter <- input$search_source_filter %||% "all"
+    type_filter <- input$search_type_filter %||% "all"
+    location_filter <- input$search_location_filter %||% "all"
+    frequency_filter <- input$search_frequency_filter %||% "all"
+    query_text <- search_query_debounced()
+    local_source_selected <- source_filter %in% c("all", "Recent", "ABS CPI", "RBA", "ABS")
+    search_started_at <- Sys.time()
 
-    local_results <- if ((input$search_source_filter %||% "all") %in% c("FRED", "DBnomics")) {
+    local_results <- if (!local_source_selected || is.null(search_index_store())) {
       empty_search_index()
     } else {
       filter_search_index(
         search_index_store(),
-        query = "",
-        source_filter = input$search_source_filter,
-        type_filter = "all",
-        location_filter = "all",
-        frequency_filter = input$search_frequency_filter %||% "all",
-        limit = Inf
+        query = query_text,
+        source_filter = source_filter,
+        type_filter = type_filter,
+        location_filter = location_filter,
+        frequency_filter = frequency_filter,
+        limit = Inf,
+        token_index = current_search_token_index()
       )
     }
 
-    combined_results <- bind_rows(
-      local_results,
+    remote_results <- bind_rows(
       fred_search_response()$results,
       dbnomics_search_response()$results
-    )
+    ) %>%
+      distinct(search_id, .keep_all = TRUE)
 
-    apply_search_filters(
-      combined_results %>% distinct(search_id, .keep_all = TRUE),
-      query = search_query_debounced(),
+    remote_results <- filter_search_index(
+      remote_results,
+      query = "",
       source_filter = "all",
-      type_filter = input$search_type_filter %||% "all",
-      location_filter = input$search_location_filter %||% "all",
+      type_filter = type_filter,
+      location_filter = location_filter,
       frequency_filter = "all",
       limit = Inf
     )
+
+    combined_results <- bind_rows(local_results, remote_results) %>%
+      distinct(search_id, .keep_all = TRUE)
+
+    search_elapsed_ms <- round(as.numeric(difftime(Sys.time(), search_started_at, units = "secs")) * 1000)
+
+    if (local_source_selected && !is.null(search_index_store())) {
+      message(sprintf(
+        "Local search query \"%s\" returned %s rows in %sms.",
+        query_text,
+        scales::comma(nrow(local_results)),
+        search_elapsed_ms
+      ))
+      search_runtime_status(sprintf(
+        "Local search: %s result%s in %sms.",
+        scales::comma(nrow(local_results)),
+        if (identical(nrow(local_results), 1L)) "" else "s",
+        search_elapsed_ms
+      ))
+    }
+
+    combined_results
   })
 
   observe({

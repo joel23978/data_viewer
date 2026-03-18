@@ -332,6 +332,59 @@ test_that("data search index builds and returns relevant local metadata", {
   expect_equal(classify_location_code("United States Industrial Production", "", "FRED"), "INTL")
 })
 
+test_that("prebuilt local search assets are used at runtime and boolean lookup uses token index", {
+  original_read_index <- read_prebuilt_local_search_index
+  original_read_token_index <- read_prebuilt_local_search_token_index
+  original_build_recent_search_index <- build_recent_search_index
+  original_build_abs_search_index <- build_abs_search_index
+  on.exit(assign("read_prebuilt_local_search_index", original_read_index, envir = .GlobalEnv), add = TRUE)
+  on.exit(assign("read_prebuilt_local_search_token_index", original_read_token_index, envir = .GlobalEnv), add = TRUE)
+  on.exit(assign("build_recent_search_index", original_build_recent_search_index, envir = .GlobalEnv), add = TRUE)
+  on.exit(assign("build_abs_search_index", original_build_abs_search_index, envir = .GlobalEnv), add = TRUE)
+
+  invalidate_local_search_asset_cache()
+  invalidate_search_index_cache()
+
+  local_index <- tibble::tibble(
+    local_row_id = 1:3,
+    search_id = c("abs::1", "abs::2", "rba::1"),
+    title = c("Retail turnover", "Industrial production", "Balance sheet"),
+    source = c("ABS", "ABS", "RBA"),
+    type_code = c("ECON", "ECON", "FIN"),
+    location_code = c("AUS", "AUS", "AUS"),
+    frequency = c("Monthly", "Monthly", "Monthly"),
+    start_date = as.Date(c(NA, NA, NA)),
+    end_date = as.Date(c(NA, NA, NA)),
+    summary = c("ABS retail", "ABS industry", "RBA finance"),
+    search_text = c("retail turnover abs", "industrial production abs", "balance sheet rba"),
+    load_payload = list(list(source = "abs"), list(source = "abs"), list(source = "rba"))
+  )
+  token_index <- build_search_token_index(local_index)
+
+  assign("read_prebuilt_local_search_index", function() local_index, envir = .GlobalEnv)
+  assign("read_prebuilt_local_search_token_index", function() token_index, envir = .GlobalEnv)
+  assign("build_recent_search_index", function() empty_search_index(), envir = .GlobalEnv)
+  assign(
+    "build_abs_search_index",
+    function() stop("Runtime should not rebuild ABS search index."),
+    envir = .GlobalEnv
+  )
+
+  search_index <- build_search_index(force = TRUE)
+  expect_equal(nrow(search_index), 3)
+
+  results <- filter_search_index(
+    search_index,
+    query = "retail AND turnover",
+    source_filter = "ABS",
+    limit = Inf,
+    token_index = current_search_token_index(force = TRUE)
+  )
+
+  expect_equal(nrow(results), 1)
+  expect_equal(results$title[[1]], "Retail turnover")
+})
+
 test_that("saved-chart series are indexed as recent search results", {
   temp_library <- tempfile(fileext = ".rds")
   temp_presentation_library <- tempfile(fileext = ".rds")

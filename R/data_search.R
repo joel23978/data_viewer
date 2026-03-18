@@ -1,5 +1,6 @@
 empty_search_index <- function() {
   tibble::tibble(
+    local_row_id = integer(),
     search_id = character(),
     title = character(),
     source = character(),
@@ -23,6 +24,16 @@ data_search_env <- new.env(parent = emptyenv())
 invalidate_search_index_cache <- function() {
   if (exists("index", envir = data_search_env, inherits = FALSE)) {
     rm("index", envir = data_search_env)
+  }
+
+  invisible(NULL)
+}
+
+invalidate_local_search_asset_cache <- function() {
+  for (cache_name in c("local_index", "token_index")) {
+    if (exists(cache_name, envir = data_search_env, inherits = FALSE)) {
+      rm(list = cache_name, envir = data_search_env)
+    }
   }
 
   invisible(NULL)
@@ -52,6 +63,9 @@ FRED_SEARCH_FREQUENCIES <- c(
   "Weekly",
   "Daily"
 )
+
+LOCAL_SEARCH_INDEX_PATH <- here::here("data", "local_search_index.rds")
+LOCAL_SEARCH_TOKEN_INDEX_PATH <- here::here("data", "local_search_token_index.rds")
 
 clean_search_text <- function(text) {
   text %>%
@@ -118,6 +132,10 @@ normalized_query_text <- function(query) {
   paste(boolean_query_terms(query), collapse = " ")
 }
 
+search_text_tokens <- function(text) {
+  unique(search_tokens(text))
+}
+
 boolean_query_matches <- function(search_text, query) {
   clauses <- parse_boolean_query(query)
 
@@ -136,6 +154,61 @@ boolean_query_matches <- function(search_text, query) {
     },
     logical(1)
   ))
+}
+
+build_search_token_index <- function(search_index) {
+  token_env <- new.env(parent = emptyenv(), hash = TRUE)
+
+  for (row_index in seq_len(nrow(search_index))) {
+    local_row_id <- search_index$local_row_id[[row_index]] %||% NA_integer_
+
+    if (!is.finite(local_row_id)) {
+      next
+    }
+
+    row_tokens <- search_text_tokens(search_index$search_text[[row_index]])
+
+    if (length(row_tokens) == 0) {
+      next
+    }
+
+    for (token in row_tokens) {
+      existing_ids <- token_env[[token]]
+
+      if (is.null(existing_ids)) {
+        token_env[[token]] <- local_row_id
+      } else {
+        token_env[[token]] <- c(existing_ids, local_row_id)
+      }
+    }
+  }
+
+  token_index <- as.list(token_env, all.names = TRUE)
+  lapply(token_index, function(row_ids) sort(unique(as.integer(row_ids))))
+}
+
+boolean_query_candidate_ids <- function(query, token_index) {
+  clauses <- parse_boolean_query(query)
+
+  if (length(clauses) == 0 || length(token_index %||% list()) == 0) {
+    return(integer())
+  }
+
+  clause_matches <- lapply(clauses, function(clause_terms) {
+    postings <- lapply(
+      clause_terms,
+      function(term) token_index[[term]] %||% integer()
+    )
+
+    if (length(postings) == 0 || any(lengths(postings) == 0)) {
+      return(integer())
+    }
+
+    Reduce(intersect, postings)
+  })
+
+  matched_ids <- Reduce(union, clause_matches, init = integer())
+  sort(unique(as.integer(matched_ids)))
 }
 
 remote_search_query <- function(query) {
@@ -778,6 +851,7 @@ build_recent_search_index <- function() {
       )
 
       tibble::tibble(
+        local_row_id = NA_integer_,
         recent_key = series_cache_key(normalized_spec),
         search_id = paste("recent", chart_record$chart_id[[1]], normalized_spec$index, sep = "::"),
         title = series_title,
@@ -815,16 +889,93 @@ build_recent_search_index <- function() {
     select(-recent_key, -saved_at)
 }
 
+build_local_search_base_index <- function() {
+  bind_rows(
+    build_cpi_search_index(),
+    build_rba_search_index(),
+    build_abs_search_index()
+  ) %>%
+    mutate(
+      frequency = coalesce(frequency, "Unknown"),
+      summary = coalesce(summary, ""),
+      search_text = coalesce(search_text, "")
+    ) %>%
+    arrange(source, title, search_id) %>%
+    mutate(local_row_id = dplyr::row_number()) %>%
+    select(local_row_id, everything())
+}
+
+write_local_search_assets <- function(index = NULL, token_index = NULL) {
+  local_index <- index %||% build_local_search_base_index()
+  local_token_index <- token_index %||% build_search_token_index(local_index)
+
+  saveRDS(local_index, LOCAL_SEARCH_INDEX_PATH)
+  saveRDS(local_token_index, LOCAL_SEARCH_TOKEN_INDEX_PATH)
+
+  invisible(list(index = local_index, token_index = local_token_index))
+}
+
+read_prebuilt_local_search_index <- function() {
+  if (!file.exists(LOCAL_SEARCH_INDEX_PATH)) {
+    stop(
+      sprintf(
+        "Local search index is missing at %s. Run `Rscript scripts/generate_search_index.R` to rebuild it.",
+        LOCAL_SEARCH_INDEX_PATH
+      ),
+      call. = FALSE
+    )
+  }
+
+  readRDS(LOCAL_SEARCH_INDEX_PATH)
+}
+
+read_prebuilt_local_search_token_index <- function() {
+  if (!file.exists(LOCAL_SEARCH_TOKEN_INDEX_PATH)) {
+    stop(
+      sprintf(
+        "Local search token index is missing at %s. Run `Rscript scripts/generate_search_index.R` to rebuild it.",
+        LOCAL_SEARCH_TOKEN_INDEX_PATH
+      ),
+      call. = FALSE
+    )
+  }
+
+  readRDS(LOCAL_SEARCH_TOKEN_INDEX_PATH)
+}
+
+load_prebuilt_local_search_assets <- function(force = FALSE) {
+  if (force) {
+    invalidate_local_search_asset_cache()
+  }
+
+  if (!exists("local_index", envir = data_search_env, inherits = FALSE)) {
+    assign("local_index", read_prebuilt_local_search_index(), envir = data_search_env)
+  }
+
+  if (!exists("token_index", envir = data_search_env, inherits = FALSE)) {
+    assign("token_index", read_prebuilt_local_search_token_index(), envir = data_search_env)
+  }
+
+  list(
+    index = get("local_index", envir = data_search_env, inherits = FALSE),
+    token_index = get("token_index", envir = data_search_env, inherits = FALSE)
+  )
+}
+
+current_search_token_index <- function(force = FALSE) {
+  load_prebuilt_local_search_assets(force = force)$token_index
+}
+
 build_search_index <- function(force = FALSE) {
   if (!force && exists("index", envir = data_search_env, inherits = FALSE)) {
     return(get("index", envir = data_search_env, inherits = FALSE))
   }
 
+  local_assets <- load_prebuilt_local_search_assets(force = force)
+
   search_index <- bind_rows(
     build_recent_search_index(),
-    build_cpi_search_index(),
-    build_rba_search_index(),
-    build_abs_search_index()
+    local_assets$index
   ) %>%
     mutate(
       frequency = coalesce(frequency, "Unknown"),
@@ -836,7 +987,7 @@ build_search_index <- function(force = FALSE) {
   search_index
 }
 
-filter_search_index <- function(search_index, query = "", source_filter = "all", type_filter = "all", location_filter = "all", frequency_filter = "all", limit = Inf) {
+filter_search_index <- function(search_index, query = "", source_filter = "all", type_filter = "all", location_filter = "all", frequency_filter = "all", limit = Inf, token_index = NULL) {
   filtered_index <- search_index
 
   if (!identical(source_filter %||% "all", "all")) {
@@ -876,14 +1027,34 @@ filter_search_index <- function(search_index, query = "", source_filter = "all",
 
   exact_query <- normalized_query_text(query)
 
-  scored_index <- filtered_index %>%
+  indexed_rows <- filtered_index %>%
+    filter(!is.na(local_row_id))
+
+  dynamic_rows <- filtered_index %>%
+    filter(is.na(local_row_id))
+
+  matched_indexed_rows <- if (!is.null(token_index) && nrow(indexed_rows) > 0) {
+    matched_ids <- boolean_query_candidate_ids(query, token_index)
+
+    if (length(matched_ids) == 0) {
+      indexed_rows[0, , drop = FALSE]
+    } else {
+      indexed_rows %>%
+        filter(local_row_id %in% matched_ids)
+    }
+  } else {
+    indexed_rows %>%
+      filter(vapply(search_text, boolean_query_matches, logical(1), query = query))
+  }
+
+  matched_dynamic_rows <- dynamic_rows %>%
+    filter(vapply(search_text, boolean_query_matches, logical(1), query = query))
+
+  scored_index <- bind_rows(matched_dynamic_rows, matched_indexed_rows) %>%
     mutate(
       title_text = clean_search_text(title),
       summary_text = clean_search_text(summary)
     )
-
-  scored_index <- scored_index %>%
-    filter(vapply(search_text, boolean_query_matches, logical(1), query = query))
 
   scored_results <- scored_index %>%
     mutate(
