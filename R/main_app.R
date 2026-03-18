@@ -216,6 +216,57 @@ build_tab_error_ui <- function(title, message) {
   )
 }
 
+build_about_tab_ui <- function() {
+  div(
+    class = "page-shell",
+    fluidRow(
+      column(
+        width = 8,
+        chart_card(
+          "About Chartwell",
+          tags$p(
+            class = "muted-copy",
+            "Chartwell helps you search, transform, analyse, save, and present macro and financial charts."
+          ),
+          tags$h4("How it works"),
+          tags$p(
+            "Start in Data Search to find a series from the local metadata index or live FRED search. You can preview a result and add it directly into the chart builder."
+          ),
+          tags$p(
+            "In Chart Builder, choose up to four series, set the date window, and apply transformations such as rolling averages, percent changes, custom formulas, and cross-series comparisons."
+          ),
+          tags$p(
+            "The Analysis workspace adds tools for correlations, regressions, forecasts, seasonal adjustment, HP filtering, and Kalman filtering. Results can be shown on the main chart and saved to the library like any other chart."
+          ),
+          tags$p(
+            "Saved Charts stores both regular charts and analysis charts. Presentations let you collect charts, reorder them, and export a chart deck for sharing."
+          )
+        )
+      ),
+      column(
+        width = 4,
+        chart_card(
+          "Created By",
+          tags$p(
+            class = "muted-copy",
+            "Chartwell was created by Joel Findlay."
+          ),
+          tags$p(
+            "The app is designed to make macro and financial data easier to search, chart, compare, and present in a clean, repeatable workflow."
+          ),
+          tags$h4("What You Can Do"),
+          tags$ul(
+            tags$li("Search series across supported sources"),
+            tags$li("Build and style charts"),
+            tags$li("Run time-series analysis tools"),
+            tags$li("Save charts and presentations for later use")
+          )
+        )
+      )
+    )
+  )
+}
+
 search_activity_message <- function(source_filter = "all", query_text = "") {
   cleaned_query <- trimws(query_text %||% "")
   targets <- switch(
@@ -236,108 +287,124 @@ search_activity_message <- function(source_filter = "all", query_text = "") {
   }
 }
 
+build_chartwell_wordmark <- function() {
+  div(
+    class = "chartwell-wordmark",
+    tags$span(class = "chartwell-wordmark__name", "Chartwell"),
+    tags$span(class = "chartwell-wordmark__sub", "Macro & Financial Charts")
+  )
+}
+
 build_main_ui <- function() {
   year_bounds <- default_year_bounds()
 
-  navbarPage(
-    title = "Data Explorer",
-    id = "main_tabs",
-    selected = "search",
-    tabPanel(
-      title = "Data Search",
-      value = "search",
-      uiOutput("search_tab_ui")
+  tagList(
+    tags$head(
+      tags$title("Chartwell — Macro & Financial Charts"),
+      tags$link(rel = "stylesheet", type = "text/css", href = "app.css"),
+      tags$link(rel = "icon", type = "image/svg+xml", href = "assets/chartwell-icon.svg"),
+      tags$meta(name = "theme-color", content = "#f5f8f4")
     ),
-    tabPanel(
-      title = "Chart Builder",
-      value = "builder",
-      div(
-        class = "page-shell",
-        fluidRow(
-          column(
-            width = 3,
-            class = "builder-left-rail",
-            chart_card(
-              "Data Window",
-              header_actions = actionButton("reset_builder", "Reset", class = "app-card__header-chip"),
-              tags$p(
-                class = "muted-copy",
-                "Set the date window and choose whether to show the data table."
-              ),
-              radioGroupButtons(
-                "date_window_shortcut",
-                "Quick range",
-                choices = c("1Y" = "1", "3Y" = "3", "5Y" = "5", "10Y" = "10", "Max" = "max"),
-                selected = character(0),
-                justified = TRUE,
-                checkIcon = list(yes = icon("check"))
-              ),
-              fluidRow(
-                column(
-                  width = 6,
-                  dateInput("start_date", "Start date", value = year_bounds$start_date, min = year_bounds$min_date, max = year_bounds$max_date)
-                ),
-                column(
-                  width = 6,
-                  dateInput("end_date", "End date", value = year_bounds$end_date, min = year_bounds$min_date, max = year_bounds$max_date)
-                )
-              ),
-              radioGroupButtons(
-                "viewData1",
-                "Underlying data table",
-                choices = c("Hide" = "0", "Show" = "1"),
-                selected = "0",
-                justified = TRUE,
-                checkIcon = list(yes = icon("check"))
-              )
-            ),
-            chart_card(
-              "Series Setup",
-              class = "series-setup-card",
-              header_actions = actionButton("clear_series_setup", "Clear", class = "app-card__header-chip"),
-              tags$p(
-                class = "muted-copy",
-                "Choose the source, series, and chart style. Use the right panel for transforms."
-              ),
-              do.call(
-                tabsetPanel,
-                c(
-                  list(id = "series_tabs", type = "tabs"),
-                  lapply(seq_len(MAX_SERIES), builder_series_ui)
-                )
-              )
-            )
-          ),
-          column(
-            width = 6,
-            chart_card(
-              "Primary Chart",
-              uiOutput("builder_summary"),
-              uiOutput("builder_messages"),
-              plotlyOutput("builder_plot", height = "500px"),
-              div(
-                class = "export-row",
-                downloadButton("exportPNG", "Download PNG"),
-                downloadButton("exportHTML", "Download HTML"),
-                downloadButton("exportSVG", "Download SVG"),
-                downloadButton("exportData", "Download CSV")
-              )
-            ),
-            conditionalPanel(
-              condition = "input.viewData1 == '1'",
+    navbarPage(
+      title = build_chartwell_wordmark(),
+      windowTitle = "Chartwell — Macro & Financial Charts",
+      id = "main_tabs",
+      selected = "search",
+      tabPanel(
+        title = "Data Search",
+        value = "search",
+        uiOutput("search_tab_ui")
+      ),
+      tabPanel(
+        title = "Chart Builder",
+        value = "builder",
+        div(
+          class = "page-shell",
+          fluidRow(
+            column(
+              width = 3,
+              class = "builder-left-rail",
               chart_card(
-                "Underlying Data",
-                DT::dataTableOutput("builder_table")
+                "Data Window",
+                header_actions = actionButton("reset_builder", "Reset", class = "app-card__header-chip"),
+                tags$p(
+                  class = "muted-copy",
+                  "Set the date window and choose whether to show the data table."
+                ),
+                radioGroupButtons(
+                  "date_window_shortcut",
+                  "Quick range",
+                  choices = c("1Y" = "1", "3Y" = "3", "5Y" = "5", "10Y" = "10", "Max" = "max"),
+                  selected = character(0),
+                  justified = TRUE,
+                  checkIcon = list(yes = icon("check"))
+                ),
+                fluidRow(
+                  column(
+                    width = 6,
+                    dateInput("start_date", "Start date", value = year_bounds$start_date, min = year_bounds$min_date, max = year_bounds$max_date)
+                  ),
+                  column(
+                    width = 6,
+                    dateInput("end_date", "End date", value = year_bounds$end_date, min = year_bounds$min_date, max = year_bounds$max_date)
+                  )
+                ),
+                radioGroupButtons(
+                  "viewData1",
+                  "Underlying data table",
+                  choices = c("Hide" = "0", "Show" = "1"),
+                  selected = "0",
+                  justified = TRUE,
+                  checkIcon = list(yes = icon("check"))
+                )
+              ),
+              chart_card(
+                "Series Setup",
+                class = "series-setup-card",
+                header_actions = actionButton("clear_series_setup", "Clear", class = "app-card__header-chip"),
+                tags$p(
+                  class = "muted-copy",
+                  "Choose the source, series, and chart style. Use the right panel for transforms."
+                ),
+                do.call(
+                  tabsetPanel,
+                  c(
+                    list(id = "series_tabs", type = "tabs"),
+                    lapply(seq_len(MAX_SERIES), builder_series_ui)
+                  )
+                )
               )
             ),
-            chart_card(
-              "Presentation",
-              header_actions = actionButton("clear_presentation_panel", "Clear", class = "app-card__header-chip"),
-              tags$p(
-                class = "muted-copy",
-                "Set titles, axes, guides, colours, and export options."
+            column(
+              width = 6,
+              chart_card(
+                "Primary Chart",
+                uiOutput("builder_summary"),
+                uiOutput("builder_messages"),
+                plotlyOutput("builder_plot", height = "500px"),
+                div(
+                  class = "export-row",
+                  downloadButton("exportPNG", "Download PNG"),
+                  downloadButton("exportHTML", "Download HTML"),
+                  downloadButton("exportSVG", "Download SVG"),
+                  downloadButton("exportData", "Download CSV")
+                )
               ),
-              fluidRow(
+              conditionalPanel(
+                condition = "input.viewData1 == '1'",
+                chart_card(
+                  "Underlying Data",
+                  DT::dataTableOutput("builder_table")
+                )
+              ),
+              chart_card(
+                "Presentation",
+                header_actions = actionButton("clear_presentation_panel", "Clear", class = "app-card__header-chip"),
+                tags$p(
+                  class = "muted-copy",
+                  "Set titles, axes, guides, colours, and export options."
+                ),
+                fluidRow(
                 column(
                   width = 8,
                   textInput("style_title", "Chart title shown above the plot", value = "Custom data view", width = "100%"),
@@ -670,10 +737,13 @@ build_main_ui <- function() {
       value = "library",
       uiOutput("library_tab_ui")
     ),
-    header = tags$head(
-      tags$link(rel = "stylesheet", type = "text/css", href = "app.css")
+    tabPanel(
+      title = "About",
+      value = "about",
+      build_about_tab_ui()
     ),
     collapsible = TRUE
+  )
   )
 }
 

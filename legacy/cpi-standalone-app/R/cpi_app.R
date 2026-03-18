@@ -1,3 +1,5 @@
+# Legacy standalone CPI app UI/server helpers
+
 build_cpi_ui <- function() {
   year_min <- as.numeric(lubridate::year(min(cpi_data_all$date)))
   year_max <- as.numeric(lubridate::year(max(cpi_data_all$date)))

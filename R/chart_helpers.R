@@ -1631,6 +1631,20 @@ palette_values <- function(data, palette_name) {
   n_series <- max(1, dplyr::n_distinct(data$name))
   requested_palette <- palette_name %||% APP_PALETTES[[1]]
   available_palettes <- grDevices::palette.pals()
+  chartwell_palette <- c(
+    "#4f7ec9",
+    "#2a55a0",
+    "#7aaef5",
+    "#1a2540",
+    "#6d90cf",
+    "#89aee8",
+    "#3f5f99",
+    "#a6c4f6"
+  )
+
+  if (identical(requested_palette, "Chartwell")) {
+    return(rep(chartwell_palette, length.out = n_series))
+  }
 
   if (requested_palette %in% available_palettes) {
     return(grDevices::palette.colors(n_series, palette = requested_palette))
@@ -1676,7 +1690,9 @@ build_chart_plot <- function(data, style) {
     chart_plot <- chart_plot +
       geom_line(
         data = filter(data, plotting == "line"),
-        linewidth = 0.9
+        linewidth = 1,
+        lineend = "round",
+        linejoin = "round"
       )
   }
 
@@ -1704,8 +1720,8 @@ build_chart_plot <- function(data, style) {
         xmax = max(data$date, na.rm = TRUE),
         ymin = style$horizontal_shading[1],
         ymax = style$horizontal_shading[2],
-        alpha = 0.08,
-        fill = "#2563eb"
+        alpha = 0.24,
+        fill = "#d6e4f7"
       )
   }
 
@@ -1765,7 +1781,7 @@ build_chart_plot <- function(data, style) {
       axis.text = element_text(size = 16, colour = "#000000"),
       axis.text.y.right = element_text(margin = margin(l = 52)),
       panel.grid.minor = element_blank(),
-      panel.grid.major.y = element_line(colour = "#d1d5db", linewidth = 0.45),
+      panel.grid.major.y = element_line(colour = "#c8d4e8", linewidth = 0.6),
       panel.grid.major.x = element_blank(),
       axis.line.x = element_line(colour = "#000000", linewidth = 0.5),
       axis.ticks.x = element_line(colour = "#000000", linewidth = 0.45),
@@ -1776,7 +1792,8 @@ build_chart_plot <- function(data, style) {
       legend.box.margin = margin(b = legend_bottom_margin),
       legend.title = element_blank(),
       legend.text = element_text(size = 16),
-      plot.background = element_rect(fill = "white", colour = NA)
+      plot.background = element_rect(fill = "#f5f8f4", colour = NA),
+      panel.background = element_rect(fill = "#f5f8f4", colour = NA)
     )
 
   if (isTRUE(style$invert_y_axis)) {
@@ -1910,7 +1927,7 @@ build_chart_widget <- function(data, style) {
       ticklen = 10,
       tickwidth = 1,
       tickcolor = "rgba(0,0,0,0)",
-      gridcolor = "#d1d5db",
+      gridcolor = "#c8d4e8",
       gridwidth = 1
     )
   )
@@ -1919,6 +1936,9 @@ build_chart_widget <- function(data, style) {
     layout_args$font %||% list(),
     list(family = chart_font, color = "#000000")
   )
+
+  layout_args$paper_bgcolor <- "#f5f8f4"
+  layout_args$plot_bgcolor <- "#f5f8f4"
 
   if (identical(style$legend, "none")) {
     layout_args$showlegend <- FALSE

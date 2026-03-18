@@ -9,4 +9,8 @@ source(here::here("R", "chart_library.R"))
 source(here::here("R", "analysis_helpers.R"))
 source(here::here("R", "main_app.R"))
 
+if (!"assets" %in% names(shiny::resourcePaths())) {
+  shiny::addResourcePath("assets", here::here("brand"))
+}
+
 shinyApp(ui = build_main_ui(), server = build_main_server)
