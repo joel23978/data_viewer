@@ -919,6 +919,36 @@ test_that("ABS source controls render restored saved selections", {
   expect_true(grepl(abs_row$series_id[[1]], as.character(abs_ui), fixed = TRUE))
 })
 
+test_that("ABS source controls prefer restored values over stale invalid selections", {
+  abs_row <- abs_ref[[1]] %>%
+    filter(!is.na(series_id), nzchar(series_id), !is.na(series), !is.na(series_type), !is.na(table_title)) %>%
+    slice(1)
+
+  abs_ui <- series_source_controls_ui(
+    input = list(
+      series_2_abs_catalogue = abs_cat[[1]],
+      series_2_abs_desc = "__stale_desc__",
+      series_2_abs_series_type = "__stale_type__",
+      series_2_abs_table = "__stale_table__",
+      series_2_abs_id = "__stale_id__"
+    ),
+    session = NULL,
+    index = 2,
+    source_value = "abs",
+    restored_spec = list(
+      source = "abs",
+      abs_catalogue = abs_cat[[1]],
+      abs_desc = abs_row$series[[1]],
+      abs_series_type = abs_row$series_type[[1]],
+      abs_table = abs_row$table_title[[1]],
+      abs_id = abs_row$series_id[[1]]
+    )
+  )
+
+  expect_true(grepl(abs_row$table_title[[1]], as.character(abs_ui), fixed = TRUE))
+  expect_true(grepl(abs_row$series_id[[1]], as.character(abs_ui), fixed = TRUE))
+})
+
 test_that("main server can add a FRED search result to the builder", {
   withr::local_envvar(FRED_API_KEY = "test-key")
   original_fred_search_remote <- fred_search_remote
@@ -984,6 +1014,64 @@ test_that("main server can add a FRED search result to the builder", {
     session$setInputs(start_date = as.Date("2020-01-01"), end_date = as.Date("2021-12-31"))
     session$flushReact()
     expect_equal(as.Date(builder_state()$date_range, origin = "1970-01-01"), as.Date(c("2020-01-01", "2021-12-31")))
+  })
+})
+
+test_that("main server can add an ABS search result to the builder without losing table selections", {
+  abs_result <- build_abs_search_index() %>%
+    filter(source == "ABS") %>%
+    slice(1)
+  abs_spec <- search_result_series_spec(abs_result, 2)
+
+  shiny::testServer(build_main_server, {
+    updated_state <- builder_state()
+    updated_state$series[[2]] <- normalize_series_spec(abs_spec)
+    apply_builder_state(updated_state, selected_series_index = 2, navigate_builder = FALSE)
+    session$flushReact()
+    session$flushReact()
+
+    expect_equal(builder_state()$series[[2]]$source, "abs")
+    expect_equal(builder_state()$series[[2]]$abs_catalogue, abs_spec$abs_catalogue)
+    expect_equal(builder_state()$series[[2]]$abs_desc, abs_spec$abs_desc)
+    expect_equal(builder_state()$series[[2]]$abs_series_type, abs_spec$abs_series_type)
+    expect_equal(builder_state()$series[[2]]$abs_table, abs_spec$abs_table)
+    expect_equal(builder_state()$series[[2]]$abs_id, abs_spec$abs_id)
+
+    restored_ui <- series_source_controls_ui(input, session, 2, "abs", restored_series_spec(session, 2))
+    expect_true(grepl(abs_spec$abs_table, as.character(restored_ui), fixed = TRUE))
+    expect_true(grepl(abs_spec$abs_id, as.character(restored_ui), fixed = TRUE))
+  })
+})
+
+test_that("forecast analysis falls back to the first available series and uses shared styling", {
+  shiny::testServer(build_main_server, {
+    session$setInputs(
+      start_date = as.Date("2024-01-01"),
+      end_date = as.Date("2025-12-31"),
+      series_1_enabled = TRUE,
+      series_1_source = "ABS CPI",
+      series_1_text = "All groups CPI",
+      series_1_region = region_list[[1]],
+      series_1_transform = "index",
+      series_1_label = "All groups CPI",
+      series_1_vis_type = "line",
+      series_2_enabled = TRUE,
+      series_2_source = "ABS CPI",
+      series_2_text = "Housing",
+      series_2_region = region_list[[1]],
+      series_2_transform = "index",
+      series_2_label = "Housing CPI",
+      series_2_vis_type = "line",
+      side_panel_mode = "analysis",
+      analysis_tabs = "Forecast"
+    )
+    session$flushReact()
+
+    expect_equal(selected_forecast_series(), "All groups CPI")
+    expect_equal(nrow(forecast_result()$forecast), 4)
+    expect_s3_class(selected_analysis_widget(), "plotly")
+    expect_equal(selected_analysis_widget()$x$layout$paper_bgcolor, "#f5f8f4")
+    expect_equal(selected_analysis_widget()$x$layout$yaxis$side, "right")
   })
 })
 

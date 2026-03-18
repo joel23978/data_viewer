@@ -38,7 +38,7 @@ rolling_correlation_data <- function(data, series_x, series_y, window = 4) {
       correlation = zoo::rollapply(
         data = cbind(x, y),
         width = window,
-        FUN = function(values) stats::cor(values[, 1], values[, 2], use = "complete.obs"),
+        FUN = function(values) suppressWarnings(stats::cor(values[, 1], values[, 2], use = "complete.obs")),
         by.column = FALSE,
         fill = NA_real_,
         align = "right"
@@ -47,17 +47,98 @@ rolling_correlation_data <- function(data, series_x, series_y, window = 4) {
     drop_na(correlation)
 }
 
-build_correlation_plot <- function(correlation_data, series_x, series_y, window) {
-  ggplot(correlation_data, aes(x = date, y = correlation)) +
+analysis_chart_style <- function(style = NULL, title = "", subtitle = "", y_axis_label = "", note = "", legend = NULL) {
+  styled <- normalize_style_settings(style %||% default_style_settings())
+  styled$title <- title
+  styled$subtitle <- subtitle
+  styled$y_axis_label <- y_axis_label
+  styled$note <- note
+
+  if (!is.null(legend)) {
+    styled$legend <- legend
+  }
+
+  styled
+}
+
+apply_analysis_chart_theme <- function(plot_object, style, x_is_date = TRUE, y_position = "right") {
+  style <- normalize_style_settings(style %||% default_style_settings())
+  chart_font <- style$font_family %||% APP_CHART_FONTS[[1]]
+  caption_top_margin <- if (identical(style$legend, "bottom")) 28 else 4
+  legend_bottom_margin <- if (identical(style$legend, "bottom")) 18 else 0
+
+  plot_object <- plot_object +
+    labs(
+      title = style$title,
+      subtitle = style$subtitle,
+      tag = style$y_axis_label,
+      caption = style$note,
+      colour = NULL,
+      fill = NULL
+    ) +
+    theme_minimal(base_size = 12, base_family = chart_font) +
+    theme(
+      text = element_text(family = chart_font),
+      plot.tag = element_text(face = "bold", size = 16, colour = "#000000", hjust = 1),
+      plot.tag.position = c(1, 0.945),
+      plot.title = element_text(face = "bold", size = 18, hjust = 0, margin = margin(b = 18)),
+      plot.subtitle = element_text(size = 16, colour = "#000000", hjust = 0, margin = margin(b = 10)),
+      plot.caption = element_text(size = 16, colour = "#000000", hjust = 0, margin = margin(t = caption_top_margin)),
+      plot.title.position = "plot",
+      plot.caption.position = "plot",
+      axis.text = element_text(size = 16, colour = "#000000"),
+      axis.text.y.right = element_text(margin = margin(l = 52)),
+      panel.grid.minor = element_blank(),
+      panel.grid.major.y = element_line(colour = "#c8d4e8", linewidth = 0.6),
+      panel.grid.major.x = element_blank(),
+      axis.line.x = element_line(colour = "#000000", linewidth = 0.5),
+      axis.ticks.x = element_line(colour = "#000000", linewidth = 0.45),
+      axis.ticks.length.x = grid::unit(6, "pt"),
+      legend.position = style$legend,
+      legend.justification = "left",
+      legend.box.just = "left",
+      legend.box.margin = margin(b = legend_bottom_margin),
+      legend.title = element_blank(),
+      legend.text = element_text(size = 16, colour = "#000000"),
+      plot.background = element_rect(fill = "#f5f8f4", colour = NA),
+      panel.background = element_rect(fill = "#f5f8f4", colour = NA)
+    )
+
+  if (isTRUE(x_is_date)) {
+    plot_object <- plot_object +
+      scale_x_date(
+        breaks = scales::breaks_pretty(n = max(2, round(style$x_labels %||% 6))),
+        date_labels = style$date_format,
+        expand = expansion(mult = c(0.01, 0.04))
+      )
+  }
+
+  if (identical(y_position, "right")) {
+    plot_object <- plot_object + scale_y_continuous(position = "right")
+  }
+
+  plot_object
+}
+
+build_analysis_widget <- function(plot_object, style, tooltip = c("x", "y", "colour")) {
+  style_plotly_widget(ggplotly(plot_object, tooltip = tooltip), style)
+}
+
+build_correlation_plot <- function(correlation_data, series_x, series_y, window, style = NULL) {
+  plot_style <- analysis_chart_style(
+    style = style,
+    title = paste("Rolling correlation:", series_x, "vs", series_y),
+    subtitle = paste("Window:", window, "observations"),
+    y_axis_label = "Correlation",
+    note = ""
+  )
+
+  plot_object <- ggplot(correlation_data, aes(x = date, y = correlation)) +
     geom_hline(yintercept = 0, colour = "#94a3b8", linetype = "dashed") +
     geom_line(linewidth = 0.9, colour = "#2563eb") +
-    labs(
-      title = paste("Rolling correlation:", series_x, "vs", series_y),
-      subtitle = paste("Window:", window, "observations"),
-      x = NULL,
-      y = "Correlation"
-    ) +
-    theme_minimal(base_size = 12)
+    labs(x = NULL, y = NULL)
+
+  apply_analysis_chart_theme(plot_object, plot_style, x_is_date = TRUE)
 }
 
 robust_vcov <- function(model) {
@@ -115,16 +196,21 @@ regression_analysis <- function(data, dependent, independent, error_assumption =
   )
 }
 
-build_regression_plot <- function(regression_result, dependent, independent) {
-  ggplot(regression_result$data, aes(x = x, y = y)) +
+build_regression_plot <- function(regression_result, dependent, independent, style = NULL) {
+  plot_style <- analysis_chart_style(
+    style = style,
+    title = paste("Regression:", dependent, "on", independent),
+    subtitle = regression_result$metrics$model_label %||% "",
+    y_axis_label = dependent,
+    note = ""
+  )
+
+  plot_object <- ggplot(regression_result$data, aes(x = x, y = y)) +
     geom_point(size = 2, colour = "#1d4ed8", alpha = 0.8) +
     geom_smooth(method = "lm", se = TRUE, colour = "#0f172a", fill = "#bfdbfe") +
-    labs(
-      title = paste("Regression:", dependent, "on", independent),
-      x = independent,
-      y = dependent
-    ) +
-    theme_minimal(base_size = 12)
+    labs(x = independent, y = dependent)
+
+  apply_analysis_chart_theme(plot_object, plot_style, x_is_date = FALSE)
 }
 
 infer_date_step <- function(dates) {
@@ -336,20 +422,44 @@ forecast_analysis <- function(
   )
 }
 
-build_forecast_plot <- function(forecast_result, series_name) {
+build_forecast_plot <- function(forecast_result, series_name, style = NULL) {
   history_data <- forecast_result$history %>%
     transmute(date = date, value = value, type = "Observed")
 
   forecast_data <- forecast_result$forecast %>%
     transmute(date = date, value = forecast, lower_95 = lower_95, upper_95 = upper_95, type = "Forecast")
 
-  holdout_data <- forecast_result$holdout %||% tibble::tibble()
+  holdout_data <- forecast_result$holdout %||% tibble::tibble(
+    date = as.Date(character()),
+    actual = numeric(),
+    forecast = numeric(),
+    lower_95 = numeric(),
+    upper_95 = numeric()
+  )
   holdout_actual <- holdout_data %>%
     transmute(date = date, value = actual)
   holdout_forecast <- holdout_data %>%
     transmute(date = date, value = forecast, lower_95 = lower_95, upper_95 = upper_95)
 
-  ggplot() +
+  subtitle_text <- paste(
+    stringr::str_to_title(forecast_result$metrics$estimation_strategy),
+    "window",
+    if (forecast_result$metrics$holdout_observations > 0) {
+      paste0("| Holdout: ", forecast_result$metrics$holdout_observations, " observations")
+    } else {
+      "| No holdout"
+    }
+  )
+  plot_style <- analysis_chart_style(
+    style = style,
+    title = paste("Forecast for", series_name),
+    subtitle = subtitle_text,
+    y_axis_label = "Value",
+    note = "",
+    legend = "bottom"
+  )
+
+  plot_object <- ggplot() +
     geom_line(data = history_data, aes(x = date, y = value), linewidth = 0.9, colour = "#0f172a") +
     {
       if (nrow(holdout_actual) > 0) {
@@ -367,21 +477,9 @@ build_forecast_plot <- function(forecast_result, series_name) {
       fill = "#60a5fa"
     ) +
     geom_line(data = forecast_data, aes(x = date, y = value), linewidth = 0.9, colour = "#2563eb") +
-    labs(
-      title = paste("Forecast for", series_name),
-      subtitle = paste(
-        stringr::str_to_title(forecast_result$metrics$estimation_strategy),
-        "window",
-        if (forecast_result$metrics$holdout_observations > 0) {
-          paste0("| Holdout: ", forecast_result$metrics$holdout_observations, " observations")
-        } else {
-          "| No holdout"
-        }
-      ),
-      x = NULL,
-      y = "Value"
-    ) +
-    theme_minimal(base_size = 12)
+    labs(x = NULL, y = NULL)
+
+  apply_analysis_chart_theme(plot_object, plot_style, x_is_date = TRUE)
 }
 
 seasonal_adjustment_frequency <- function(dates) {
@@ -532,36 +630,37 @@ seasonal_adjustment_analysis <- function(data, series_name, display_mode = "both
   )
 }
 
-build_seasonal_adjustment_plot <- function(seasonal_result, series_name, display_mode = "both") {
+build_seasonal_adjustment_plot <- function(seasonal_result, series_name, display_mode = "both", style = NULL) {
   plotted_data <- seasonal_result$data
+  plot_style <- analysis_chart_style(
+    style = style,
+    title = if (identical(display_mode, "adjusted")) {
+      paste("Seasonally adjusted:", series_name)
+    } else {
+      paste("Seasonal adjustment:", series_name)
+    },
+    subtitle = "X-13ARIMA-SEATS",
+    y_axis_label = "Value",
+    note = "",
+    legend = if (identical(display_mode, "adjusted")) "none" else "bottom"
+  )
 
   if (identical(display_mode, "adjusted")) {
-    return(
-      ggplot(plotted_data, aes(x = date, y = value)) +
-        geom_line(linewidth = 0.95, colour = "#1d4ed8") +
-        labs(
-          title = paste("Seasonally adjusted:", series_name),
-          subtitle = "X-13ARIMA-SEATS",
-          x = NULL,
-          y = "Value"
-        ) +
-        theme_minimal(base_size = 12)
-    )
+    plot_object <- ggplot(plotted_data, aes(x = date, y = value)) +
+      geom_line(linewidth = 0.95, colour = "#1d4ed8") +
+      labs(x = NULL, y = NULL)
+
+    return(apply_analysis_chart_theme(plot_object, plot_style, x_is_date = TRUE))
   }
 
-  ggplot(plotted_data, aes(x = date, y = value, colour = series)) +
+  plot_object <- ggplot(plotted_data, aes(x = date, y = value, colour = series)) +
     geom_line(linewidth = 0.95) +
     scale_colour_manual(
       values = c("Original" = "#94a3b8", "Seasonally adjusted" = "#1d4ed8")
     ) +
-    labs(
-      title = paste("Seasonal adjustment:", series_name),
-      subtitle = "X-13ARIMA-SEATS",
-      x = NULL,
-      y = "Value",
-      colour = NULL
-    ) +
-    theme_minimal(base_size = 12)
+    labs(x = NULL, y = NULL, colour = NULL)
+
+  apply_analysis_chart_theme(plot_object, plot_style, x_is_date = TRUE)
 }
 
 filter_display_choices <- function() {
@@ -719,27 +818,29 @@ hp_filter_analysis <- function(data, series_name, side = "two_sided", display_mo
   )
 }
 
-build_hp_filter_plot <- function(filter_result, series_name, side = "two_sided", display_mode = "overlay") {
+build_hp_filter_plot <- function(filter_result, series_name, side = "two_sided", display_mode = "overlay", style = NULL) {
   plotted_data <- filter_result$data
   subtitle_text <- paste(
     if (identical(side, "one_sided")) "One-sided" else "Two-sided",
     "| lambda:",
     format(round(filter_result$metrics$lambda, 2), trim = TRUE)
   )
+  plot_style <- analysis_chart_style(
+    style = style,
+    title = paste("HP filter:", series_name),
+    subtitle = subtitle_text,
+    y_axis_label = if (identical(display_mode, "cycle")) "Cycle" else "Value",
+    note = "",
+    legend = if (identical(display_mode, "overlay")) "bottom" else "none"
+  )
 
   if (identical(display_mode, "components")) {
-    return(
-      ggplot(plotted_data, aes(x = date, y = value)) +
-        geom_line(linewidth = 0.95, colour = "#1d4ed8") +
-        facet_wrap(~component, ncol = 1, scales = "free_y") +
-        labs(
-          title = paste("HP filter:", series_name),
-          subtitle = subtitle_text,
-          x = NULL,
-          y = NULL
-        ) +
-        theme_minimal(base_size = 12)
-    )
+    plot_object <- ggplot(plotted_data, aes(x = date, y = value)) +
+      geom_line(linewidth = 0.95, colour = "#1d4ed8") +
+      facet_wrap(~component, ncol = 1, scales = "free_y") +
+      labs(x = NULL, y = NULL)
+
+    return(apply_analysis_chart_theme(plot_object, plot_style, x_is_date = TRUE))
   }
 
   plot_object <- ggplot(plotted_data, aes(x = date, y = value))
@@ -757,15 +858,9 @@ build_hp_filter_plot <- function(filter_result, series_name, side = "two_sided",
       geom_line(linewidth = 0.95, colour = "#1d4ed8")
   }
 
-  plot_object +
-    labs(
-      title = paste("HP filter:", series_name),
-      subtitle = subtitle_text,
-      x = NULL,
-      y = if (identical(display_mode, "cycle")) "Cycle" else "Value",
-      colour = NULL
-    ) +
-    theme_minimal(base_size = 12)
+  plot_object <- plot_object + labs(x = NULL, y = NULL, colour = NULL)
+
+  apply_analysis_chart_theme(plot_object, plot_style, x_is_date = TRUE)
 }
 
 kalman_filter_analysis <- function(data, series_name, side = "two_sided", display_mode = "overlay") {
@@ -835,23 +930,25 @@ kalman_filter_analysis <- function(data, series_name, side = "two_sided", displa
   )
 }
 
-build_kalman_filter_plot <- function(filter_result, series_name, side = "two_sided", display_mode = "overlay") {
+build_kalman_filter_plot <- function(filter_result, series_name, side = "two_sided", display_mode = "overlay", style = NULL) {
   plotted_data <- filter_result$data
   subtitle_text <- paste(if (identical(side, "one_sided")) "One-sided" else "Two-sided", "| Local linear trend")
+  plot_style <- analysis_chart_style(
+    style = style,
+    title = paste("Kalman filter:", series_name),
+    subtitle = subtitle_text,
+    y_axis_label = if (identical(display_mode, "cycle")) "Cycle" else "Value",
+    note = "",
+    legend = if (identical(display_mode, "overlay")) "bottom" else "none"
+  )
 
   if (identical(display_mode, "components")) {
-    return(
-      ggplot(plotted_data, aes(x = date, y = value)) +
-        geom_line(linewidth = 0.95, colour = "#1d4ed8") +
-        facet_wrap(~component, ncol = 1, scales = "free_y") +
-        labs(
-          title = paste("Kalman filter:", series_name),
-          subtitle = subtitle_text,
-          x = NULL,
-          y = NULL
-        ) +
-        theme_minimal(base_size = 12)
-    )
+    plot_object <- ggplot(plotted_data, aes(x = date, y = value)) +
+      geom_line(linewidth = 0.95, colour = "#1d4ed8") +
+      facet_wrap(~component, ncol = 1, scales = "free_y") +
+      labs(x = NULL, y = NULL)
+
+    return(apply_analysis_chart_theme(plot_object, plot_style, x_is_date = TRUE))
   }
 
   plot_object <- ggplot(plotted_data, aes(x = date, y = value))
@@ -869,13 +966,7 @@ build_kalman_filter_plot <- function(filter_result, series_name, side = "two_sid
       geom_line(linewidth = 0.95, colour = "#1d4ed8")
   }
 
-  plot_object +
-    labs(
-      title = paste("Kalman filter:", series_name),
-      subtitle = subtitle_text,
-      x = NULL,
-      y = if (identical(display_mode, "cycle")) "Cycle" else "Value",
-      colour = NULL
-    ) +
-    theme_minimal(base_size = 12)
+  plot_object <- plot_object + labs(x = NULL, y = NULL, colour = NULL)
+
+  apply_analysis_chart_theme(plot_object, plot_style, x_is_date = TRUE)
 }

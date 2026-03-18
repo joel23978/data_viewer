@@ -98,6 +98,17 @@ default_source_note <- function(series_specs = NULL) {
 }
 
 compact_single_choice_input <- function(input_id, label, choices, selected = NULL) {
+  if (length(choices) == 0) {
+    return(
+      selectInput(
+        input_id,
+        label,
+        choices = character(),
+        selected = character()
+      )
+    )
+  }
+
   if (length(choices) <= 2) {
     return(
       radioGroupButtons(
@@ -117,6 +128,66 @@ compact_single_choice_input <- function(input_id, label, choices, selected = NUL
     choices = choices,
     selected = selected %||% unname(choices[[1]])
   )
+}
+
+resolve_valid_single_choice <- function(current_value, restored_value = NULL, choices = character()) {
+  valid_choices <- as.character(choices %||% character())
+
+  if (length(valid_choices) == 0) {
+    return(character())
+  }
+
+  current_choice <- as.character(current_value %||% character())
+  restored_choice <- as.character(restored_value %||% character())
+
+  if (length(current_choice) > 0 && current_choice[1] %in% valid_choices) {
+    return(current_choice[1])
+  }
+
+  if (length(restored_choice) > 0 && restored_choice[1] %in% valid_choices) {
+    return(restored_choice[1])
+  }
+
+  valid_choices[1]
+}
+
+resolve_valid_multi_choice <- function(current_value, restored_value = NULL, choices = character()) {
+  valid_choices <- as.character(choices %||% character())
+
+  if (length(valid_choices) == 0) {
+    return(character())
+  }
+
+  current_choices <- intersect(as.character(current_value %||% character()), valid_choices)
+  restored_choices <- intersect(as.character(restored_value %||% character()), valid_choices)
+
+  if (length(current_choices) > 0) {
+    return(current_choices)
+  }
+
+  if (length(restored_choices) > 0) {
+    return(restored_choices)
+  }
+
+  valid_choices[1]
+}
+
+resolve_distinct_choice_pair <- function(primary_value, secondary_value, choices = character()) {
+  valid_choices <- as.character(choices %||% character())
+
+  if (length(valid_choices) == 0) {
+    return(list(primary = character(), secondary = character()))
+  }
+
+  selected_primary <- resolve_valid_single_choice(primary_value, NULL, valid_choices)
+  available_secondary <- setdiff(valid_choices, selected_primary)
+  selected_secondary <- if (length(available_secondary) == 0) {
+    selected_primary
+  } else {
+    resolve_valid_single_choice(secondary_value, NULL, available_secondary)
+  }
+
+  list(primary = selected_primary, secondary = selected_secondary)
 }
 
 fred_vintage_mode_choices <- function() {
@@ -477,25 +548,46 @@ series_source_controls_ui <- function(input, session, index, source_value = "ABS
   }
 
   if (identical(source_value, "abs")) {
-    current_catalogue <- input[[series_input_id(index, "abs_catalogue")]] %||% restored_spec$abs_catalogue %||% abs_cat[[1]]
+    current_catalogue <- resolve_valid_single_choice(
+      input[[series_input_id(index, "abs_catalogue")]],
+      restored_spec$abs_catalogue,
+      abs_cat
+    )
     catalogue_index <- match(current_catalogue, abs_cat)
     catalogue_data <- abs_ref[[catalogue_index]] %||% abs_ref[[1]]
     desc_choices <- unique(catalogue_data$series)
-    current_desc <- input[[series_input_id(index, "abs_desc")]] %||% restored_spec$abs_desc %||% desc_choices[1]
+    current_desc <- resolve_valid_single_choice(
+      input[[series_input_id(index, "abs_desc")]],
+      restored_spec$abs_desc,
+      desc_choices
+    )
     type_choices <- catalogue_data %>%
       filter(series == current_desc) %>%
       pull(series_type) %>%
       unique()
-    current_type <- input[[series_input_id(index, "abs_series_type")]] %||% restored_spec$abs_series_type %||% type_choices[1]
+    current_type <- resolve_valid_single_choice(
+      input[[series_input_id(index, "abs_series_type")]],
+      restored_spec$abs_series_type,
+      type_choices
+    )
     table_choices <- catalogue_data %>%
       filter(series == current_desc, series_type == current_type) %>%
       pull(table_title) %>%
       unique()
-    current_table <- input[[series_input_id(index, "abs_table")]] %||% restored_spec$abs_table %||% table_choices[1]
+    current_table <- resolve_valid_single_choice(
+      input[[series_input_id(index, "abs_table")]],
+      restored_spec$abs_table,
+      table_choices
+    )
     id_choices <- catalogue_data %>%
       filter(series == current_desc, series_type == current_type, table_title == current_table) %>%
       pull(series_id) %>%
       unique()
+    current_ids <- resolve_valid_multi_choice(
+      input[[series_input_id(index, "abs_id")]],
+      restored_spec$abs_id,
+      id_choices
+    )
 
     return(
       tagList(
@@ -527,7 +619,7 @@ series_source_controls_ui <- function(input, session, index, source_value = "ABS
           series_input_id(index, "abs_id"),
           "ABS series ID",
           choices = id_choices,
-          selected = input[[series_input_id(index, "abs_id")]] %||% restored_spec$abs_id %||% id_choices[1],
+          selected = current_ids,
           options = list(create = TRUE),
           multiple = TRUE
         )
@@ -560,48 +652,6 @@ register_series_dependencies <- function(input, output, session, index) {
     series_source_controls_ui(input, session, index, source_value, restored_spec_value)
   })
 
-  choose_single_restore_value <- function(current_value, restored_value, choices) {
-    valid_choices <- as.character(choices %||% character())
-
-    if (length(valid_choices) == 0) {
-      return(character())
-    }
-
-    current_choice <- as.character(current_value %||% character())
-    restored_choice <- as.character(restored_value %||% character())
-
-    if (length(current_choice) > 0 && current_choice[1] %in% valid_choices) {
-      return(current_choice[1])
-    }
-
-    if (length(restored_choice) > 0 && restored_choice[1] %in% valid_choices) {
-      return(restored_choice[1])
-    }
-
-    valid_choices[1]
-  }
-
-  choose_multi_restore_value <- function(current_value, restored_value, choices) {
-    valid_choices <- as.character(choices %||% character())
-
-    if (length(valid_choices) == 0) {
-      return(character())
-    }
-
-    current_choices <- intersect(as.character(current_value %||% character()), valid_choices)
-    restored_choices <- intersect(as.character(restored_value %||% character()), valid_choices)
-
-    if (length(current_choices) > 0) {
-      return(current_choices)
-    }
-
-    if (length(restored_choices) > 0) {
-      return(restored_choices)
-    }
-
-    valid_choices[1]
-  }
-
   observeEvent(input[[series_input_id(index, "rba_table")]], {
     table_value <- input[[series_input_id(index, "rba_table")]]
     series_choices <- rba_series[[table_value]] %||% character()
@@ -630,7 +680,7 @@ register_series_dependencies <- function(input, output, session, index) {
       unique() %>%
       na.omit()
     restored_spec_value <- restored_series_spec(session, index)
-    selected_desc <- choose_single_restore_value(
+    selected_desc <- resolve_valid_single_choice(
       input[[series_input_id(index, "abs_desc")]],
       restored_spec_value$abs_desc %||% character(),
       desc_choices
@@ -670,7 +720,7 @@ register_series_dependencies <- function(input, output, session, index) {
         unique() %>%
         na.omit()
       restored_spec_value <- restored_series_spec(session, index)
-      selected_type <- choose_single_restore_value(
+      selected_type <- resolve_valid_single_choice(
         input[[series_input_id(index, "abs_series_type")]],
         restored_spec_value$abs_series_type %||% character(),
         type_choices
@@ -713,7 +763,7 @@ register_series_dependencies <- function(input, output, session, index) {
         unique() %>%
         na.omit()
       restored_spec_value <- restored_series_spec(session, index)
-      selected_table <- choose_single_restore_value(
+      selected_table <- resolve_valid_single_choice(
         input[[series_input_id(index, "abs_table")]],
         restored_spec_value$abs_table %||% character(),
         table_choices
@@ -761,7 +811,7 @@ register_series_dependencies <- function(input, output, session, index) {
         pull(series_id) %>%
         na.omit()
       restored_spec_value <- restored_series_spec(session, index)
-      selected_ids <- choose_multi_restore_value(
+      selected_ids <- resolve_valid_multi_choice(
         input[[series_input_id(index, "abs_id")]],
         restored_spec_value$abs_id %||% character(),
         id_choices
@@ -1819,6 +1869,10 @@ build_chart_plot <- function(data, style) {
 
 build_chart_widget <- function(data, style) {
   widget <- ggplotly(build_chart_plot(data, style), tooltip = c("x", "y", "colour"))
+  style_plotly_widget(widget, style)
+}
+
+style_plotly_widget <- function(widget, style) {
   title_text <- trimws(style$title %||% "")
   subtitle_text <- trimws(style$subtitle %||% "")
   note_text <- trimws(style$note %||% "")

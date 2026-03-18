@@ -1748,8 +1748,9 @@ build_main_server <- function(input, output, session) {
     active_tab <- input$analysis_tabs %||% "Correlations"
 
     if (identical(active_tab, "Correlations")) {
-      series_x <- input$analysis_corr_x %||% ""
-      series_y <- input$analysis_corr_y %||% ""
+      corr_pair <- analysis_corr_pair()
+      series_x <- corr_pair$primary %||% ""
+      series_y <- corr_pair$secondary %||% ""
       window <- max(2L, as.integer(input$analysis_corr_window %||% 4))
 
       if (!nzchar(series_x) || !nzchar(series_y) || identical(series_x, series_y)) {
@@ -1781,8 +1782,9 @@ build_main_server <- function(input, output, session) {
     }
 
     if (identical(active_tab, "Regression")) {
-      dependent <- input$analysis_reg_y %||% ""
-      independent <- input$analysis_reg_x %||% ""
+      reg_pair <- analysis_reg_pair()
+      dependent <- reg_pair$secondary %||% ""
+      independent <- reg_pair$primary %||% ""
       error_assumption <- input$analysis_reg_errors %||% "classical"
 
       if (!nzchar(dependent) || !nzchar(independent) || identical(dependent, independent)) {
@@ -1819,7 +1821,7 @@ build_main_server <- function(input, output, session) {
     }
 
     if (identical(active_tab, "Forecast")) {
-      series_name <- input$analysis_forecast_series %||% ""
+      series_name <- selected_forecast_series() %||% ""
 
       if (!nzchar(series_name)) {
         return(NULL)
@@ -1829,7 +1831,7 @@ build_main_server <- function(input, output, session) {
         forecast_analysis(
           data,
           series_name = series_name,
-          model_family = input$analysis_forecast_family,
+          model_family = input$analysis_forecast_family %||% "AR",
           ar_lag = max(0, as.integer(input$analysis_forecast_ar)),
           ma_lag = max(0, as.integer(input$analysis_forecast_ma)),
           horizon = max(1, as.integer(input$analysis_forecast_horizon)),
@@ -1865,7 +1867,7 @@ build_main_server <- function(input, output, session) {
     }
 
     if (identical(active_tab, "Seasonal Adjust")) {
-      series_name <- input$analysis_seasonal_series %||% ""
+      series_name <- selected_seasonal_series() %||% ""
       display_mode <- input$analysis_seasonal_view %||% "both"
 
       if (!nzchar(series_name)) {
@@ -1904,7 +1906,7 @@ build_main_server <- function(input, output, session) {
     }
 
     if (identical(active_tab, "HP Filter")) {
-      series_name <- input$analysis_hp_series %||% ""
+      series_name <- selected_hp_series() %||% ""
       side <- input$analysis_hp_side %||% "two_sided"
       display_mode <- input$analysis_hp_view %||% "overlay"
 
@@ -1942,7 +1944,7 @@ build_main_server <- function(input, output, session) {
     }
 
     if (identical(active_tab, "Kalman Filter")) {
-      series_name <- input$analysis_kalman_series %||% ""
+      series_name <- selected_kalman_series() %||% ""
       side <- input$analysis_kalman_side %||% "two_sided"
       display_mode <- input$analysis_kalman_view %||% "overlay"
 
@@ -2014,59 +2016,71 @@ build_main_server <- function(input, output, session) {
     widget <- if (identical(chart_kind, "builder") || is.null(analysis_payload)) {
       build_chart_widget(chart_record$data_snapshot[[1]], chart_state$style)
     } else if (identical(chart_kind, "correlation")) {
-      ggplotly(
+      build_analysis_widget(
         build_correlation_plot(
           analysis_payload,
           analysis_spec$series_x %||% "",
           analysis_spec$series_y %||% "",
-          analysis_spec$window %||% 4
+          analysis_spec$window %||% 4,
+          chart_state$style
         ),
+        chart_state$style,
         tooltip = c("x", "y")
       )
     } else if (identical(chart_kind, "regression")) {
-      ggplotly(
+      build_analysis_widget(
         build_regression_plot(
           analysis_payload,
           analysis_spec$dependent %||% "",
-          analysis_spec$independent %||% ""
+          analysis_spec$independent %||% "",
+          chart_state$style
         ),
+        chart_state$style,
         tooltip = c("x", "y")
       )
     } else if (identical(chart_kind, "forecast")) {
-      ggplotly(
+      build_analysis_widget(
         build_forecast_plot(
           analysis_payload,
-          analysis_spec$series_name %||% "Series"
+          analysis_spec$series_name %||% "Series",
+          chart_state$style
         ),
+        chart_state$style,
         tooltip = c("x", "y")
       )
     } else if (identical(chart_kind, "seasonal_adjustment")) {
-      ggplotly(
+      build_analysis_widget(
         build_seasonal_adjustment_plot(
           analysis_payload,
           analysis_spec$series_name %||% "Series",
-          analysis_spec$display_mode %||% "both"
+          analysis_spec$display_mode %||% "both",
+          chart_state$style
         ),
+        chart_state$style,
         tooltip = c("x", "y", "colour")
       )
     } else if (identical(chart_kind, "hp_filter")) {
-      ggplotly(
+      build_analysis_widget(
         build_hp_filter_plot(
           analysis_payload,
           analysis_spec$series_name %||% "Series",
           analysis_spec$side %||% "two_sided",
-          analysis_spec$display_mode %||% "overlay"
+          analysis_spec$display_mode %||% "overlay",
+          chart_state$style
         ),
+        chart_state$style,
         tooltip = c("x", "y", "colour")
       )
     } else if (identical(chart_kind, "kalman_filter")) {
-      ggplotly(
+      build_analysis_widget(
         build_kalman_filter_plot(
           analysis_payload,
           analysis_spec$series_name %||% "Series",
           analysis_spec$side %||% "two_sided",
-          analysis_spec$display_mode %||% "overlay"
+          analysis_spec$display_mode %||% "overlay",
+          chart_state$style
         ),
+        chart_state$style,
         tooltip = c("x", "y", "colour")
       )
     } else {
@@ -2703,48 +2717,69 @@ build_main_server <- function(input, output, session) {
     analysis_series_choices(chart_data())
   })
 
-  observe({
-    series_choices <- available_series()
-    choose_distinct_pair <- function(primary_value, secondary_value) {
-      if (length(series_choices) == 0) {
-        return(list(primary = character(), secondary = character()))
-      }
-
-      selected_primary <- if (length(primary_value) > 0 && primary_value %in% series_choices) primary_value else series_choices[1]
-      available_secondary <- setdiff(series_choices, selected_primary)
-      selected_secondary <- if (length(secondary_value) > 0 && secondary_value %in% available_secondary) {
-        secondary_value
-      } else if (length(available_secondary) > 0) {
-        available_secondary[1]
-      } else {
-        selected_primary
-      }
-
-      list(primary = selected_primary, secondary = selected_secondary)
-    }
-
-    corr_pair <- choose_distinct_pair(input$analysis_corr_x %||% character(), input$analysis_corr_y %||% character())
-    reg_pair <- choose_distinct_pair(input$analysis_reg_x %||% character(), input$analysis_reg_y %||% character())
-
-    updateSelectInput(session, "analysis_corr_x", choices = series_choices, selected = corr_pair$primary %||% character())
-    updateSelectInput(session, "analysis_corr_y", choices = series_choices, selected = corr_pair$secondary %||% character())
-    updateSelectInput(session, "analysis_reg_x", choices = series_choices, selected = reg_pair$primary %||% character())
-    updateSelectInput(session, "analysis_reg_y", choices = series_choices, selected = reg_pair$secondary %||% character())
-    updateSelectInput(session, "analysis_forecast_series", choices = series_choices, selected = series_choices[1] %||% character())
-    updateSelectInput(session, "analysis_seasonal_series", choices = series_choices, selected = series_choices[1] %||% character())
-    updateSelectInput(session, "analysis_hp_series", choices = series_choices, selected = series_choices[1] %||% character())
-    updateSelectInput(session, "analysis_kalman_series", choices = series_choices, selected = series_choices[1] %||% character())
+  analysis_corr_pair <- reactive({
+    resolve_distinct_choice_pair(input$analysis_corr_x %||% character(), input$analysis_corr_y %||% character(), available_series())
   })
 
+  analysis_reg_pair <- reactive({
+    resolve_distinct_choice_pair(input$analysis_reg_x %||% character(), input$analysis_reg_y %||% character(), available_series())
+  })
+
+  selected_analysis_series <- function(current_value) {
+    resolve_valid_single_choice(current_value, NULL, available_series())
+  }
+
+  selected_forecast_series <- reactive({
+    selected_analysis_series(input$analysis_forecast_series)
+  })
+
+  selected_seasonal_series <- reactive({
+    selected_analysis_series(input$analysis_seasonal_series)
+  })
+
+  selected_hp_series <- reactive({
+    selected_analysis_series(input$analysis_hp_series)
+  })
+
+  selected_kalman_series <- reactive({
+    selected_analysis_series(input$analysis_kalman_series)
+  })
+
+  update_analysis_select <- function(input_id, choices, selected) {
+    updateSelectInput(session, input_id, choices = choices, selected = selected %||% character())
+  }
+
+  observeEvent(available_series(), {
+    series_choices <- available_series()
+    corr_pair <- resolve_distinct_choice_pair(isolate(input$analysis_corr_x), isolate(input$analysis_corr_y), series_choices)
+    reg_pair <- resolve_distinct_choice_pair(isolate(input$analysis_reg_x), isolate(input$analysis_reg_y), series_choices)
+
+    update_analysis_select("analysis_corr_x", series_choices, corr_pair$primary)
+    update_analysis_select("analysis_corr_y", series_choices, corr_pair$secondary)
+    update_analysis_select("analysis_reg_x", series_choices, reg_pair$primary)
+    update_analysis_select("analysis_reg_y", series_choices, reg_pair$secondary)
+    update_analysis_select("analysis_forecast_series", series_choices, resolve_valid_single_choice(isolate(input$analysis_forecast_series), NULL, series_choices))
+    update_analysis_select("analysis_seasonal_series", series_choices, resolve_valid_single_choice(isolate(input$analysis_seasonal_series), NULL, series_choices))
+    update_analysis_select("analysis_hp_series", series_choices, resolve_valid_single_choice(isolate(input$analysis_hp_series), NULL, series_choices))
+    update_analysis_select("analysis_kalman_series", series_choices, resolve_valid_single_choice(isolate(input$analysis_kalman_series), NULL, series_choices))
+  }, ignoreInit = FALSE)
+
   correlation_result <- reactive({
-    req(length(available_series()) >= 2)
-    req(nzchar(input$analysis_corr_x), nzchar(input$analysis_corr_y))
-    req(input$analysis_corr_x != input$analysis_corr_y)
+    if (length(available_series()) < 2) {
+      return(NULL)
+    }
+    pair <- analysis_corr_pair()
+    if (length(pair$primary) == 0 || length(pair$secondary) == 0) {
+      return(NULL)
+    }
+    if (identical(pair$primary, pair$secondary)) {
+      return(NULL)
+    }
 
     rolling_correlation_data(
       chart_data(),
-      input$analysis_corr_x,
-      input$analysis_corr_y,
+      pair$primary,
+      pair$secondary,
       max(2, as.integer(input$analysis_corr_window))
     )
   })
@@ -2754,6 +2789,20 @@ build_main_server <- function(input, output, session) {
       return(NULL)
     }
 
+    safe_analysis_widget <- function(expr, failure_message) {
+      tryCatch(
+        expr,
+        error = function(error) {
+          detail <- trimws(conditionMessage(error) %||% "")
+          if (nzchar(detail)) {
+            empty_plotly_widget(paste(failure_message, detail))
+          } else {
+            empty_plotly_widget(failure_message)
+          }
+        }
+      )
+    }
+
     active_tab <- input$analysis_tabs %||% "Correlations"
 
     if (identical(active_tab, "Correlations")) {
@@ -2761,17 +2810,20 @@ build_main_server <- function(input, output, session) {
         return(empty_plotly_widget("Add at least two chart series to run correlation analysis."))
       }
 
+      corr_pair <- analysis_corr_pair()
       result <- tryCatch(correlation_result(), error = function(error) NULL)
       if (is.null(result) || nrow(result) == 0) {
         return(empty_plotly_widget("Unable to compute the requested rolling correlation."))
       }
 
-      return(
-        ggplotly(
-          build_correlation_plot(result, input$analysis_corr_x, input$analysis_corr_y, input$analysis_corr_window),
+      return(safe_analysis_widget(
+        build_analysis_widget(
+          build_correlation_plot(result, corr_pair$primary, corr_pair$secondary, input$analysis_corr_window, builder_state()$style),
+          builder_state()$style,
           tooltip = c("x", "y")
-        )
-      )
+        ),
+        "Unable to render the rolling correlation chart."
+      ))
     }
 
     if (identical(active_tab, "Regression")) {
@@ -2779,17 +2831,20 @@ build_main_server <- function(input, output, session) {
         return(empty_plotly_widget("Add at least two chart series to run regression analysis."))
       }
 
+      reg_pair <- analysis_reg_pair()
       result <- tryCatch(regression_result(), error = function(error) NULL)
       if (is.null(result)) {
         return(empty_plotly_widget("Unable to estimate the requested regression."))
       }
 
-      return(
-        ggplotly(
-          build_regression_plot(result, input$analysis_reg_y, input$analysis_reg_x),
+      return(safe_analysis_widget(
+        build_analysis_widget(
+          build_regression_plot(result, reg_pair$secondary, reg_pair$primary, builder_state()$style),
+          builder_state()$style,
           tooltip = c("x", "y")
-        )
-      )
+        ),
+        "Unable to render the regression chart."
+      ))
     }
 
     if (identical(active_tab, "Seasonal Adjust")) {
@@ -2797,21 +2852,25 @@ build_main_server <- function(input, output, session) {
         return(empty_plotly_widget("Add at least one chart series to run seasonal adjustment."))
       }
 
+      series_name <- selected_seasonal_series()
       result <- tryCatch(seasonal_adjustment_result(), error = function(error) NULL)
       if (is.null(result)) {
         return(empty_plotly_widget("Unable to run X-13 seasonal adjustment for the selected series."))
       }
 
-      return(
-        ggplotly(
+      return(safe_analysis_widget(
+        build_analysis_widget(
           build_seasonal_adjustment_plot(
             result,
-            input$analysis_seasonal_series,
-            input$analysis_seasonal_view %||% "both"
+            series_name,
+            input$analysis_seasonal_view %||% "both",
+            builder_state()$style
           ),
+          builder_state()$style,
           tooltip = c("x", "y", "colour")
-        )
-      )
+        ),
+        "Unable to render the seasonal-adjustment chart."
+      ))
     }
 
     if (identical(active_tab, "HP Filter")) {
@@ -2819,22 +2878,26 @@ build_main_server <- function(input, output, session) {
         return(empty_plotly_widget("Add at least one chart series to run an HP filter."))
       }
 
+      series_name <- selected_hp_series()
       result <- tryCatch(hp_filter_result(), error = function(error) NULL)
       if (is.null(result)) {
         return(empty_plotly_widget("Unable to estimate the requested HP filter."))
       }
 
-      return(
-        ggplotly(
+      return(safe_analysis_widget(
+        build_analysis_widget(
           build_hp_filter_plot(
             result,
-            input$analysis_hp_series,
+            series_name,
             input$analysis_hp_side %||% "two_sided",
-            input$analysis_hp_view %||% "overlay"
+            input$analysis_hp_view %||% "overlay",
+            builder_state()$style
           ),
+          builder_state()$style,
           tooltip = c("x", "y", "colour")
-        )
-      )
+        ),
+        "Unable to render the HP-filter chart."
+      ))
     }
 
     if (identical(active_tab, "Kalman Filter")) {
@@ -2842,36 +2905,45 @@ build_main_server <- function(input, output, session) {
         return(empty_plotly_widget("Add at least one chart series to run a Kalman filter."))
       }
 
+      series_name <- selected_kalman_series()
       result <- tryCatch(kalman_filter_result(), error = function(error) NULL)
       if (is.null(result)) {
         return(empty_plotly_widget("Unable to estimate the requested Kalman filter."))
       }
 
-      return(
-        ggplotly(
+      return(safe_analysis_widget(
+        build_analysis_widget(
           build_kalman_filter_plot(
             result,
-            input$analysis_kalman_series,
+            series_name,
             input$analysis_kalman_side %||% "two_sided",
-            input$analysis_kalman_view %||% "overlay"
+            input$analysis_kalman_view %||% "overlay",
+            builder_state()$style
           ),
+          builder_state()$style,
           tooltip = c("x", "y", "colour")
-        )
-      )
+        ),
+        "Unable to render the Kalman-filter chart."
+      ))
     }
 
     if (length(available_series()) < 1) {
       return(empty_plotly_widget("Add at least one chart series to run forecasting."))
     }
 
+    series_name <- selected_forecast_series()
     result <- tryCatch(forecast_result(), error = function(error) NULL)
     if (is.null(result)) {
       return(empty_plotly_widget("Unable to estimate the requested forecast model."))
     }
 
-    ggplotly(
-      build_forecast_plot(result, input$analysis_forecast_series),
-      tooltip = c("x", "y")
+    safe_analysis_widget(
+      build_analysis_widget(
+        build_forecast_plot(result, series_name, builder_state()$style),
+        builder_state()$style,
+        tooltip = c("x", "y")
+      ),
+      "Unable to render the forecast chart."
     )
   })
 
@@ -2916,14 +2988,21 @@ build_main_server <- function(input, output, session) {
   })
 
   regression_result <- reactive({
-    req(length(available_series()) >= 2)
-    req(nzchar(input$analysis_reg_x), nzchar(input$analysis_reg_y))
-    req(input$analysis_reg_x != input$analysis_reg_y)
+    if (length(available_series()) < 2) {
+      return(NULL)
+    }
+    pair <- analysis_reg_pair()
+    if (length(pair$primary) == 0 || length(pair$secondary) == 0) {
+      return(NULL)
+    }
+    if (identical(pair$primary, pair$secondary)) {
+      return(NULL)
+    }
 
     regression_analysis(
       chart_data(),
-      dependent = input$analysis_reg_y,
-      independent = input$analysis_reg_x,
+      dependent = pair$secondary,
+      independent = pair$primary,
       error_assumption = input$analysis_reg_errors
     )
   })
@@ -2949,12 +3028,17 @@ build_main_server <- function(input, output, session) {
   })
 
   seasonal_adjustment_result <- reactive({
-    req(length(available_series()) >= 1)
-    req(nzchar(input$analysis_seasonal_series))
+    if (length(available_series()) < 1) {
+      return(NULL)
+    }
+    series_name <- selected_seasonal_series()
+    if (length(series_name) == 0 || !nzchar(series_name)) {
+      return(NULL)
+    }
 
     seasonal_adjustment_analysis(
       chart_data(),
-      series_name = input$analysis_seasonal_series,
+      series_name = series_name,
       display_mode = input$analysis_seasonal_view %||% "both"
     )
   })
@@ -2980,12 +3064,17 @@ build_main_server <- function(input, output, session) {
   })
 
   hp_filter_result <- reactive({
-    req(length(available_series()) >= 1)
-    req(nzchar(input$analysis_hp_series))
+    if (length(available_series()) < 1) {
+      return(NULL)
+    }
+    series_name <- selected_hp_series()
+    if (length(series_name) == 0 || !nzchar(series_name)) {
+      return(NULL)
+    }
 
     hp_filter_analysis(
       chart_data(),
-      series_name = input$analysis_hp_series,
+      series_name = series_name,
       side = input$analysis_hp_side %||% "two_sided",
       display_mode = input$analysis_hp_view %||% "overlay"
     )
@@ -3012,12 +3101,17 @@ build_main_server <- function(input, output, session) {
   })
 
   kalman_filter_result <- reactive({
-    req(length(available_series()) >= 1)
-    req(nzchar(input$analysis_kalman_series))
+    if (length(available_series()) < 1) {
+      return(NULL)
+    }
+    series_name <- selected_kalman_series()
+    if (length(series_name) == 0 || !nzchar(series_name)) {
+      return(NULL)
+    }
 
     kalman_filter_analysis(
       chart_data(),
-      series_name = input$analysis_kalman_series,
+      series_name = series_name,
       side = input$analysis_kalman_side %||% "two_sided",
       display_mode = input$analysis_kalman_view %||% "overlay"
     )
@@ -3051,7 +3145,7 @@ build_main_server <- function(input, output, session) {
     }
 
     target_index <- max(1L, min(MAX_SERIES, as.integer(input$analysis_seasonal_target_series %||% "1")))
-    series_name <- trimws(input$analysis_seasonal_series %||% "Seasonal adjustment")
+    series_name <- trimws(selected_seasonal_series() %||% "Seasonal adjustment")
     display_mode <- input$analysis_seasonal_view %||% "both"
     result_key <- paste0(
       "seasonal_adjustment::",
@@ -3085,7 +3179,7 @@ build_main_server <- function(input, output, session) {
     }
 
     target_index <- max(1L, min(MAX_SERIES, as.integer(input$analysis_hp_target_series %||% "1")))
-    series_name <- trimws(input$analysis_hp_series %||% "HP filter")
+    series_name <- trimws(selected_hp_series() %||% "HP filter")
     view_mode <- input$analysis_hp_view %||% "overlay"
     side <- input$analysis_hp_side %||% "two_sided"
     result_key <- paste0("hp_filter::", digest::digest(list(series_name, side, view_mode, result$data)))
@@ -3117,7 +3211,7 @@ build_main_server <- function(input, output, session) {
     }
 
     target_index <- max(1L, min(MAX_SERIES, as.integer(input$analysis_kalman_target_series %||% "1")))
-    series_name <- trimws(input$analysis_kalman_series %||% "Kalman filter")
+    series_name <- trimws(selected_kalman_series() %||% "Kalman filter")
     view_mode <- input$analysis_kalman_view %||% "overlay"
     side <- input$analysis_kalman_side %||% "two_sided"
     result_key <- paste0("kalman_filter::", digest::digest(list(series_name, side, view_mode, result$data)))
@@ -3142,13 +3236,18 @@ build_main_server <- function(input, output, session) {
   })
 
   forecast_result <- reactive({
-    req(length(available_series()) >= 1)
-    req(nzchar(input$analysis_forecast_series))
+    if (length(available_series()) < 1) {
+      return(NULL)
+    }
+    series_name <- selected_forecast_series()
+    if (length(series_name) == 0 || !nzchar(series_name)) {
+      return(NULL)
+    }
 
     forecast_analysis(
       chart_data(),
-      series_name = input$analysis_forecast_series,
-      model_family = input$analysis_forecast_family,
+      series_name = series_name,
+      model_family = input$analysis_forecast_family %||% "AR",
       ar_lag = max(0, as.integer(input$analysis_forecast_ar)),
       ma_lag = max(0, as.integer(input$analysis_forecast_ma)),
       horizon = max(1, as.integer(input$analysis_forecast_horizon)),
