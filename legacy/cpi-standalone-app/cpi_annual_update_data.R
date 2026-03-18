@@ -1,3 +1,5 @@
+## Legacy CPI annual update script
+
 Sys.setenv(R_READABS_PATH = here("data_abs"))
 
 ## data download ----
@@ -204,6 +206,5 @@ cpi_data_all <- cpi_class_1 %>%
 
 
 save(cpi_data_all, file = here("data", "cpi_data_all.Rda"))
-
 
 

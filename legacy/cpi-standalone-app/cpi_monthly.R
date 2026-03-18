@@ -1,3 +1,5 @@
+## Legacy CPI monthly prep script
+
 library(tidyverse)
 library(readabs)
 library(here)
@@ -91,7 +93,6 @@ ggplotly(p)
 
 unique(cpi_monthly_long$class_1)
 unique(cpi_monthly_long$class_2)
-
 
 
 
