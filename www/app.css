@@ -164,6 +164,51 @@ textarea,
   margin-left: auto;
 }
 
+.app-card__header-actions .form-group {
+  margin-bottom: 0;
+}
+
+.card-renderer-toggle .radio-group-buttons > .btn-group-container-sw {
+  display: flex !important;
+  flex-wrap: nowrap;
+  gap: 6px;
+  margin-bottom: 0;
+}
+
+.card-renderer-toggle .radio-group-buttons > .btn-group-container-sw > .btn-group,
+.card-renderer-toggle .radio-group-buttons > .btn-group-container-sw > .btn-group-vertical {
+  display: flex !important;
+  flex: 0 0 auto;
+  margin: 0 !important;
+  width: auto !important;
+}
+
+.card-renderer-toggle .radio-group-buttons > .btn-group-container-sw > .btn-group > .btn,
+.card-renderer-toggle .radio-group-buttons > .btn-group-container-sw > .btn-group-vertical > .btn,
+.card-renderer-toggle .radio-group-buttons > .btn-group-container-sw > .radioBtn {
+  background: rgba(255, 255, 255, 0.14);
+  border: 1px solid rgba(255, 255, 255, 0.28);
+  border-radius: 999px !important;
+  color: var(--color-text-on-dark);
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1;
+  min-height: 0;
+  min-width: 0;
+  padding: 7px 12px;
+  width: auto !important;
+}
+
+.card-renderer-toggle .radio-group-buttons > .btn-group-container-sw > .btn-group > .btn.active,
+.card-renderer-toggle .radio-group-buttons > .btn-group-container-sw > .btn-group > .btn:active,
+.card-renderer-toggle .radio-group-buttons > .btn-group-container-sw > .btn-group-vertical > .btn.active,
+.card-renderer-toggle .radio-group-buttons > .btn-group-container-sw > .radioBtn.active {
+  background: rgba(255, 255, 255, 0.22);
+  border-color: rgba(255, 255, 255, 0.4);
+  color: #ffffff;
+  box-shadow: none;
+}
+
 .app-card__header-chip {
   background: rgba(255, 255, 255, 0.14);
   border: 1px solid rgba(255, 255, 255, 0.28);
@@ -333,6 +378,10 @@ textarea,
 .muted-copy {
   color: var(--color-text-secondary);
   margin-bottom: 14px;
+}
+
+.export-note {
+  margin: 10px 0;
 }
 
 .summary-chip-row {

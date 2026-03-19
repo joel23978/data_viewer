@@ -254,6 +254,7 @@ default_style_settings <- function() {
     subtitle = "",
     y_axis_label = "%",
     note = "Source: custom query",
+    renderer = "plotly",
     font_family = APP_CHART_FONTS[[1]],
     legend = "bottom",
     palette = APP_PALETTES[[1]],
@@ -270,8 +271,8 @@ default_style_settings <- function() {
     vertical_1 = as.Date(NA),
     vertical_2 = as.Date(NA),
     recession_shading = "none",
-    export_width = 7,
-    export_height = 5
+    export_width = 8,
+    export_height = 7
   )
 }
 
@@ -1032,6 +1033,7 @@ style_settings_from_input <- function(input) {
     subtitle = trimws(input$style_subtitle %||% ""),
     y_axis_label = trimws(input$style_y_axis_label %||% "%"),
     note = trimws(input$style_note %||% "Source: custom query"),
+    renderer = input$style_renderer %||% "plotly",
     font_family = input$style_font_family %||% APP_CHART_FONTS[[1]],
     legend = input$style_legend %||% "bottom",
     palette = input$style_palette %||% APP_PALETTES[[1]],
@@ -1052,7 +1054,7 @@ style_settings_from_input <- function(input) {
     vertical_2 = date_or_default(input$style_vertical_2),
     recession_shading = input$style_recession_shading %||% "none",
     export_width = numeric_or_default(input$export_width, 8),
-    export_height = numeric_or_default(input$export_height, 5)
+    export_height = numeric_or_default(input$export_height, 7)
   )
 }
 
@@ -1102,6 +1104,7 @@ normalize_style_settings <- function(style) {
     subtitle = trimws(style$subtitle %||% ""),
     y_axis_label = trimws(style$y_axis_label %||% "%"),
     note = trimws(style$note %||% "Source: custom query"),
+    renderer = style$renderer %||% "plotly",
     font_family = style$font_family %||% APP_CHART_FONTS[[1]],
     legend = style$legend %||% "bottom",
     palette = style$palette %||% APP_PALETTES[[1]],
@@ -1126,7 +1129,7 @@ normalize_style_settings <- function(style) {
     vertical_2 = if (length(style$vertical_2 %||% as.Date(character())) == 0) as.Date(NA) else as.Date(style$vertical_2)[1],
     recession_shading = style$recession_shading %||% "none",
     export_width = as.numeric(style$export_width %||% 8),
-    export_height = as.numeric(style$export_height %||% 5)
+    export_height = as.numeric(style$export_height %||% 7)
   )
 }
 
@@ -1703,6 +1706,106 @@ palette_values <- function(data, palette_name) {
   grDevices::palette.colors(n_series, palette = APP_PALETTES[[1]])
 }
 
+plotly_legend_rows <- function(labels, legend_position = "bottom") {
+  if (!identical(legend_position, "bottom")) {
+    return(0L)
+  }
+
+  cleaned_labels <- trimws(as.character(labels %||% character()))
+  cleaned_labels <- cleaned_labels[nzchar(cleaned_labels)]
+
+  if (length(cleaned_labels) == 0) {
+    return(0L)
+  }
+
+  estimated_row_load <- sum(pmax(nchar(cleaned_labels), 8) + 4)
+  as.integer(max(1, ceiling(estimated_row_load / 42)))
+}
+
+plotly_footer_metrics <- function(labels, style) {
+  legend_rows <- plotly_legend_rows(labels, style$legend %||% "bottom")
+  note_present <- nzchar(trimws(style$note %||% ""))
+  legend_block_px <- if (legend_rows > 0) 26 + pmax(0, legend_rows - 1) * 22 else 0
+  note_block_px <- if (note_present) 34 else 0
+  inter_block_px <- if (legend_rows > 0 && note_present) 14 else 0
+
+  list(
+    legend_rows = legend_rows,
+    bottom_margin = 34 + legend_block_px + note_block_px + inter_block_px,
+    note_y = if (legend_rows > 0) -(0.10 + legend_rows * 0.082) else -0.05,
+    extra_height_px = legend_block_px + note_block_px + inter_block_px
+  )
+}
+
+plotly_widget_height <- function(data, style, base_height = 500) {
+  labels <- if (is.null(data) || nrow(data) == 0) character() else unique(as.character(data$name))
+  metrics <- plotly_footer_metrics(labels, style)
+  as.integer(base_height + metrics$extra_height_px)
+}
+
+static_legend_rows <- function(labels, legend_position = "bottom") {
+  if (!identical(legend_position, "bottom")) {
+    return(0L)
+  }
+
+  cleaned_labels <- trimws(as.character(labels %||% character()))
+  cleaned_labels <- cleaned_labels[nzchar(cleaned_labels)]
+
+  if (length(cleaned_labels) == 0) {
+    return(0L)
+  }
+
+  estimated_row_load <- sum(pmax(nchar(cleaned_labels), 8) + 4)
+  as.integer(max(1, ceiling(estimated_row_load / 84)))
+}
+
+resolve_static_chart_font <- function(font_family) {
+  requested_font <- trimws(font_family %||% APP_CHART_FONTS[[1]])
+
+  if (!requireNamespace("systemfonts", quietly = TRUE)) {
+    return(requested_font)
+  }
+
+  available_fonts <- try(systemfonts::system_fonts(), silent = TRUE)
+  if (inherits(available_fonts, "try-error") || nrow(available_fonts) == 0) {
+    return(requested_font)
+  }
+
+  available_families <- unique(as.character(available_fonts$family))
+  family_lookup <- stats::setNames(available_families, tolower(available_families))
+  matched_font <- unname(family_lookup[tolower(requested_font)])
+
+  if (!is.null(matched_font) && nzchar(matched_font)) {
+    return(matched_font)
+  }
+
+  fallback_map <- list(
+    "plus jakarta sans" = c("Avenir Next", "Avenir", "Helvetica Neue", "Helvetica", "Arial"),
+    "pt sans narrow" = c("PT Sans Caption", "PT Sans", "Arial Narrow", "Arial"),
+    "trebuchet ms" = c("Trebuchet MS", "Arial", "Helvetica"),
+    "helvetica neue" = c("Helvetica Neue", "Helvetica", "Arial"),
+    "gill sans" = c("Gill Sans", "Avenir Next", "Helvetica Neue")
+  )
+
+  fallback_candidates <- unique(c(
+    fallback_map[[tolower(requested_font)]],
+    requested_font,
+    APP_CHART_FONTS,
+    "Helvetica Neue",
+    "Helvetica",
+    "Arial"
+  ))
+
+  for (candidate in fallback_candidates) {
+    matched_font <- unname(family_lookup[tolower(candidate)])
+    if (!is.null(matched_font) && nzchar(matched_font)) {
+      return(matched_font)
+    }
+  }
+
+  "sans"
+}
+
 build_chart_plot <- function(data, style) {
   if (nrow(data) == 0) {
     stop("No chart data is available yet.", call. = FALSE)
@@ -1710,9 +1813,14 @@ build_chart_plot <- function(data, style) {
 
   axis_settings <- pretty_axis_breaks(data, style)
   x_breaks <- scales::breaks_pretty(n = max(2, round(style$x_labels %||% 6)))
-  chart_font <- style$font_family %||% APP_CHART_FONTS[[1]]
-  caption_top_margin <- if (identical(style$legend, "bottom")) 28 else 4
-  legend_bottom_margin <- if (identical(style$legend, "bottom")) 18 else 0
+  chart_font <- resolve_static_chart_font(style$font_family)
+  series_names <- unique(as.character(data$name))
+  legend_rows <- static_legend_rows(series_names, style$legend %||% "bottom")
+  legend_rows <- max(legend_rows, 1L)
+  note_present <- nzchar(trimws(style$note %||% ""))
+  caption_top_margin <- if (identical(style$legend, "bottom") && note_present) 12 + pmax(0, legend_rows - 1L) * 6 else 4
+  legend_bottom_margin <- if (identical(style$legend, "bottom") && note_present) 6 else 0
+  legend_labels <- stats::setNames(stringr::str_wrap(series_names, width = 55), series_names)
   bottom_gridline_value <- if (length(axis_settings$breaks) > 0 && all(is.finite(axis_settings$breaks))) {
     if (isTRUE(style$invert_y_axis)) {
       max(axis_settings$breaks, na.rm = TRUE)
@@ -1801,8 +1909,16 @@ build_chart_plot <- function(data, style) {
   }
 
   chart_plot <- chart_plot +
-    scale_colour_manual(values = palette_values(data, style$palette)) +
-    scale_fill_manual(values = palette_values(data, style$palette)) +
+    scale_colour_manual(
+      values = stats::setNames(palette_values(data, style$palette), series_names),
+      breaks = series_names,
+      labels = legend_labels
+    ) +
+    scale_fill_manual(
+      values = stats::setNames(palette_values(data, style$palette), series_names),
+      breaks = series_names,
+      labels = legend_labels
+    ) +
     scale_x_date(
       breaks = x_breaks,
       date_labels = style$date_format,
@@ -1820,16 +1936,16 @@ build_chart_plot <- function(data, style) {
     ) +
     theme_minimal(base_size = 12, base_family = chart_font) +
     theme(
-      text = element_text(family = chart_font),
-      plot.tag = element_text(face = "bold", size = 16, colour = "#000000", hjust = 1),
-      plot.tag.position = c(1, 0.945),
-      plot.title = element_text(face = "bold", size = 18, hjust = 0, margin = margin(b = 18)),
-      plot.subtitle = element_text(size = 16, colour = "#000000", hjust = 0, margin = margin(b = 10)),
+      text = element_text(family = chart_font, colour = "#000000"),
+      plot.tag = element_text(face = "bold", family = chart_font, size = 16, colour = "#000000", hjust = 1, vjust = 0.5),
+      plot.tag.position = c(0.965, 0.885),
+      plot.title = element_text(face = "bold", family = chart_font, size = 22, hjust = 0, margin = margin(b = 18)),
+      plot.subtitle = element_text(size = 16, family = chart_font, colour = "#000000", hjust = 0, margin = margin(b = 10)),
       plot.caption = element_text(size = 16, colour = "#000000", hjust = 0, margin = margin(t = caption_top_margin)),
       plot.title.position = "plot",
       plot.caption.position = "plot",
-      axis.text = element_text(size = 16, colour = "#000000"),
-      axis.text.y.right = element_text(margin = margin(l = 52)),
+      axis.text = element_text(size = 16, family = chart_font, colour = "#000000"),
+      axis.text.y.right = element_text(family = chart_font, margin = margin(l = 2)),
       panel.grid.minor = element_blank(),
       panel.grid.major.y = element_line(colour = "#c8d4e8", linewidth = 0.6),
       panel.grid.major.x = element_blank(),
@@ -1839,11 +1955,19 @@ build_chart_plot <- function(data, style) {
       legend.position = style$legend,
       legend.justification = "left",
       legend.box.just = "left",
+      legend.direction = "horizontal",
       legend.box.margin = margin(b = legend_bottom_margin),
+      legend.margin = margin(t = 6),
       legend.title = element_blank(),
-      legend.text = element_text(size = 16),
+      legend.text = element_text(size = 16, family = chart_font, colour = "#000000", lineheight = 0.95),
+      legend.spacing.x = grid::unit(8, "pt"),
+      legend.key.width = grid::unit(18, "pt"),
       plot.background = element_rect(fill = "#f5f8f4", colour = NA),
       panel.background = element_rect(fill = "#f5f8f4", colour = NA)
+    ) +
+    guides(
+      colour = guide_legend(nrow = legend_rows, byrow = TRUE),
+      fill = guide_legend(nrow = legend_rows, byrow = TRUE)
     )
 
   if (isTRUE(style$invert_y_axis)) {
@@ -1868,8 +1992,318 @@ build_chart_plot <- function(data, style) {
 }
 
 build_chart_widget <- function(data, style) {
-  widget <- ggplotly(build_chart_plot(data, style), tooltip = c("x", "y", "colour"))
-  style_plotly_widget(widget, style)
+  if (nrow(data) == 0) {
+    return(empty_plotly_widget("Configure at least one valid series to render the chart."))
+  }
+
+  axis_settings <- pretty_axis_breaks(data, style)
+  series_names <- unique(as.character(data$name))
+  chart_font <- style$font_family %||% APP_CHART_FONTS[[1]]
+  title_text <- trimws(style$title %||% "")
+  subtitle_text <- trimws(style$subtitle %||% "")
+  note_text <- trimws(style$note %||% "")
+  y_axis_label <- trimws(style$y_axis_label %||% "")
+  footer_metrics <- plotly_footer_metrics(series_names, style)
+  note_y <- footer_metrics$note_y
+  bottom_margin <- footer_metrics$bottom_margin
+  top_margin <- if (nzchar(subtitle_text)) 92 else 76
+  right_margin <- if (nzchar(y_axis_label)) 62 else 46
+  bottom_gridline_value <- if (length(axis_settings$breaks) > 0 && all(is.finite(axis_settings$breaks))) {
+    if (isTRUE(style$invert_y_axis)) {
+      max(axis_settings$breaks, na.rm = TRUE)
+    } else {
+      min(axis_settings$breaks, na.rm = TRUE)
+    }
+  } else if (isTRUE(style$invert_y_axis)) {
+    axis_settings$max
+  } else {
+    axis_settings$min
+  }
+
+  plot_range <- range(data$date, na.rm = TRUE)
+  x_break_numeric <- pretty(as.numeric(plot_range), n = max(2, round(style$x_labels %||% 6)))
+  x_breaks <- as.Date(x_break_numeric, origin = "1970-01-01")
+  x_breaks <- x_breaks[x_breaks >= plot_range[1] & x_breaks <= plot_range[2]]
+
+  if (length(x_breaks) < 2) {
+    x_breaks <- unique(as.Date(c(plot_range[1], plot_range[2])))
+  }
+
+  color_map <- setNames(palette_values(data, style$palette), series_names)
+  widget <- plotly::plot_ly()
+
+  for (series_name in series_names) {
+    series_data <- data %>%
+      filter(name == series_name) %>%
+      arrange(date)
+
+    series_mode <- unique(series_data$plotting %||% "line")[1]
+    series_color <- color_map[[series_name]] %||% "#4f7ec9"
+    hover_template <- paste0(
+      htmltools::htmlEscape(series_name),
+      "<br>%{x|%Y-%m-%d}<br>%{y:.4~f}<extra></extra>"
+    )
+
+    if (identical(series_mode, "bar")) {
+      widget <- widget %>%
+        plotly::add_bars(
+          data = series_data,
+          x = ~date,
+          y = ~value,
+          name = series_name,
+          legendgroup = series_name,
+          marker = list(color = series_color),
+          hovertemplate = hover_template
+        )
+    } else if (identical(series_mode, "scatter")) {
+      widget <- widget %>%
+        plotly::add_markers(
+          data = series_data,
+          x = ~date,
+          y = ~value,
+          name = series_name,
+          legendgroup = series_name,
+          marker = list(color = series_color, size = 7),
+          hovertemplate = hover_template
+        )
+    } else {
+      widget <- widget %>%
+        plotly::add_lines(
+          data = series_data,
+          x = ~date,
+          y = ~value,
+          name = series_name,
+          legendgroup = series_name,
+          line = list(color = series_color, width = 2),
+          hovertemplate = hover_template
+        )
+    }
+  }
+
+  shapes <- list()
+  if (!is.na(style$horizontal_1)) {
+    shapes <- c(shapes, list(list(
+      type = "line",
+      xref = "x",
+      yref = "y",
+      x0 = min(data$date, na.rm = TRUE),
+      x1 = max(data$date, na.rm = TRUE),
+      y0 = style$horizontal_1,
+      y1 = style$horizontal_1,
+      line = list(color = "#6b7280", dash = "dash", width = 1)
+    )))
+  }
+  if (!is.na(style$horizontal_2)) {
+    shapes <- c(shapes, list(list(
+      type = "line",
+      xref = "x",
+      yref = "y",
+      x0 = min(data$date, na.rm = TRUE),
+      x1 = max(data$date, na.rm = TRUE),
+      y0 = style$horizontal_2,
+      y1 = style$horizontal_2,
+      line = list(color = "#9ca3af", dash = "dash", width = 1)
+    )))
+  }
+  if (length(style$horizontal_shading) == 2 && all(is.finite(style$horizontal_shading))) {
+    shapes <- c(shapes, list(list(
+      type = "rect",
+      xref = "x",
+      yref = "y",
+      x0 = min(data$date, na.rm = TRUE),
+      x1 = max(data$date, na.rm = TRUE),
+      y0 = min(style$horizontal_shading),
+      y1 = max(style$horizontal_shading),
+      line = list(width = 0),
+      fillcolor = "rgba(214, 228, 247, 0.24)"
+    )))
+  }
+  if (!is.null(style$vertical_1) && length(style$vertical_1) == 1 && !is.na(style$vertical_1)) {
+    shapes <- c(shapes, list(list(
+      type = "line",
+      xref = "x",
+      yref = "paper",
+      x0 = style$vertical_1,
+      x1 = style$vertical_1,
+      y0 = 0,
+      y1 = 1,
+      line = list(color = "#6b7280", dash = "dash", width = 1)
+    )))
+  }
+  if (!is.null(style$vertical_2) && length(style$vertical_2) == 1 && !is.na(style$vertical_2)) {
+    shapes <- c(shapes, list(list(
+      type = "line",
+      xref = "x",
+      yref = "paper",
+      x0 = style$vertical_2,
+      x1 = style$vertical_2,
+      y0 = 0,
+      y1 = 1,
+      line = list(color = "#9ca3af", dash = "dash", width = 1)
+    )))
+  }
+  if (!identical(style$recession_shading, "none")) {
+    recession_rows <- rec_data %>%
+      filter(region == style$recession_shading)
+
+    if (nrow(recession_rows) > 0) {
+      shapes <- c(
+        shapes,
+        lapply(seq_len(nrow(recession_rows)), function(index) {
+          recession_row <- recession_rows[index, ]
+          list(
+            type = "rect",
+            xref = "x",
+            yref = "paper",
+            x0 = recession_row$peak,
+            x1 = recession_row$trough,
+            y0 = 0,
+            y1 = 1,
+            line = list(width = 0),
+            fillcolor = "rgba(17, 24, 39, 0.08)"
+          )
+        })
+      )
+    }
+  }
+  if (is.finite(bottom_gridline_value)) {
+    shapes <- c(shapes, list(list(
+      type = "line",
+      xref = "x",
+      yref = "y",
+      x0 = min(data$date, na.rm = TRUE),
+      x1 = max(data$date, na.rm = TRUE),
+      y0 = bottom_gridline_value,
+      y1 = bottom_gridline_value,
+      line = list(color = "#000000", width = 1)
+    )))
+  }
+
+  annotations <- list()
+  if (nzchar(note_text)) {
+    annotations <- c(annotations, list(
+      list(
+        text = htmltools::htmlEscape(note_text),
+        x = 0,
+        y = note_y,
+        xref = "paper",
+        yref = "paper",
+        xanchor = "left",
+        yanchor = "top",
+        showarrow = FALSE,
+        align = "left",
+        font = list(size = 16, color = "#000000", family = chart_font)
+      )
+    ))
+  }
+  if (nzchar(y_axis_label)) {
+    annotations <- c(annotations, list(
+      list(
+        text = htmltools::htmlEscape(y_axis_label),
+        x = 1.002,
+        y = 0.985,
+        xref = "paper",
+        yref = "paper",
+        xanchor = "right",
+        yanchor = "bottom",
+        showarrow = FALSE,
+        align = "right",
+        font = list(size = 16, color = "#000000", family = chart_font)
+      )
+    ))
+  }
+
+  title_markup <- if (nzchar(title_text)) {
+    paste0(
+      "<span style='font-family:",
+      htmltools::htmlEscape(chart_font),
+      ";font-size:22px;'><b>",
+      htmltools::htmlEscape(title_text),
+      "</b></span>"
+    )
+  } else {
+    ""
+  }
+  title_block <- if (nzchar(title_text) || nzchar(subtitle_text)) {
+    list(
+      text = if (nzchar(subtitle_text)) {
+        paste0(
+          title_markup,
+          "<br><span style='display:inline-block;margin-top:4px;font-size:16px;color:#000000;font-family:",
+          htmltools::htmlEscape(chart_font),
+          ";'>",
+          htmltools::htmlEscape(subtitle_text),
+          "</span>"
+        )
+      } else {
+        title_markup
+      },
+      x = 0.04,
+      xanchor = "left"
+    )
+  } else {
+    list(text = "", x = 0, xanchor = "left")
+  }
+
+  y_range <- if (isTRUE(style$invert_y_axis)) {
+    c(axis_settings$max, axis_settings$min)
+  } else {
+    c(axis_settings$min, axis_settings$max)
+  }
+
+  widget %>%
+    plotly::layout(
+      title = title_block,
+      barmode = "group",
+      paper_bgcolor = "#f5f8f4",
+      plot_bgcolor = "#f5f8f4",
+      font = list(family = chart_font, color = "#000000"),
+      margin = list(t = top_margin, r = right_margin, b = bottom_margin, l = 28),
+      annotations = annotations,
+      shapes = shapes,
+      xaxis = list(
+        title = list(text = ""),
+        type = "date",
+        tickmode = "array",
+        tickvals = x_breaks,
+        ticktext = format(x_breaks, style$date_format),
+        tickfont = list(size = 16, color = "#000000", family = chart_font),
+        tickprefix = "\u2002",
+        showline = TRUE,
+        linecolor = "#000000",
+        linewidth = 1,
+        ticks = "outside",
+        ticklen = 6,
+        tickwidth = 1,
+        tickcolor = "#000000",
+        showgrid = FALSE
+      ),
+      yaxis = list(
+        title = list(text = ""),
+        side = "right",
+        tickmode = "array",
+        tickvals = axis_settings$breaks,
+        range = y_range,
+        tickprefix = "\u2002",
+        tickfont = list(size = 16, color = "#000000", family = chart_font),
+        ticklabelstandoff = 0,
+        ticklen = 10,
+        tickwidth = 1,
+        tickcolor = "rgba(0,0,0,0)",
+        gridcolor = "#c8d4e8",
+        gridwidth = 1,
+        zeroline = FALSE
+      ),
+      showlegend = !identical(style$legend, "none"),
+      legend = if (identical(style$legend, "none")) NULL else list(
+        orientation = if (identical(style$legend, "bottom")) "h" else "v",
+        x = 0,
+        xanchor = "left",
+        y = if (identical(style$legend, "bottom")) -0.12 else 1,
+        yanchor = if (identical(style$legend, "bottom")) "top" else "top",
+        font = list(size = 16, family = chart_font, color = "#000000")
+      )
+    )
 }
 
 style_plotly_widget <- function(widget, style) {
@@ -1878,8 +2312,17 @@ style_plotly_widget <- function(widget, style) {
   note_text <- trimws(style$note %||% "")
   y_axis_label <- trimws(style$y_axis_label %||% "")
   chart_font <- style$font_family %||% APP_CHART_FONTS[[1]]
-  note_y <- if (identical(style$legend, "bottom")) -0.24 else -0.07
-  bottom_margin <- if (identical(style$legend, "bottom")) 108 else 42
+  legend_labels <- vapply(
+    Filter(function(trace) {
+      trace_name <- trimws(as.character(trace$name %||% ""))
+      nzchar(trace_name) && !identical(trace$showlegend %||% TRUE, FALSE)
+    }, widget$x$data %||% list()),
+    function(trace) as.character(trace$name %||% ""),
+    character(1)
+  )
+  footer_metrics <- plotly_footer_metrics(legend_labels, style)
+  note_y <- footer_metrics$note_y
+  bottom_margin <- footer_metrics$bottom_margin
   layout_args <- list()
   annotations <- list()
 
@@ -1903,11 +2346,11 @@ style_plotly_widget <- function(widget, style) {
 
   if (nzchar(y_axis_label)) {
     existing_margin <- layout_args$margin %||% list()
-    layout_args$margin <- modifyList(list(t = 92, r = 82), existing_margin)
+    layout_args$margin <- modifyList(list(t = 78, r = 58), existing_margin)
     annotations <- c(annotations, list(
       list(
         text = y_axis_label,
-        x = 1.02,
+        x = 1.002,
         y = 0.985,
         xref = "paper",
         yref = "paper",
@@ -1928,7 +2371,7 @@ style_plotly_widget <- function(widget, style) {
     paste0(
       "<span style='font-family:",
       htmltools::htmlEscape(chart_font),
-      ";'><b>",
+      ";font-size:22px;'><b>",
       htmltools::htmlEscape(title_text),
       "</b></span>"
     )
@@ -1941,7 +2384,7 @@ style_plotly_widget <- function(widget, style) {
       text = if (nzchar(subtitle_text)) {
         paste0(
           title_markup,
-          "<br><span style='display:inline-block;margin-top:8px;font-size:16px;color:#000000;font-family:",
+          "<br><span style='display:inline-block;margin-top:4px;font-size:16px;color:#000000;font-family:",
           htmltools::htmlEscape(chart_font),
           ";'>",
           htmltools::htmlEscape(subtitle_text),
@@ -1960,6 +2403,7 @@ style_plotly_widget <- function(widget, style) {
   layout_args$xaxis <- modifyList(
     layout_args$xaxis %||% list(),
     list(
+      title = list(text = ""),
       tickfont = list(size = 16, color = "#000000", family = chart_font),
       tickprefix = "\u2002",
       showline = TRUE,
@@ -1974,10 +2418,11 @@ style_plotly_widget <- function(widget, style) {
   layout_args$yaxis <- modifyList(
     layout_args$yaxis %||% list(),
     list(
+      title = list(text = ""),
       side = "right",
-      tickprefix = "\u2002\u2002\u2002",
+      tickprefix = "\u2002",
       tickfont = list(size = 16, color = "#000000", family = chart_font),
-      ticklabelstandoff = 34,
+      ticklabelstandoff = 0,
       ticklen = 10,
       tickwidth = 1,
       tickcolor = "rgba(0,0,0,0)",
@@ -2172,6 +2617,7 @@ restore_chart_state <- function(session, chart_state) {
   updateTextInput(session, "style_subtitle", value = chart_state$style$subtitle)
   updateTextInput(session, "style_y_axis_label", value = chart_state$style$y_axis_label)
   updateTextInput(session, "style_note", value = chart_state$style$note)
+  updateRadioGroupButtons(session, "style_renderer", selected = chart_state$style$renderer)
   updateSelectInput(session, "style_font_family", selected = chart_state$style$font_family)
   updateRadioGroupButtons(session, "style_legend", selected = chart_state$style$legend)
   updateSelectInput(session, "style_palette", selected = chart_state$style$palette)

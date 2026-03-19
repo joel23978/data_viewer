@@ -7,6 +7,19 @@ library(here)
 library(dplyr)
 library(tidyr)
 library(ggplot2)
+
+if (requireNamespace("reticulate", quietly = TRUE)) {
+  python_path <- Sys.which("python3")
+  if (nzchar(python_path)) {
+    Sys.setenv(RETICULATE_PYTHON = python_path)
+    try(reticulate::use_python(python_path, required = FALSE), silent = TRUE)
+  }
+}
+
+if (requireNamespace("ragg", quietly = TRUE)) {
+  options(shiny.useragg = TRUE)
+}
+
 library(plotly)
 library(lubridate)
 library(stringr)

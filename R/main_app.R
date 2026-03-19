@@ -139,10 +139,8 @@ build_library_tab_ui <- function() {
           DT::dataTableOutput("library_table"),
           div(
             class = "library-actions",
-            actionButton("load_chart", "Load into builder"),
             actionButton("update_chart", "Update selected"),
-            actionButton("delete_chart", "Delete saved chart"),
-            downloadButton("export_saved_chart", "Export selected chart")
+            actionButton("delete_chart", "Delete saved chart")
           )
         ),
         chart_card(
@@ -165,8 +163,23 @@ build_library_tab_ui <- function() {
         width = 6,
         chart_card(
           "Selected Preview",
+          header_actions = div(
+            class = "card-renderer-toggle",
+            radioGroupButtons(
+              "library_renderer_toggle",
+              NULL,
+              choices = c("Plotly" = "plotly", "Static" = "static"),
+              selected = "plotly",
+              justified = FALSE,
+              checkIcon = list(yes = icon("check"))
+            )
+          ),
           uiOutput("library_selected_meta"),
-          plotlyOutput("library_plot", height = "500px")
+          uiOutput("library_plot_container"),
+          div(
+            class = "library-actions",
+            actionButton("load_chart", "Load into builder")
+          )
         ),
         chart_card(
           "Presentation Details",
@@ -390,15 +403,30 @@ build_main_ui <- function() {
               width = 6,
               chart_card(
                 "Primary Chart",
+                header_actions = div(
+                  class = "card-renderer-toggle",
+                  radioGroupButtons(
+                    "style_renderer",
+                    NULL,
+                    choices = c("Plotly" = "plotly", "Static" = "static"),
+                    selected = "plotly",
+                    justified = FALSE,
+                    checkIcon = list(yes = icon("check"))
+                  )
+                ),
                 uiOutput("builder_summary"),
                 uiOutput("builder_messages"),
-                plotlyOutput("builder_plot", height = "500px"),
+                uiOutput("builder_plot_container"),
                 div(
                   class = "export-row",
                   downloadButton("exportPNG", "Download PNG"),
-                  downloadButton("exportHTML", "Download HTML"),
+                  downloadButton("exportPPTX", "Download PPTX"),
                   downloadButton("exportSVG", "Download SVG"),
                   downloadButton("exportData", "Download CSV")
+                ),
+                tags$p(
+                  class = "muted-copy export-note",
+                  "Chart exports use the static chart renderer with dimensions specified in the panel below."
                 )
               ),
               conditionalPanel(
@@ -491,12 +519,12 @@ build_main_ui <- function() {
                       class = "paired-range-input__row",
                       tags$div(
                         class = "paired-range-input__field",
-                        numericInput("export_width", label = NULL, value = 7, min = 4, step = 0.5)
+                        numericInput("export_width", label = NULL, value = 8, min = 4, step = 0.5)
                       ),
                       tags$div(class = "paired-range-input__separator", "x"),
                       tags$div(
                         class = "paired-range-input__field",
-                        numericInput("export_height", label = NULL, value = 5, min = 3, step = 0.5)
+                        numericInput("export_height", label = NULL, value = 7, min = 3, step = 0.5)
                       )
                     )
                   )
@@ -1122,6 +1150,7 @@ build_main_server <- function(input, output, session) {
         input$style_subtitle,
         input$style_y_axis_label,
         input$style_note,
+        input$style_renderer,
         input$style_font_family,
         input$style_legend,
         input$style_palette,
@@ -1248,6 +1277,10 @@ build_main_server <- function(input, output, session) {
     build_chart_plot(chart_data(), builder_state()$style)
   })
 
+  current_renderer <- reactive({
+    builder_state()$style$renderer %||% "plotly"
+  })
+
   current_widget <- reactive({
     build_chart_widget(chart_data(), builder_state()$style)
   })
@@ -1255,7 +1288,7 @@ build_main_server <- function(input, output, session) {
   export_widget <- reactive({
     style <- builder_state()$style
     width_px <- round((style$export_width %||% 8) * 160)
-    height_px <- round((style$export_height %||% 5) * 160)
+    height_px <- round((style$export_height %||% 7) * 160)
 
     current_widget() %>%
       plotly::layout(
@@ -1265,9 +1298,227 @@ build_main_server <- function(input, output, session) {
       ) %>%
       plotly::config(
         responsive = FALSE,
-        displayModeBar = TRUE
+        displayModeBar = FALSE
       )
   })
+
+  empty_static_plot <- function(message) {
+    ggplot() +
+      theme_void() +
+      annotate("text", x = 0.5, y = 0.5, label = message, size = 6, colour = "#64748b") +
+      coord_cartesian(xlim = c(0, 1), ylim = c(0, 1), expand = FALSE)
+  }
+
+  chart_export_python_path <- function() {
+    configured_path <- trimws(Sys.getenv("RETICULATE_PYTHON", unset = ""))
+    discovered_path <- trimws(Sys.which("python3"))
+    python_path <- c(configured_path, discovered_path)
+    python_path <- python_path[nzchar(python_path)][1] %||% ""
+
+    if (!nzchar(python_path) || !file.exists(python_path)) {
+      return("")
+    }
+
+    python_path
+  }
+
+  save_plotly_image_with_python <- function(widget, file, width_px, height_px, format = c("png", "svg")) {
+    format <- match.arg(format)
+    python_path <- chart_export_python_path()
+
+    if (!nzchar(python_path)) {
+      stop("Python is not available for Plotly image export.", call. = FALSE)
+    }
+
+    widget_json <- plotly::plotly_json(widget, jsonedit = FALSE, pretty = FALSE)
+    json_file <- tempfile(fileext = ".json")
+    script_file <- tempfile(fileext = ".py")
+
+    writeLines(as.character(widget_json), con = json_file, useBytes = TRUE)
+    writeLines(
+      c(
+        "import pathlib",
+        "import sys",
+        "import plotly.io as pio",
+        "",
+        "json_path = pathlib.Path(sys.argv[1])",
+        "output_path = pathlib.Path(sys.argv[2])",
+        "width = int(sys.argv[3])",
+        "height = int(sys.argv[4])",
+        "fmt = sys.argv[5]",
+        "",
+        "figure = pio.from_json(json_path.read_text(encoding='utf-8'))",
+        "figure.write_image(output_path, format=fmt, width=width, height=height, scale=2 if fmt == 'png' else 1)"
+      ),
+      con = script_file
+    )
+
+    command_output <- system2(
+      python_path,
+      c(script_file, json_file, file, as.integer(width_px), as.integer(height_px), format),
+      stdout = TRUE,
+      stderr = TRUE
+    )
+    command_status <- as.integer(attr(command_output, "status") %||% 0L)
+
+    if (!isTRUE(command_status == 0L)) {
+      stop(paste(command_output, collapse = "\n"), call. = FALSE)
+    }
+  }
+
+  save_chart_pptx_with_python <- function(image_file, pptx_file, slide_title = NULL) {
+    python_path <- chart_export_python_path()
+
+    if (!nzchar(python_path)) {
+      stop("Python 3 is not available for PPTX export.", call. = FALSE)
+    }
+
+    script_file <- tempfile(fileext = ".py")
+    script_lines <- c(
+      "import sys",
+      "from pptx import Presentation",
+      "from pptx.util import Inches",
+      "from PIL import Image",
+      "",
+      "image_file, pptx_file, slide_title = sys.argv[1:4]",
+      "prs = Presentation()",
+      "prs.slide_width = Inches(10)",
+      "prs.slide_height = Inches(7.5)",
+      "slide = prs.slides.add_slide(prs.slide_layouts[6])",
+      "",
+      "bg_fill = slide.background.fill",
+      "bg_fill.solid()",
+      "bg_fill.fore_color.rgb = __import__('pptx.dml.color', fromlist=['RGBColor']).RGBColor(0xF5, 0xF8, 0xF4)",
+      "",
+      "content_left = Inches(0.3)",
+      "content_top = Inches(0.3)",
+      "content_width = prs.slide_width - Inches(0.6)",
+      "content_height = prs.slide_height - Inches(0.6)",
+      "",
+      "with Image.open(image_file) as img:",
+      "    img_width, img_height = img.size",
+      "",
+      "avail_width = content_width",
+      "avail_height = content_height",
+      "scale = min(avail_width / img_width, avail_height / img_height)",
+      "pic_width = int(img_width * scale)",
+      "pic_height = int(img_height * scale)",
+      "pic_left = int(content_left + (content_width - pic_width) / 2)",
+      "pic_top = int(content_top + (content_height - pic_height) / 2)",
+      "slide.shapes.add_picture(image_file, pic_left, pic_top, width=pic_width, height=pic_height)",
+      "",
+      "prs.save(pptx_file)"
+    )
+    writeLines(script_lines, script_file)
+
+    command_output <- tryCatch(
+      system2(
+        python_path,
+        c(script_file, image_file, pptx_file, slide_title %||% ""),
+        stdout = TRUE,
+        stderr = TRUE
+      ),
+      error = function(error) paste(error$message)
+    )
+    command_status <- as.integer(attr(command_output, "status") %||% 0L)
+
+    if (!isTRUE(command_status == 0L)) {
+      stop(paste(command_output, collapse = "\n"), call. = FALSE)
+    }
+  }
+
+  save_static_chart_html <- function(file, plot_object, style) {
+    temp_png <- tempfile(fileext = ".png")
+    ggplot2::ggsave(
+      temp_png,
+      plot = plot_object,
+      width = style$export_width,
+      height = style$export_height,
+      dpi = 300
+    )
+
+    image_uri <- base64enc::dataURI(file = temp_png, mime = "image/png")
+    chart_title <- trimws(style$title %||% "Chart")
+    chart_doc <- htmltools::tags$html(
+      htmltools::tags<head(
+        htmltools::tags$meta(charset = "utf-8"),
+        htmltools::tags$title(chart_title),
+        htmltools::tags$style(htmltools::HTML(
+          "
+          body { margin: 0; font-family: 'Plus Jakarta Sans', sans-serif; background: #edf2ec; }
+          .export-shell { max-width: 960px; margin: 0 auto; padding: 24px; }
+          .export-frame { background: #f5f8f4; border: 1px solid #d7e2d6; border-radius: 24px; padding: 24px; }
+          .export-frame img { width: 100%; height: auto; display: block; }
+          "
+        ))
+      ),
+      htmltools::tags$body(
+        htmltools::tags$div(
+          class = "export-shell",
+          htmltools::tags$div(
+            class = "export-frame",
+            htmltools::tags$img(src = image_uri, alt = chart_title)
+          )
+        )
+      )
+    )
+
+    htmltools::save_html(chart_doc, file = file)
+  }
+
+  save_plotly_chart_html <- function(file, widget, style) {
+    width_px <- round((style$export_width %||% 8) * 96)
+    height_px <- round((style$export_height %||% 7) * 96)
+    chart_title <- trimws(style$title %||% "Chart")
+
+    export_widget_tag <- widget %>%
+      plotly::layout(
+        autosize = FALSE,
+        width = width_px,
+        height = height_px
+      ) %>%
+      plotly::config(
+        responsive = FALSE,
+        displayModeBar = FALSE
+      ) %>%
+      htmltools::as.tags()
+
+    chart_doc <- htmltools::tags$html(
+      htmltools::tags$head(
+        htmltools::tags$meta(charset = "utf-8"),
+        htmltools::tags$title(chart_title),
+        htmltools::tags$link(rel = "preconnect", href = "https://fonts.googleapis.com"),
+        htmltools::tags$link(rel = "preconnect", href = "https://fonts.gstatic.com", crossorigin = ""),
+        htmltools::tags$link(
+          rel = "stylesheet",
+          href = "https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap"
+        ),
+        htmltools::tags$style(htmltools::HTML(
+          paste0(
+            "body { margin: 0; font-family: 'Plus Jakarta Sans', sans-serif; background: #edf2ec; color: #111827; }",
+            ".export-shell { max-width: ", width_px + 64L, "px; margin: 0 auto; padding: 24px; }",
+            ".export-frame { background: #f5f8f4; border: 1px solid #d7e2d6; border-radius: 24px; padding: 24px; }",
+            ".export-chart { width: ", width_px, "px; max-width: 100%; margin: 0 auto; }",
+            ".export-chart .plotly.html-widget { margin: 0 auto; }"
+          )
+        ))
+      ),
+      htmltools::tags$body(
+        htmltools::tags$div(
+          class = "export-shell",
+          htmltools::tags$div(
+            class = "export-frame",
+            htmltools::tags$div(
+              class = "export-chart",
+              export_widget_tag
+            )
+          )
+        )
+      )
+    )
+
+    htmltools::save_html(htmltools::browsable(chart_doc), file = file)
+  }
 
   chart_library_store <- reactiveVal(NULL)
   presentation_library_store <- reactiveVal(NULL)
@@ -1753,8 +2004,36 @@ build_main_server <- function(input, output, session) {
     )
   })
 
-  output$builder_plot <- renderPlotly({
+  builder_plot_height <- reactive({
+    plotly_widget_height(chart_data(), builder_state()$style, base_height = 500)
+  })
+
+  output$builder_plot_container <- renderUI({
+    if (identical(current_renderer(), "plotly")) {
+      return(plotlyOutput("builder_plot_plotly", height = paste0(builder_plot_height(), "px")))
+    }
+
+    plotOutput("builder_plot_static", height = paste0(builder_plot_height(), "px"))
+  })
+
+  output$builder_plot_plotly <- renderPlotly({
     main_panel_widget()
+  })
+
+  output$builder_plot_static <- renderPlot({
+    if (identical(input$side_panel_mode %||% "transform", "analysis")) {
+      return(selected_analysis_plot())
+    }
+
+    if (nrow(chart_data()) == 0) {
+      return(empty_static_plot("Configure at least one valid series to render the chart."))
+    }
+
+    current_plot()
+  })
+
+  library_renderer <- reactive({
+    input$library_renderer_toggle %||% "plotly"
   })
 
   output$builder_table <- DT::renderDataTable({
@@ -1770,23 +2049,54 @@ build_main_server <- function(input, output, session) {
     },
     content = function(file) {
       req(nrow(chart_data()) > 0)
-      ggplot2::ggsave(
-        file,
-        plot = current_plot(),
-        width = builder_state()$style$export_width,
-        height = builder_state()$style$export_height,
-        dpi = 300
-      )
+      style <- builder_state()$style
+
+      if (identical(current_renderer(), "plotly")) {
+        width_px <- round((style$export_width %||% 8) * 160)
+        height_px <- round((style$export_height %||% 7) * 160)
+        tryCatch(
+          save_plotly_image_with_python(export_widget(), file, width_px, height_px, format = "png"),
+          error = function(error) {
+            ggplot2::ggsave(
+              file,
+              plot = current_plot(),
+              width = style$export_width,
+              height = style$export_height,
+              dpi = 300
+            )
+          }
+        )
+      } else {
+        ggplot2::ggsave(
+          file,
+          plot = current_plot(),
+          width = style$export_width,
+          height = style$export_height,
+          dpi = 300
+        )
+      }
     }
   )
 
-  output$exportHTML <- downloadHandler(
+  output$exportPPTX <- downloadHandler(
     filename = function() {
-      paste0(str_replace_all(builder_state()$style$title %||% "chart", "[^A-Za-z0-9]+", "_"), ".html")
+      paste0(str_replace_all(builder_state()$style$title %||% "chart", "[^A-Za-z0-9]+", "_"), ".pptx")
     },
+    contentType = "application/vnd.openxmlformats-officedocument.presentationml.presentation",
     content = function(file) {
       req(nrow(chart_data()) > 0)
-      saveWidget(export_widget(), file, selfcontained = TRUE)
+      style <- builder_state()$style
+      temp_png <- tempfile(fileext = ".png")
+
+      ggplot2::ggsave(
+        temp_png,
+        plot = current_plot(),
+        width = style$export_width,
+        height = style$export_height,
+        dpi = 300
+      )
+
+      save_chart_pptx_with_python(temp_png, file, style$title %||% "Chart")
     }
   )
 
@@ -1796,15 +2106,36 @@ build_main_server <- function(input, output, session) {
     },
     content = function(file) {
       req(nrow(chart_data()) > 0)
-      grDevices::svg(
-        filename = file,
-        width = builder_state()$style$export_width,
-        height = builder_state()$style$export_height,
-        onefile = TRUE,
-        bg = "white"
-      )
-      on.exit(grDevices::dev.off(), add = TRUE)
-      print(current_plot())
+      style <- builder_state()$style
+
+      if (identical(current_renderer(), "plotly")) {
+        width_px <- round((style$export_width %||% 8) * 160)
+        height_px <- round((style$export_height %||% 7) * 160)
+        tryCatch(
+          save_plotly_image_with_python(export_widget(), file, width_px, height_px, format = "svg"),
+          error = function(error) {
+            grDevices::svg(
+              filename = file,
+              width = style$export_width,
+              height = style$export_height,
+              onefile = TRUE,
+              bg = "white"
+            )
+            on.exit(grDevices::dev.off(), add = TRUE)
+            print(current_plot())
+          }
+        )
+      } else {
+        grDevices::svg(
+          filename = file,
+          width = style$export_width,
+          height = style$export_height,
+          onefile = TRUE,
+          bg = "white"
+        )
+        on.exit(grDevices::dev.off(), add = TRUE)
+        print(current_plot())
+      }
     }
   )
 
@@ -2504,6 +2835,40 @@ build_main_server <- function(input, output, session) {
     build_saved_chart_widget(chart_record)
   })
 
+  library_plot_height <- reactive({
+    chart_record <- selected_preview_chart_record()
+    if (is.null(chart_record) || nrow(chart_record) == 0) {
+      return(500L)
+    }
+
+    chart_kind <- chart_record$chart_kind[[1]] %||% "builder"
+    chart_state <- chart_record$chart_state[[1]] %||% list(style = default_style_settings())
+    chart_style <- chart_state$style %||% default_style_settings()
+
+    if (!identical(chart_kind, "builder")) {
+      return(500L)
+    }
+
+    plotly_widget_height(chart_record$data_snapshot[[1]], chart_style, base_height = 500)
+  })
+
+  output$library_plot_container <- renderUI({
+    if (identical(library_renderer(), "plotly")) {
+      return(plotlyOutput("library_plot", height = paste0(library_plot_height(), "px")))
+    }
+
+    plotOutput("library_plot_static", height = paste0(library_plot_height(), "px"))
+  })
+
+  output$library_plot_static <- renderPlot({
+    chart_record <- selected_preview_chart_record()
+    if (is.null(chart_record)) {
+      return(empty_static_plot("Select a saved chart to preview it."))
+    }
+
+    build_saved_chart_plot(chart_record)
+  })
+
   observeEvent(input$load_chart, {
     ensure_chart_library_loaded()
     selected_records <- selected_chart_records()
@@ -2855,6 +3220,145 @@ build_main_server <- function(input, output, session) {
       pair$primary,
       pair$secondary,
       max(2, as.integer(input$analysis_corr_window))
+    )
+  })
+
+  selected_analysis_plot <- reactive({
+    if (!identical(input$side_panel_mode %||% "transform", "analysis")) {
+      return(empty_static_plot("Choose an analysis to display on the main panel."))
+    }
+
+    safe_analysis_plot <- function(expr, failure_message) {
+      tryCatch(
+        expr,
+        error = function(error) {
+          detail <- trimws(conditionMessage(error) %||% "")
+          if (nzchar(detail)) {
+            empty_static_plot(paste(failure_message, detail))
+          } else {
+            empty_static_plot(failure_message)
+          }
+        }
+      )
+    }
+
+    active_tab <- input$analysis_tabs %||% "Correlations"
+
+    if (identical(active_tab, "Correlations")) {
+      if (length(available_series()) < 2) {
+        return(empty_static_plot("Add at least two chart series to run correlation analysis."))
+      }
+
+      corr_pair <- analysis_corr_pair()
+      result <- tryCatch(correlation_result(), error = function(error) NULL)
+      if (is.null(result) || nrow(result) == 0) {
+        return(empty_static_plot("Unable to compute the requested rolling correlation."))
+      }
+
+      return(safe_analysis_plot(
+        build_correlation_plot(result, corr_pair$primary, corr_pair$secondary, input$analysis_corr_window, builder_state()$style),
+        "Unable to render the rolling correlation chart."
+      ))
+    }
+
+    if (identical(active_tab, "Regression")) {
+      if (length(available_series()) < 2) {
+        return(empty_static_plot("Add at least two chart series to run regression analysis."))
+      }
+
+      reg_pair <- analysis_reg_pair()
+      result <- tryCatch(regression_result(), error = function(error) NULL)
+      if (is.null(result)) {
+        return(empty_static_plot("Unable to estimate the requested regression."))
+      }
+
+      return(safe_analysis_plot(
+        build_regression_plot(result, reg_pair$secondary, reg_pair$primary, builder_state()$style),
+        "Unable to render the regression chart."
+      ))
+    }
+
+    if (identical(active_tab, "Seasonal Adjust")) {
+      if (length(available_series()) < 1) {
+        return(empty_static_plot("Add at least one chart series to run seasonal adjustment."))
+      }
+
+      series_name <- selected_seasonal_series()
+      result <- tryCatch(seasonal_adjustment_result(), error = function(error) NULL)
+      if (is.null(result)) {
+        return(empty_static_plot("Unable to run X-13 seasonal adjustment for the selected series."))
+      }
+
+      return(safe_analysis_plot(
+        build_seasonal_adjustment_plot(
+          result,
+          series_name,
+          input$analysis_seasonal_view %||% "both",
+          builder_state()$style
+        ),
+        "Unable to render the seasonal-adjustment chart."
+      ))
+    }
+
+    if (identical(active_tab, "HP Filter")) {
+      if (length(available_series()) < 1) {
+        return(empty_static_plot("Add at least one chart series to run an HP filter."))
+      }
+
+      series_name <- selected_hp_series()
+      result <- tryCatch(hp_filter_result(), error = function(error) NULL)
+      if (is.null(result)) {
+        return(empty_static_plot("Unable to estimate the requested HP filter."))
+      }
+
+      return(safe_analysis_plot(
+        build_hp_filter_plot(
+          result,
+          series_name,
+          input$analysis_hp_side %||% "two_sided",
+          input$analysis_hp_view %||% "overlay",
+          builder_state()$style
+        ),
+        "Unable to render the HP-filter chart."
+      ))
+    }
+
+    if (identical(active_tab, "Kalman Filter")) {
+      if (length(available_series()) < 1) {
+        return(empty_static_plot("Add at least one chart series to run a Kalman filter."))
+      }
+
+      series_name <- selected_kalman_series()
+      result <- tryCatch(kalman_filter_result(), error = function(error) NULL)
+      if (is.null(result)) {
+        return(empty_static_plot("Unable to estimate the requested Kalman filter."))
+      }
+
+      return(safe_analysis_plot(
+        build_kalman_filter_plot(
+          result,
+          series_name,
+          input$analysis_kalman_side %||% "two_sided",
+          input$analysis_kalman_view %||% "overlay",
+          builder_state()$style
+        ),
+        "Unable to render the Kalman-filter chart."
+      ))
+    }
+
+    if (length(available_series()) < 1) {
+      return(empty_static_plot("Add at least one chart series to run forecasting."))
+    }
+
+    series_name <- selected_forecast_series()
+    result <- tryCatch(forecast_result(), error = function(error) NULL)
+    if (is.null(result)) {
+      return(empty_static_plot("Unable to estimate the requested forecast model."))
+    }
+
+    safe_analysis_plot(
+      build_forecast_plot(result, series_name, builder_state()$style),
+      "Unable to render the forecast chart."
     )
   })
 
