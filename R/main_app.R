@@ -121,7 +121,7 @@ build_search_tab_ui <- function() {
           uiOutput("search_selected_meta"),
           div(
             class = "search-preview-plot",
-            plotOutput("search_preview_plot", height = "236px")
+            plotOutput("search_preview_plot", height = "256px")
           ),
           div(
             class = "search-segmented-control search-segmented-control--target",
@@ -1307,7 +1307,7 @@ init_search_builder_handlers <- function(
         plot.subtitle = element_blank(),
         plot.caption = element_blank(),
         plot.tag = element_blank(),
-        plot.margin = margin(t = -10, r = 0, b = -6, l = 0),
+        plot.margin = margin(t = -10, r = 4, b = 12, l = 0),
         axis.text.y.right = element_text(margin = margin(l = 10))
       )
   })
