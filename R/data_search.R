@@ -666,11 +666,7 @@ build_abs_search_index <- function() {
 }
 
 search_remote_provider_sources <- function(source_filter = "all") {
-  all_sources <- vapply(
-    Filter(function(entry) !is.null(entry$search_remote %||% NULL), provider_registry_entries()),
-    function(entry) entry$source %||% "",
-    character(1)
-  )
+  all_sources <- remote_search_source_values()
   selected_source <- source_filter %||% "all"
 
   if (identical(selected_source, "all")) {

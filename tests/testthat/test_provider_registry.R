@@ -34,6 +34,23 @@ test_that("provider registry resolves all supported provider seams", {
   expect_true(is.function(provider_registry_entry("abs")$search_index_builder))
 })
 
+test_that("source catalog drives builder sources and search filters", {
+  catalog <- source_catalog()
+
+  expect_true(all(c("fred", "dbnomics", "rba", "abs", "recent", "analysis_result") %in% catalog$id))
+  expect_equal(default_builder_source_value(), "abs")
+  expect_equal(builder_source_choices()[["ABS"]], "abs")
+  expect_equal(builder_source_choices()[["Analysis result"]], "analysis_result")
+  expect_equal(search_source_filter_choices()[["Recent"]], "Recent")
+  expect_equal(search_source_filter_choices()[["FRED"]], "FRED")
+  expect_equal(search_source_filter_choices()[["RBA"]], "RBA")
+  expect_equal(search_source_filter_choices()[["ABS"]], "ABS")
+  expect_false("DBnomics" %in% names(search_source_filter_choices()))
+  expect_true(search_filter_includes("all", local_search_source_values()))
+  expect_true(search_filter_includes("ABS", local_search_source_values()))
+  expect_false(search_filter_includes("ABS", remote_search_source_values()))
+})
+
 test_that("RBA registry controls and fetch dispatch round-trip cleanly", {
   rba_row <- rba_browse_data %>%
     distinct(table_no, description, series_id, frequency) %>%

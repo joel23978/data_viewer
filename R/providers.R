@@ -103,6 +103,132 @@ provider_registry_entries <- function() {
   Filter(Negate(is.null), provider_registry())
 }
 
+source_catalog <- function() {
+  tibble::tribble(
+    ~id, ~label, ~provider_id, ~builder_value, ~search_value, ~search_kind, ~builder_enabled, ~search_enabled, ~builder_default,
+    "recent", "Recent", NA_character_, NA_character_, "Recent", "recent", FALSE, TRUE, FALSE,
+    "fred", "FRED", "fred", "FRED", "FRED", "remote", TRUE, TRUE, FALSE,
+    "dbnomics", "DBnomics", "dbnomics", "dbnomics", "DBnomics", "remote", TRUE, FALSE, FALSE,
+    "rba", "RBA", "rba", "rba", "RBA", "local", TRUE, TRUE, FALSE,
+    "abs", "ABS", "abs", "abs", "ABS", "local", TRUE, TRUE, TRUE,
+    "analysis_result", "Analysis result", NA_character_, "analysis_result", NA_character_, "none", TRUE, FALSE, FALSE
+  )
+}
+
+builder_source_choices <- function() {
+  catalog <- source_catalog() %>%
+    filter(builder_enabled)
+
+  stats::setNames(catalog$builder_value, catalog$label)
+}
+
+default_builder_source_value <- function() {
+  catalog <- source_catalog() %>%
+    filter(builder_enabled, builder_default)
+
+  catalog$builder_value[[1]] %||% builder_source_choices()[[1]]
+}
+
+search_source_filter_choices <- function() {
+  catalog <- source_catalog() %>%
+    filter(search_enabled)
+
+  c("All" = "all", stats::setNames(catalog$search_value, catalog$label))
+}
+
+source_catalog_search_values <- function(search_kind = NULL) {
+  catalog <- source_catalog() %>%
+    filter(search_enabled)
+
+  if (!is.null(search_kind)) {
+    catalog <- catalog[catalog$search_kind %in% search_kind, , drop = FALSE]
+  }
+
+  catalog$search_value
+}
+
+local_search_source_values <- function() {
+  source_catalog_search_values(c("recent", "local"))
+}
+
+remote_search_source_values <- function() {
+  source_catalog_search_values("remote")
+}
+
+search_filter_includes <- function(source_filter, search_values) {
+  selected_filter <- source_filter %||% "all"
+  identical(selected_filter, "all") || selected_filter %in% (search_values %||% character())
+}
+
+search_activity_target <- function(source_filter = "all", query_text = "") {
+  selected_filter <- source_filter %||% "all"
+  cleaned_query <- trimws(query_text %||% "")
+
+  if (identical(selected_filter, "all")) {
+    if (nzchar(cleaned_query)) {
+      return("recent series, local metadata, and live search")
+    }
+
+    return("recent series and local metadata")
+  }
+
+  catalog_entry <- source_catalog_entry(selected_filter)
+  if (is.null(catalog_entry) || nrow(catalog_entry) == 0) {
+    return("search sources")
+  }
+
+  search_kind <- catalog_entry$search_kind[[1]] %||% "none"
+  label <- catalog_entry$label[[1]] %||% "search source"
+
+  if (identical(search_kind, "recent")) {
+    return("recent saved series")
+  }
+
+  if (identical(search_kind, "local")) {
+    return(paste("local", label, "metadata"))
+  }
+
+  if (identical(search_kind, "remote")) {
+    if (identical(label, "FRED")) {
+      return("FRED")
+    }
+
+    return(paste("live", label))
+  }
+
+  "search sources"
+}
+
+source_catalog_entry <- function(source_value) {
+  source_text <- trimws(as.character(source_value %||% ""))
+
+  if (!nzchar(source_text)) {
+    return(NULL)
+  }
+
+  catalog <- source_catalog()
+  normalized_text <- tolower(source_text)
+  matches <- catalog %>%
+    filter(
+      tolower(id) == normalized_text |
+        tolower(coalesce(builder_value, "")) == normalized_text |
+        tolower(coalesce(search_value, "")) == normalized_text
+    )
+
+  if (nrow(matches) == 0) {
+    return(NULL)
+  }
+
+  matches[1, , drop = FALSE]
+}
+
+source_catalog_supported_builder_values <- function() {
+  source_catalog() %>%
+    filter(builder_enabled) %>%
+    pull(builder_value) %>%
+    unique()
+}
+
 provider_registry_register_dependencies <- function(input, output, session, index) {
   purrr::walk(
     provider_registry_entries(),

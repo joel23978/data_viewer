@@ -623,14 +623,8 @@ builder_series_ui <- function(index) {
       selectInput(
         source_id,
         "Data source",
-        choices = c(
-          "FRED" = "FRED",
-          "dbnomics" = "dbnomics",
-          "rba" = "rba",
-          "abs" = "abs",
-          "Analysis result" = "analysis_result"
-        ),
-        selected = "abs"
+        choices = builder_source_choices(),
+        selected = default_builder_source_value()
       ),
       uiOutput(series_source_controls_id(index)),
       textInput(series_input_id(index, "label"), "Chart label shown in the legend", value = ""),
