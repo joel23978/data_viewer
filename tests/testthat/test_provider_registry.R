@@ -54,10 +54,12 @@ test_that("RBA registry controls and fetch dispatch round-trip cleanly", {
   expect_equal(spec$source, "rba")
   expect_equal(spec$rba_table, rba_row$table_no)
   expect_equal(spec$rba_desc, rba_row$description)
+  expect_equal(spec$rba_series_id, rba_row$series_id)
 
   normalized <- normalize_series_spec(spec)
   expect_equal(normalized$rba_table, rba_row$table_no)
   expect_equal(normalized$rba_desc, rba_row$description)
+  expect_equal(normalized$rba_series_id, rba_row$series_id)
 
   original_rba_data <- rba_data
   on.exit(assign("rba_data", original_rba_data, envir = .GlobalEnv), add = TRUE)
@@ -70,14 +72,14 @@ test_that("RBA registry controls and fetch dispatch round-trip cleanly", {
       tibble::tibble(
         date = as.Date("2024-01-01"),
         value = 1,
-        name = series
+        name = rba_row$description
       )
     },
     envir = .GlobalEnv
   )
 
   fetched <- query_series_history(normalized)
-  expect_equal(captured_series, rba_row$description)
+  expect_equal(captured_series, rba_row$series_id)
   expect_equal(fetched$name[[1]], rba_row$description)
 })
 
@@ -94,6 +96,8 @@ test_that("RBA registry search payload is restoreable", {
   expect_equal(registry_spec$source, "rba")
   expect_equal(registry_spec$rba_table, search_result$load_payload[[1]]$rba_table)
   expect_equal(registry_spec$rba_desc, search_result$load_payload[[1]]$rba_desc)
+  expect_equal(registry_spec$rba_series_id, search_result$load_payload[[1]]$rba_series_id)
   expect_equal(search_result_spec$source, "rba")
   expect_equal(search_result_spec$rba_desc, search_result$load_payload[[1]]$rba_desc)
+  expect_equal(search_result_spec$rba_series_id, search_result$load_payload[[1]]$rba_series_id)
 })

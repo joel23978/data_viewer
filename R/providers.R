@@ -120,14 +120,22 @@ provider_rba_register_dependencies <- function(input, output, session, index) {
 }
 
 provider_rba_spec_from_input <- function(input, index, transform_profile = default_transform_profile(), restored_spec = NULL) {
+  selected_table <- input[[series_input_id(index, "rba_table")]] %||% restored_spec$rba_table %||% rba_tables[[1]]
+  selected_desc <- input[[series_input_id(index, "rba_desc")]] %||% restored_spec$rba_desc
+  selected_series_id <- get_rba_desc_id() %>%
+    filter(table_no == selected_table, description %in% selected_desc) %>%
+    pull(series_id) %>%
+    unique()
+
   spec <- list(
     index = index,
     source = "rba",
     label = trimws(input[[series_input_id(index, "label")]] %||% ""),
     transform_profile = transform_profile,
     vis_type = input[[series_input_id(index, "vis_type")]] %||% "line",
-    rba_table = input[[series_input_id(index, "rba_table")]] %||% restored_spec$rba_table %||% rba_tables[[1]],
-    rba_desc = input[[series_input_id(index, "rba_desc")]] %||% restored_spec$rba_desc
+    rba_table = selected_table,
+    rba_desc = selected_desc,
+    rba_series_id = if (length(selected_series_id) > 0) selected_series_id else restored_spec$rba_series_id %||% character()
   )
 
   if (length(spec$rba_desc) == 0) {
@@ -148,12 +156,22 @@ provider_rba_normalize_spec <- function(spec, normalized_spec = NULL) {
 
   normalized_spec$rba_table <- spec$rba_table %||% rba_tables[[1]]
   normalized_spec$rba_desc <- spec$rba_desc %||% character()
+  normalized_spec$rba_series_id <- spec$rba_series_id %||% character()
 
   normalized_spec
 }
 
 provider_rba_query_series_history <- function(spec) {
-  rba_data(series = spec$rba_desc)
+  series_ids <- spec$rba_series_id %||% character()
+
+  if (length(series_ids) == 0 && length(spec$rba_desc %||% character()) > 0) {
+    series_ids <- get_rba_desc_id() %>%
+      filter(table_no == (spec$rba_table %||% rba_tables[[1]]), description %in% spec$rba_desc) %>%
+      pull(series_id) %>%
+      unique()
+  }
+
+  rba_data(series = series_ids)
 }
 
 provider_rba_search_result_to_spec <- function(search_result, index) {
@@ -183,12 +201,13 @@ provider_rba_search_index_builder <- function() {
       summary = compact_rba_table_title(table_no, table_title),
       search_text = clean_search_text(paste(table_no, table_title, description, series_id, "rba")),
       load_payload = purrr::pmap(
-        list(table_no, description),
-        function(table_no, description) {
+        list(table_no, description, series_id),
+        function(table_no, description, series_id) {
           list(
             source = "rba",
             rba_table = table_no,
             rba_desc = description,
+            rba_series_id = series_id,
             label = description,
             vis_type = "line",
             transform_profile = default_transform_profile()

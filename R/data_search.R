@@ -757,12 +757,13 @@ build_rba_search_index <- function() {
       summary = compact_rba_table_title(table_no, table_title),
       search_text = clean_search_text(paste(table_no, table_title, description, series_id, "rba")),
       load_payload = purrr::pmap(
-        list(table_no, description),
-        function(table_no, description) {
+        list(table_no, description, series_id),
+        function(table_no, description, series_id) {
           list(
             source = "rba",
             rba_table = table_no,
             rba_desc = description,
+            rba_series_id = series_id,
             label = description,
             vis_type = "line",
             transform_profile = default_transform_profile()

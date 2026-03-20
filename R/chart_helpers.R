@@ -442,6 +442,7 @@ series_cache_key <- function(spec) {
     cache_key_value(spec$dbnomics_series),
     cache_key_value(spec$rba_table),
     cache_key_value(spec$rba_desc),
+    cache_key_value(spec$rba_series_id),
     cache_key_value(spec$abs_catalogue),
     cache_key_value(spec$abs_desc),
     cache_key_value(spec$abs_series_type),

@@ -378,7 +378,7 @@ build_main_ui <- function() {
                   radioGroupButtons(
                     "date_window_shortcut",
                     "Quick range",
-                    choices = c("1Y" = "1", "3Y" = "3", "5Y" = "5", "10Y" = "10", "Max" = "max"),
+                    choices = c("1Y" = "1", "3Y" = "3", "5Y" = "5", "10Y" = "10", "20Y" = "20", "Max" = "max"),
                     selected = character(0),
                     justified = TRUE,
                     checkIcon = list(yes = icon("check"))

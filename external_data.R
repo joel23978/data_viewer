@@ -262,8 +262,8 @@ rba_data <- function(
     "RBA",
     {
       tmp <- get_rba_desc_id() %>%
-        filter(description %in% series) %>%
-        group_by(description) %>%
+        filter(series_id %in% series) %>%
+        group_by(series_id) %>%
         slice_head(n = 1) %>%
         pull(series_id)
 
