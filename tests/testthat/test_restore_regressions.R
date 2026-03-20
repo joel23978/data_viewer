@@ -6,46 +6,7 @@ source(here::here("R", "data_search.R"))
 source(here::here("R", "chart_library.R"))
 source(here::here("R", "analysis_helpers.R"))
 source(here::here("R", "main_app.R"))
-
-local_mock_abs_data <- function(env = parent.frame()) {
-  original_abs_data <- abs_data
-
-  if (length(ls(envir = series_cache_env)) > 0) {
-    rm(list = ls(envir = series_cache_env), envir = series_cache_env)
-  }
-
-  assign(
-    "abs_data",
-    function(series = NULL) {
-      selected_ids <- unique(trimws(as.character(series %||% character())))
-      selected_ids <- selected_ids[nzchar(selected_ids)]
-
-      if (length(selected_ids) == 0) {
-        return(data_viewer_empty_series())
-      }
-
-      purrr::map_dfr(seq_along(selected_ids), function(index) {
-        series_id <- selected_ids[[index]]
-        matched_row <- abs_rows_by_id(series_id) %>% slice_head(n = 1)
-        series_name <- matched_row$series[[1]] %||% series_id
-
-        tibble::tibble(
-          date = seq(as.Date("2020-01-01"), by = "quarter", length.out = 16),
-          value = seq_len(16) + (index - 1) * 10,
-          name = series_name
-        )
-      })
-    },
-    envir = .GlobalEnv
-  )
-
-  withr::defer(assign("abs_data", original_abs_data, envir = .GlobalEnv), envir = env)
-  withr::defer({
-    if (length(ls(envir = series_cache_env)) > 0) {
-      rm(list = ls(envir = series_cache_env), envir = series_cache_env)
-    }
-  }, envir = env)
-}
+source(here::here("tests", "testthat", "helper_app_fixtures.R"))
 
 build_restore_abs_specs <- function(env = parent.frame()) {
   local_mock_abs_data(env)

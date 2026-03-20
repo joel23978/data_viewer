@@ -2436,8 +2436,13 @@ build_main_server <- function(input, output, session) {
       )
     }
 
-    remote_results <- bind_rows(lapply(remote_search_responses(), `[[`, "results")) %>%
-      distinct(search_id, .keep_all = TRUE)
+    remote_results_list <- lapply(remote_search_responses(), `[[`, "results")
+    remote_results <- if (length(remote_results_list) == 0) {
+      empty_search_index()
+    } else {
+      bind_rows(remote_results_list) %>%
+        distinct(search_id, .keep_all = TRUE)
+    }
 
     remote_results <- filter_search_index(
       remote_results,
