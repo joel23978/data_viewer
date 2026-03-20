@@ -3,7 +3,6 @@ data_sources <- list("ABS CPI"
                     , "dbnomics"
                     , "rba"
                     , "abs"
-                    #, "bloomberg"
 )
 
 transformation_choices <- list("index" 
@@ -290,6 +289,5 @@ set_chart_defaults <- function(
   }
 
 }
-
 
 

@@ -47,15 +47,6 @@ seriesUI <- function(id) {
       ns=NS(id)
     )
     
-    # Bloomberg options
-    , conditionalPanel(
-      condition = "input.source == 'bloomberg'",
-      selectInput(ns("bloomberg_category"), "Category", choices = bbg_categories),
-      selectizeInput(ns("bloomberg_desc"), "Series", choices = bbg_series[[1]], multiple = TRUE),
-      selectizeInput(ns("bloomberg_ticker"), "Ticker (for query)", choices = bbg_tickers[[1]], options = list(create = TRUE), multiple = TRUE),
-      ns=NS(id)
-    )
-    
     # ABS options
     , conditionalPanel(
       condition = "input.source == 'abs'",
@@ -161,32 +152,6 @@ abs_update <- function(input, output, session){
 
 
 
-bloomy_update <- function(input, output, session){
-  observe({
-    cat_input <- input$bloomberg_category
-    if (!is.null(cat_input)) {
-      series_choices <- bbg_series[[cat_input]] %>% na.omit()  # Ensure no NA values
-      if (length(series_choices) > 0) {
-        updateSelectInput(session, 'bloomberg_desc', choices = series_choices, selected = series_choices[1])
-      }
-    }
-  })
-  
-  observe({
-    desc_input <- input$bloomberg_desc
-    if (!is.null(desc_input)) {
-      valid_tickers <- bbg_ref %>% filter(Description %in% desc_input) %>% pull(Security) %>% na.omit()
-      if (length(valid_tickers) > 0) {
-        updateSelectInput(session, 'bloomberg_ticker', choices = valid_tickers, selected = valid_tickers)
-      }
-    }
-  })
-}
-
-
-
-
-
 data_query <- function(input, output, session, input_dates){
 
  start_date <- lubridate::ymd(min(input_dates), truncated = 2L)
@@ -211,10 +176,6 @@ data_query <- function(input, output, session, input_dates){
       
     } else if (input$source == "rba"){
       tmp <- rba_data(series = input$rba_desc)
-      
-    } else if (input$source == "bloomberg"){
-      tmp <- bbg_data(series = input$bloomberg_ticker
-                      , start_date, end_date)
       
     } else if (input$source == "abs"){
       tmp <- abs_data(series = input$abs_id)
@@ -248,7 +209,6 @@ data_transform <- function(input, output, session, data_source){
   tmp
 }
   
-
 
 
 

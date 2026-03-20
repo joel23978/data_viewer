@@ -10,8 +10,7 @@ data.
 This project is a work in progress.
 
 The app currently allows you to pull data from FRED, dbnomics, the RBA
-(using readrba), the ABS (using readabs) and bloomberg (assuming you
-have access to a terminal).
+(using readrba), and the ABS (using readabs).
 
 The app is also hosted using *shinyapps.io* and can be accessed at the
 following [link](https://joelfindlay.shinyapps.io/cpi_abs/).

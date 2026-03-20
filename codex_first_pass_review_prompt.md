@@ -9,7 +9,7 @@ Fill this in before running the review.
   - Build charts from up to four series, apply transforms, and format/export the result.
   - Run analysis workflows such as correlations, regression, forecasting, seasonal adjustment, HP filter, and Kalman filter.
   - Save charts to a local library and assemble/export presentations.
-- Current external data sources: ABS CPI/local CPI data, ABS via readabs metadata/data, RBA via readrba, FRED via fredr, DBnomics via rdbnomics, Bloomberg via Rblpapi, recession shading data from FRED-derived local data.
+- Current external data sources: ABS CPI/local CPI data, ABS via readabs metadata/data, RBA via readrba, FRED via fredr, DBnomics via rdbnomics, recession shading data from FRED-derived local data.
 - Planned future data sources: Not explicitly defined in code comments, but the current architecture implies future additions of further external macro/financial series providers and local metadata-backed sources.
 - Known performance pain points:
   - Historically slow Data Search startup and ABS search.
@@ -17,7 +17,7 @@ Fill this in before running the review.
   - Large reactive surface area in the main server and restore logic.
 - Known ingestion pain points:
   - Source-specific selection chains, especially ABS.
-  - Live provider dependencies and environment requirements (Bloomberg terminal, FRED key, Python/Kaleido/PPTX stack).
+  - Live provider dependencies and environment requirements (FRED key, Python/Kaleido/PPTX stack).
   - Metadata prep and runtime querying are spread across multiple files.
 - Areas that feel hard to extend:
   - Adding a new data source across UI, query, search, save/export, and source-note logic.
@@ -38,7 +38,7 @@ Fill this in before running the review.
   - Rscript scripts/generate_search_index.R
 - Constraints:
   - The app is deployed to shinyapps.io, so runtime/startup costs matter.
-  - Some functionality depends on local/external environment setup: Bloomberg access, FRED API key, Python for Plotly image export and PPTX export.
+  - Some functionality depends on local/external environment setup: FRED API key, Python for Plotly image export and PPTX export.
   - The codebase currently uses sourced scripts rather than Shiny modules/packages.
   - There is active migration tension between static ggplot output and Plotly output.
 

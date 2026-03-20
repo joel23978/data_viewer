@@ -20,7 +20,7 @@ Confirmed: `build_chart_plot()` (ggplot, line 1801) and `build_chart_widget()` (
 
 ### 4. External data helpers do NOT reference `input$` in defaults
 
-Codex claimed `fred_data(series = input$fred_series, ...)` etc. were default arguments. Checked: the only `input$` reference in `external_data.R` is a **comment** on line 74 (`# , desc = input$bloomberg_desc_1`). All fetch functions take explicit parameters — `bbg_data(series = NULL)`, `fred_data(series = NULL)`, etc. This coupling concern is not valid.
+Codex claimed `fred_data(series = input$fred_series, ...)` etc. were default arguments. Checked: the helper functions take explicit parameters, for example `fred_data(series = NULL)` and `db_data(series = NULL)`. This coupling concern is not valid.
 
 ### 5. Provider metadata is NOT eagerly loaded at source time
 

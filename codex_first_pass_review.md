@@ -19,7 +19,7 @@
 - [/Users/joelfindlay/dev/data_viewer/R/chart_library.R](/Users/joelfindlay/dev/data_viewer/R/chart_library.R)
   - Local chart/presentation library persistence and record shaping.
 - [/Users/joelfindlay/dev/data_viewer/external_data.R](/Users/joelfindlay/dev/data_viewer/external_data.R)
-  - External provider access and provider metadata objects for Bloomberg, FRED, DBnomics, RBA, and ABS.
+  - External provider access and provider metadata objects for FRED, DBnomics, RBA, and ABS.
 - [/Users/joelfindlay/dev/data_viewer/cpi_annual.R](/Users/joelfindlay/dev/data_viewer/cpi_annual.R)
   - Domain-specific CPI transformation logic and CPI data shaping.
 - [/Users/joelfindlay/dev/data_viewer/scripts/generate_search_index.R](/Users/joelfindlay/dev/data_viewer/scripts/generate_search_index.R)
@@ -141,8 +141,6 @@ Impact:
 Several helpers still use Shiny `input$...` values as default arguments, for example:
 - `fred_data(series = input$fred_series, ...)`
 - `db_data(series = input$db_series, ...)`
-- `bbg_data(series = input$bloomberg_ticker_1, ...)`
-
 This works in the app, but it is not a good abstraction boundary. It makes helpers harder to reason about outside live Shiny context and increases accidental coupling to UI naming.
 
 #### 7. Search is much improved, but still not cleanly isolated from app concerns
@@ -244,4 +242,3 @@ So the right first-pass conclusion is:
   - targeted walkthroughs for ABS add/load
   - renderer parity matrix for builder/analysis/export
   - source-addition spike to see how many files must change today
-
