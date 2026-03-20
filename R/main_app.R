@@ -789,6 +789,81 @@ build_main_ui <- function() {
   )
 }
 
+default_builder_restore_context <- function() {
+  list(
+    mode = "idle",
+    token = 0L,
+    scope = "none",
+    selected_series_index = NULL
+  )
+}
+
+init_builder_restore_state <- function(session) {
+  restored_state <- reactiveVal(NULL)
+  builder_restore_context <- reactiveVal(default_builder_restore_context())
+
+  builder_restore_mode <- function() {
+    builder_restore_context()$mode %||% "idle"
+  }
+
+  clear_builder_restore_state <- function(clear_series_specs = TRUE) {
+    restored_state(NULL)
+    builder_restore_context(default_builder_restore_context())
+    if (isTRUE(clear_series_specs)) {
+      session$userData$restored_series_specs <- list()
+    }
+
+    invisible(NULL)
+  }
+
+  apply_builder_state <- function(chart_state, selected_series_index = NULL, navigate_builder = FALSE, restore_scope = "full") {
+    normalized_state <- normalize_chart_state(chart_state)
+    next_token <- (shiny::isolate(builder_restore_context())$token %||% 0L) + 1L
+
+    restored_state(normalized_state)
+    builder_restore_context(list(
+      mode = "applying",
+      token = next_token,
+      scope = restore_scope %||% "full",
+      selected_series_index = selected_series_index
+    ))
+    session$userData$restored_series_specs <- list()
+    restore_chart_state(session, normalized_state)
+
+    if (!is.null(selected_series_index)) {
+      updateTabsetPanel(session, "series_tabs", selected = paste("Series", selected_series_index))
+    }
+
+    if (isTRUE(navigate_builder)) {
+      updateNavbarPage(session, "main_tabs", selected = "builder")
+    }
+
+    session$onFlushed(function() {
+      current_context <- shiny::isolate(builder_restore_context())
+      if (!identical(current_context$token %||% 0L, next_token)) {
+        return(invisible(NULL))
+      }
+
+      builder_restore_context(list(
+        mode = "settled",
+        token = next_token,
+        scope = restore_scope %||% "full",
+        selected_series_index = selected_series_index
+      ))
+    }, once = TRUE)
+
+    invisible(NULL)
+  }
+
+  list(
+    restored_state = restored_state,
+    builder_restore_context = builder_restore_context,
+    builder_restore_mode = builder_restore_mode,
+    clear_builder_restore_state = clear_builder_restore_state,
+    apply_builder_state = apply_builder_state
+  )
+}
+
 build_main_server <- function(input, output, session) {
   ensure_chart_library()
   session$userData$restored_series_specs <- list()
@@ -982,23 +1057,13 @@ build_main_server <- function(input, output, session) {
     ignoreInit = TRUE
   )
 
-  restored_state <- reactiveVal(NULL)
+  restore_manager <- init_builder_restore_state(session)
+  restored_state <- restore_manager$restored_state
+  builder_restore_mode <- restore_manager$builder_restore_mode
+  clear_builder_restore_state <- restore_manager$clear_builder_restore_state
+  apply_builder_state <- restore_manager$apply_builder_state
   synced_library_title <- reactiveVal("")
   synced_source_note <- reactiveVal(default_builder_state()$style$note)
-
-  apply_builder_state <- function(chart_state, selected_series_index = NULL, navigate_builder = FALSE) {
-    normalized_state <- normalize_chart_state(chart_state)
-    restored_state(normalized_state)
-    restore_chart_state(session, normalized_state)
-
-    if (!is.null(selected_series_index)) {
-      updateTabsetPanel(session, "series_tabs", selected = paste("Series", selected_series_index))
-    }
-
-    if (isTRUE(navigate_builder)) {
-      updateNavbarPage(session, "main_tabs", selected = "builder")
-    }
-  }
 
   observe({
     current_chart_title <- trimws(input$style_title %||% "")
@@ -1012,6 +1077,10 @@ build_main_server <- function(input, output, session) {
   })
 
   observe({
+    if (identical(builder_restore_mode(), "applying")) {
+      return(invisible(NULL))
+    }
+
     generated_source_note <- default_source_note(normalize_chart_state(builder_state_from_input(input, session))$series)
     current_source_note <- trimws(input$style_note %||% "")
     prior_synced_note <- trimws(synced_source_note() %||% "")
@@ -1127,72 +1196,35 @@ build_main_server <- function(input, output, session) {
 
   observeEvent(
     {
-      list(input$start_date, input$end_date)
-    },
-    {
-      loaded_state <- restored_state()
-      req(!is.null(loaded_state))
-
-      requested_range <- normalize_date_range(c(
-        as.Date(input$start_date %||% loaded_state$date_range[[1]]),
-        as.Date(input$end_date %||% loaded_state$date_range[[2]])
-      ))
-      loaded_range <- normalize_date_range(loaded_state$date_range)
-
-      if (!identical(requested_range, loaded_range)) {
-        restored_state(NULL)
-      }
-    },
-    ignoreInit = TRUE
-  )
-
-  observeEvent(
-    {
-      list(
-        input$style_title,
-        input$style_subtitle,
-        input$style_y_axis_label,
-        input$style_note,
-        input$style_renderer,
-        input$style_font_family,
-        input$style_legend,
-        input$style_palette,
-        input$style_date_format,
-        input$style_x_labels,
-        input$style_auto_y_axis,
-        input$style_y_min,
-        input$style_y_max,
-        input$style_y_breaks,
-        input$style_invert_y_axis,
-        input$style_horizontal_1,
-        input$style_horizontal_2,
-        input$style_horizontal_shading_min,
-        input$style_horizontal_shading_max,
-        input$style_vertical_1,
-        input$style_vertical_2,
-        input$style_recession_shading,
-        input$export_width,
-        input$export_height
-      )
-    },
-    {
-      loaded_state <- restored_state()
-      req(!is.null(loaded_state))
-
-      if (!identical(
-        normalize_style_settings(style_settings_from_input(input)),
-        normalize_style_settings(loaded_state$style)
-      )) {
-        restored_state(NULL)
-      }
-    },
-    ignoreInit = TRUE
-  )
-
-  observeEvent(
-    {
       c(
         list(
+          input$start_date,
+          input$end_date,
+          input$style_title,
+          input$style_subtitle,
+          input$style_y_axis_label,
+          input$style_note,
+          input$style_renderer,
+          input$style_font_family,
+          input$style_legend,
+          input$style_palette,
+          input$style_date_format,
+          input$style_x_labels,
+          input$style_auto_y_axis,
+          input$style_y_min,
+          input$style_y_max,
+          input$style_y_breaks,
+          input$style_invert_y_axis,
+          input$style_horizontal_1,
+          input$style_horizontal_2,
+          input$style_horizontal_shading_min,
+          input$style_horizontal_shading_max,
+          input$style_vertical_1,
+          input$style_vertical_2,
+          input$style_recession_shading,
+          input$export_width,
+          input$export_height,
+          input$viewData1,
           input$transform_all_moving_average,
           input$transform_all_rolling_sum,
           input$transform_all_lagged_value,
@@ -1203,6 +1235,25 @@ build_main_server <- function(input, output, session) {
         ),
         unlist(lapply(seq_len(MAX_SERIES), function(index) {
           list(
+            input[[series_input_id(index, "enabled")]],
+            input[[series_input_id(index, "source")]],
+            input[[series_input_id(index, "label")]],
+            input[[series_input_id(index, "vis_type")]],
+            input[[series_input_id(index, "text")]],
+            input[[series_input_id(index, "region")]],
+            input[[series_input_id(index, "transform")]],
+            input[[series_input_id(index, "rebase_date")]],
+            input[[series_input_id(index, "fred_series")]],
+            input[[series_input_id(index, "fred_vintage_mode")]],
+            input[[series_input_id(index, "fred_vintage_date")]],
+            input[[series_input_id(index, "dbnomics_series")]],
+            input[[series_input_id(index, "rba_table")]],
+            input[[series_input_id(index, "rba_desc")]],
+            input[[series_input_id(index, "abs_catalogue")]],
+            input[[series_input_id(index, "abs_desc")]],
+            input[[series_input_id(index, "abs_series_type")]],
+            input[[series_input_id(index, "abs_table")]],
+            input[[series_input_id(index, "abs_id")]],
             input[[transform_input_id(paste0("transform_", index), "moving_average")]],
             input[[transform_input_id(paste0("transform_", index), "rolling_sum")]],
             input[[transform_input_id(paste0("transform_", index), "lagged_value")]],
@@ -1215,54 +1266,16 @@ build_main_server <- function(input, output, session) {
       )
     },
     {
-      loaded_state <- restored_state()
-      req(!is.null(loaded_state))
-
-      current_series_profiles <- lapply(
-        seq_len(MAX_SERIES),
-        function(index) transform_profile_from_input(input, paste0("transform_", index))
-      )
-      loaded_series_profiles <- lapply(
-        seq_len(MAX_SERIES),
-        function(index) normalize_transform_profile((loaded_state$series[[index]] %||% list())$transform_profile)
-      )
-
-      if (
-        !identical(
-          normalize_transform_profile(transform_profile_from_input(input, "transform_all")),
-          normalize_transform_profile(loaded_state$all_series_transform)
-        ) ||
-        !identical(current_series_profiles, loaded_series_profiles)
-      ) {
-        restored_state(NULL)
+      if (identical(builder_restore_mode(), "applying")) {
+        return(invisible(NULL))
       }
-    },
-    ignoreInit = TRUE
-  )
 
-  observeEvent(
-    {
-      unlist(lapply(seq_len(MAX_SERIES), function(index) {
-        list(input[[series_input_id(index, "label")]])
-      }), recursive = FALSE)
-    },
-    {
       loaded_state <- restored_state()
       req(!is.null(loaded_state))
 
-      current_labels <- vapply(
-        seq_len(MAX_SERIES),
-        function(index) trimws(input[[series_input_id(index, "label")]] %||% ""),
-        character(1)
-      )
-      loaded_labels <- vapply(
-        seq_len(MAX_SERIES),
-        function(index) trimws(((loaded_state$series[[index]] %||% list())$label) %||% ""),
-        character(1)
-      )
-
-      if (!identical(current_labels, loaded_labels)) {
-        restored_state(NULL)
+      current_state <- normalize_chart_state(builder_state_from_input(input, session))
+      if (!identical(current_state, loaded_state)) {
+        clear_builder_restore_state()
       }
     },
     ignoreInit = TRUE
@@ -2097,13 +2110,23 @@ build_main_server <- function(input, output, session) {
     search_row <- selected_search_result()
     req(!is.null(search_row))
 
-    target_index <- series_slot_from_search_target(builder_state(), input$search_target_series)
-    series_spec <- search_result_series_spec(search_row, target_index)
-    updated_state <- builder_state()
-    updated_state$series[[target_index]] <- normalize_series_spec(series_spec)
-    apply_builder_state(updated_state, selected_series_index = target_index, navigate_builder = FALSE)
-
-    showNotification("Search result added to the builder.", type = "message")
+    run_with_status(
+      "Adding the selected search result to the builder...",
+      "Search result added to the builder.",
+      {
+        target_index <- series_slot_from_search_target(builder_state(), input$search_target_series)
+        series_spec <- search_result_series_spec(search_row, target_index)
+        updated_state <- builder_state()
+        updated_state$series[[target_index]] <- normalize_series_spec(series_spec)
+        apply_builder_state(
+          updated_state,
+          selected_series_index = target_index,
+          navigate_builder = FALSE,
+          restore_scope = "single_series"
+        )
+      },
+      failure_prefix = "Unable to add the search result:"
+    )
   })
 
   output$builder_summary <- renderUI({
@@ -3103,9 +3126,8 @@ build_main_server <- function(input, output, session) {
 
   observeEvent(input$load_chart, {
     ensure_chart_library_loaded()
-    selected_records <- selected_chart_records()
-    req(!is.null(selected_records), nrow(selected_records) == 1)
-    chart_record <- selected_records[1, , drop = FALSE]
+    chart_record <- selected_preview_chart_record()
+    req(!is.null(chart_record), nrow(chart_record) == 1)
 
     run_with_status(
       paste("Loading", chart_record$title[[1]], "into the builder..."),
@@ -3976,7 +3998,12 @@ build_main_server <- function(input, output, session) {
 
     updated_state <- builder_state()
     updated_state$series[[target_index]] <- analysis_spec
-    apply_builder_state(updated_state, selected_series_index = target_index, navigate_builder = FALSE)
+    apply_builder_state(
+      updated_state,
+      selected_series_index = target_index,
+      navigate_builder = FALSE,
+      restore_scope = "single_series"
+    )
 
     showNotification(sprintf("Seasonally adjusted result added to Series %s.", target_index), type = "message")
   })
@@ -4008,7 +4035,12 @@ build_main_server <- function(input, output, session) {
 
     updated_state <- builder_state()
     updated_state$series[[target_index]] <- analysis_spec
-    apply_builder_state(updated_state, selected_series_index = target_index, navigate_builder = FALSE)
+    apply_builder_state(
+      updated_state,
+      selected_series_index = target_index,
+      navigate_builder = FALSE,
+      restore_scope = "single_series"
+    )
 
     showNotification(sprintf("HP-filtered result added to Series %s.", target_index), type = "message")
   })

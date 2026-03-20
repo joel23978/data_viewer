@@ -1,51 +1,104 @@
 # bloomberg  ----
 
-library(Rblpapi)
-
-load(here("data", "bbg_ref.Rda"))
-
-bbg_ref <- bbg_ref %>%
-  arrange(Category, Security)
-
-bbg_categories <- unique(bbg_ref$Category)
-
-bbg_series <- list()
-for (i in 1:length(bbg_categories)){
-  bbg_series[[i]] <- bbg_ref %>%
-    filter(Category == bbg_categories[i]) %>%
-    pull(Description)
+get_bbg_ref <- function() {
+  data_viewer_cache_get(
+    "bbg_ref",
+    function() {
+      load_object <- data_viewer_load_rda(here("data", "bbg_ref.Rda"), "bbg_ref")
+      load_object %>%
+        arrange(Category, Security)
+    },
+    "Load Bloomberg reference"
+  )
 }
-names(bbg_series) <- bbg_categories
 
-bbg_tickers <- list()
-for (i in 1:length(bbg_categories)){
-  bbg_tickers[[i]] <- bbg_ref %>%
-    filter(Category == bbg_categories[i]) %>%
-    pull(Security)
+get_bbg_categories <- function() {
+  data_viewer_cache_get(
+    "bbg_categories",
+    function() unique(get_bbg_ref()$Category),
+    "Build Bloomberg categories"
+  )
 }
-names(bbg_tickers) <- bbg_categories
+
+get_bbg_series <- function() {
+  data_viewer_cache_get(
+    "bbg_series",
+    function() {
+      ref_data <- get_bbg_ref()
+      categories <- get_bbg_categories()
+      series_list <- vector("list", length(categories))
+
+      for (i in seq_along(categories)) {
+        series_list[[i]] <- ref_data %>%
+          filter(Category == categories[[i]]) %>%
+          pull(Description)
+      }
+
+      names(series_list) <- categories
+      series_list
+    },
+    "Build Bloomberg series lookup"
+  )
+}
+
+get_bbg_tickers <- function() {
+  data_viewer_cache_get(
+    "bbg_tickers",
+    function() {
+      ref_data <- get_bbg_ref()
+      categories <- get_bbg_categories()
+      ticker_list <- vector("list", length(categories))
+
+      for (i in seq_along(categories)) {
+        ticker_list[[i]] <- ref_data %>%
+          filter(Category == categories[[i]]) %>%
+          pull(Security)
+      }
+
+      names(ticker_list) <- categories
+      ticker_list
+    },
+    "Build Bloomberg ticker lookup"
+  )
+}
+
+data_viewer_register_active_binding("bbg_ref", function() get_bbg_ref())
+data_viewer_register_active_binding("bbg_categories", function() get_bbg_categories())
+data_viewer_register_active_binding("bbg_series", function() get_bbg_series())
+data_viewer_register_active_binding("bbg_tickers", function() get_bbg_tickers())
 
 # blpConnect()
 
 bbg_data <- function(
-    series = input$bloomberg_ticker_1
+    series = NULL
     # , desc = input$bloomberg_desc_1
     , start_date = NULL
     , end_date = NULL
 ){
+  if (!data_viewer_has_text(series)) {
+    return(data_viewer_empty_series())
+  }
+
+  if (!requireNamespace("Rblpapi", quietly = TRUE)) {
+    return(data_viewer_empty_series())
+  }
+
   query_start <- if (is.null(start_date)) as.Date("1900-01-01") else start_date
 
-  bdh(
-    securities = series,
-    fields = c("PX_LAST"),
-    start.date = query_start
-  ) %>%
-    mutate(security = series) %>%
-    select(c(3, 1, 2)) %>%
-    `colnames<-`(c("name", "date", "value")) %>%
-    {
-      if (is.null(end_date)) . else filter(., date <= end_date)
-    }
+  data_viewer_safe_fetch(
+    "Bloomberg",
+    Rblpapi::bdh(
+      securities = series,
+      fields = c("PX_LAST"),
+      start.date = query_start
+    ) %>%
+      mutate(security = series) %>%
+      select(c(3, 1, 2)) %>%
+      `colnames<-`(c("name", "date", "value")) %>%
+      {
+        if (is.null(end_date)) . else filter(., date <= end_date)
+      }
+  )
 }
 
 
@@ -57,7 +110,6 @@ bbg_data <- function(
 
 # fredr ----
 
-library(fredr)
 Sys.getenv("FRED_API_KEY")
 
 fred_vintage_cache_env <- new.env(parent = emptyenv())
@@ -68,6 +120,10 @@ fred_vintage_dates <- function(series, force = FALSE) {
     return(as.Date(character()))
   }
 
+  if (!requireNamespace("fredr", quietly = TRUE)) {
+    return(as.Date(character()))
+  }
+
   cache_key <- cleaned_series
   if (!force && exists(cache_key, envir = fred_vintage_cache_env, inherits = FALSE)) {
     return(get(cache_key, envir = fred_vintage_cache_env, inherits = FALSE))
@@ -75,7 +131,7 @@ fred_vintage_dates <- function(series, force = FALSE) {
 
   vintage_dates <- tryCatch(
     {
-      response <- fredr_series_vintagedates(series_id = cleaned_series)
+      response <- fredr::fredr_series_vintagedates(series_id = cleaned_series)
       matching_columns <- intersect(c("vintage_date", "date"), names(response))
       date_column <- if (length(matching_columns) > 0) matching_columns[1] else names(response)[1]
       as.Date(sort(unique(response[[date_column]])))
@@ -90,7 +146,7 @@ fred_vintage_dates <- function(series, force = FALSE) {
 }
 
 fred_data <- function(
-    series = input$fred_series
+    series = NULL
     , start_date = NULL
     , end_date = NULL
     , realtime_start = NULL
@@ -98,6 +154,14 @@ fred_data <- function(
     , vintage_dates = NULL
     , name_override = NULL
 ){
+  if (!data_viewer_has_text(series)) {
+    return(data_viewer_empty_series())
+  }
+
+  if (!requireNamespace("fredr", quietly = TRUE)) {
+    return(data_viewer_empty_series())
+  }
+
   query_args <- list(series_id = series)
   if (!is.null(start_date)) {
     query_args$observation_start <- start_date
@@ -115,16 +179,21 @@ fred_data <- function(
     query_args$vintage_dates <- vintage_dates
   }
 
-  fred_result <- do.call(fredr_series_observations, query_args) %>%
-    select(c(date, value, series_id)) %>%
-    rename(name = series_id)
+  data_viewer_safe_fetch(
+    "FRED",
+    {
+      fred_result <- do.call(fredr::fredr_series_observations, query_args) %>%
+        select(c(date, value, series_id)) %>%
+        rename(name = series_id)
 
-  if (!is.null(name_override) && nzchar(trimws(name_override))) {
-    fred_result <- fred_result %>%
-      mutate(name = trimws(name_override))
-  }
+      if (!is.null(name_override) && nzchar(trimws(name_override))) {
+        fred_result <- fred_result %>%
+          mutate(name = trimws(name_override))
+      }
 
-  fred_result
+      fred_result
+    }
+  )
 }
 
 # recession shading ----
@@ -166,35 +235,42 @@ rec_regions <- c("Australia", "United States", "United Kingdom", "Euro area",  "
 # }
 # 
 # save(rec_data, file = here("data", "rec_data.Rda"))
-load(file = here("data", "rec_data.Rda"))
 
 
 
 
 # dbnomics ----
 
-library(rdbnomics)
-
 db_data <- function(
-    series = input$db_series
+    series = NULL
     , start_date = NULL
     , end_date = NULL
 ){
+  if (!data_viewer_has_text(series)) {
+    return(data_viewer_empty_series())
+  }
 
-  rdb(
-    ids = series
-  ) %>%
-    select(c(period, value, dataset_name)) %>%
-    rename(name = dataset_name
-           , date = period) %>%
-    mutate(date = as.Date(date)) %>%
-    {
-      if (!is.null(start_date)) filter(., date >= start_date) else .
-    } %>%
-    {
-      if (!is.null(end_date)) filter(., date <= end_date) else .
-    } %>%
-    drop_na()
+  if (!requireNamespace("rdbnomics", quietly = TRUE)) {
+    return(data_viewer_empty_series())
+  }
+
+  data_viewer_safe_fetch(
+    "DBnomics",
+    rdbnomics::rdb(
+      ids = series
+    ) %>%
+      select(c(period, value, dataset_name)) %>%
+      rename(name = dataset_name
+             , date = period) %>%
+      mutate(date = as.Date(date)) %>%
+      {
+        if (!is.null(start_date)) filter(., date >= start_date) else .
+      } %>%
+      {
+        if (!is.null(end_date)) filter(., date <= end_date) else .
+      } %>%
+      drop_na()
+  )
 }
 
 
@@ -204,18 +280,120 @@ db_data <- function(
 
 # read_rba ----
 
-library(readrba)
 # tmp <- browse_rba_tables()
 # rba_table_names <- paste(tmp$no, tmp$title)
 
-rba_browse_data <- browse_rba_series()
+get_rba_browse_data <- function() {
+  data_viewer_cache_get(
+    "rba_browse_data",
+    function() {
+      if (!requireNamespace("readrba", quietly = TRUE)) {
+        return(tibble::tibble(
+          table_no = character(),
+          table_title = character(),
+          description = character(),
+          series_id = character(),
+          frequency = character()
+        ))
+      }
 
-rba_table_meta <- rba_browse_data %>%
-  select(table_no, table_title) %>%
-  distinct() %>%
-  group_by(table_no) %>%
-  summarise(table_title = table_title[1], .groups = "drop") %>%
-  arrange(table_no)
+      if (exists("browse_rba_series", envir = .GlobalEnv, inherits = FALSE) &&
+          is.function(get("browse_rba_series", envir = .GlobalEnv, inherits = FALSE))) {
+        get("browse_rba_series", envir = .GlobalEnv, inherits = FALSE)()
+      } else {
+        readrba::browse_rba_series()
+      }
+    },
+    "Load RBA browse metadata"
+  )
+}
+
+get_rba_table_meta <- function() {
+  data_viewer_cache_get(
+    "rba_table_meta",
+    function() {
+      get_rba_browse_data() %>%
+        select(table_no, table_title) %>%
+        distinct() %>%
+        group_by(table_no) %>%
+        summarise(table_title = table_title[1], .groups = "drop") %>%
+        arrange(table_no)
+    },
+    "Build RBA table metadata"
+  )
+}
+
+get_rba_tables <- function() {
+  data_viewer_cache_get(
+    "rba_tables",
+    function() get_rba_table_meta()$table_no,
+    "Build RBA table list"
+  )
+}
+
+get_rba_table_choices <- function() {
+  data_viewer_cache_get(
+    "rba_table_choices",
+    function() {
+      table_meta <- get_rba_table_meta()
+      stats::setNames(
+        table_meta$table_no,
+        mapply(compact_rba_table_title, table_meta$table_no, table_meta$table_title, USE.NAMES = FALSE)
+      )
+    },
+    "Build RBA table choices"
+  )
+}
+
+get_rba_desc_id <- function() {
+  data_viewer_cache_get(
+    "rba_desc_id",
+    function() {
+      get_rba_browse_data() %>%
+        select(c(table_no, description, series_id)) %>%
+        unique()
+    },
+    "Build RBA description lookup"
+  )
+}
+
+get_rba_series <- function() {
+  data_viewer_cache_get(
+    "rba_series",
+    function() {
+      desc_id <- get_rba_desc_id()
+      tables <- get_rba_tables()
+      series_list <- vector("list", length(tables))
+
+      for (i in seq_along(tables)) {
+        series_list[[i]] <- desc_id %>%
+          filter(table_no == tables[[i]]) %>%
+          pull(description)
+      }
+
+      names(series_list) <- tables
+      series_list
+    },
+    "Build RBA series lookup"
+  )
+}
+
+data_viewer_register_active_binding("rba_browse_data", function() get_rba_browse_data())
+data_viewer_register_active_binding("rba_table_meta", function() get_rba_table_meta())
+data_viewer_register_active_binding("rba_tables", function() get_rba_tables())
+data_viewer_register_active_binding("rba_table_choices", function() get_rba_table_choices())
+data_viewer_register_active_binding("rba_desc_id", function() get_rba_desc_id())
+data_viewer_register_active_binding("rba_series", function() get_rba_series())
+
+get_rec_data <- function() {
+  data_viewer_cache_get(
+    "rec_data",
+    function() data_viewer_load_rda(here("data", "rec_data.Rda"), "rec_data"),
+    "Load recession data"
+  )
+}
+
+data_viewer_register_active_binding("rec_data", function() get_rec_data())
 
 compact_rba_table_title <- function(table_no, table_title) {
   short_title <- table_title %>%
@@ -227,52 +405,46 @@ compact_rba_table_title <- function(table_no, table_title) {
   paste(table_no, short_title)
 }
 
-rba_tables <- rba_table_meta$table_no
-rba_table_choices <- stats::setNames(
-  rba_table_meta$table_no,
-  mapply(compact_rba_table_title, rba_table_meta$table_no, rba_table_meta$table_title, USE.NAMES = FALSE)
-)
-
-rba_desc_id <- rba_browse_data %>%
-  select(c(table_no, description, series_id)) %>%
-  unique()
-
-rba_series <- list()
-
-for (i in 1:length(rba_tables)){
-  rba_series[[i]] <- rba_desc_id %>%
-    filter(table_no == rba_tables[i]) %>%
-    pull(description)
-}
-
-names(rba_series) <- rba_tables
-
-
 rba_data <- function(
-    series = input$rba_desc_1
+    series = NULL
 ){
-  if(length(series) != 0){
-    tmp <- rba_desc_id %>%
-      filter(description %in% series) %>%
-      group_by(description) %>%
-      slice_head(n=1) %>%
-      pull(series_id) 
-    
-    tmp1 <- data.frame(date=as.Date(character()),
-                       value=as.numeric(character()),
-                       name=character(), 
-                       stringsAsFactors=FALSE)
-    
-    for (i in 1:length(tmp)){
-      tmp1 <- tmp1 %>%
-        rbind(
-          read_rba_seriesid(tmp[i]) %>%
-            select(c(date, value, description)) %>%
-            rename(name = description) %>%
-            drop_na()
-        )}
-    return(tmp1)
+  if (!data_viewer_has_text(series)) {
+    return(data_viewer_empty_series())
   }
+
+  if (!requireNamespace("readrba", quietly = TRUE)) {
+    return(data_viewer_empty_series())
+  }
+
+  data_viewer_safe_fetch(
+    "RBA",
+    {
+      tmp <- get_rba_desc_id() %>%
+        filter(description %in% series) %>%
+        group_by(description) %>%
+        slice_head(n = 1) %>%
+        pull(series_id)
+
+      tmp1 <- data.frame(
+        date = as.Date(character()),
+        value = as.numeric(character()),
+        name = character(),
+        stringsAsFactors = FALSE
+      )
+
+      for (i in seq_along(tmp)) {
+        tmp1 <- tmp1 %>%
+          rbind(
+            readrba::read_rba_seriesid(tmp[[i]]) %>%
+              select(c(date, value, description)) %>%
+              rename(name = description) %>%
+              drop_na()
+          )
+      }
+
+      tmp1
+    }
+  )
 }
 
 # tmp7 <- c("Australian Government Deposits", "Australian dollar investments")
@@ -282,7 +454,6 @@ rba_data <- function(
 
 # readabs
 
-library(readabs)
 # abs_catalogue <- read_csv(here("data", "abs_catalogue.csv")) %>%
 #   filter(`Catalogue Number` %!in% c("3101.0"
 #                                     , "3201.0 (Ceased)"
@@ -308,18 +479,42 @@ library(readabs)
 # save(abs_cat, file = here("data", "abs_cat.Rda"))
 
 
-load(file = here("data", "abs_ref.Rda"))
-load(file = here("data", "abs_cat.Rda"))
+get_abs_ref <- function() {
+  data_viewer_cache_get(
+    "abs_ref",
+    function() data_viewer_load_rda(here("data", "abs_ref.Rda"), "abs_ref"),
+    "Load ABS reference data"
+  )
+}
+
+get_abs_cat <- function() {
+  data_viewer_cache_get(
+    "abs_cat",
+    function() data_viewer_load_rda(here("data", "abs_cat.Rda"), "abs_cat"),
+    "Load ABS catalogue labels"
+  )
+}
+
+data_viewer_register_active_binding("abs_ref", function() get_abs_ref())
+data_viewer_register_active_binding("abs_cat", function() get_abs_cat())
 
 
 abs_data <- function(
-  series = input$abs_id_1
+  series = NULL
 ){
-  
-  if(length(series) > 0){
-    read_abs(series_id = series) %>%
+  if (!data_viewer_has_text(series)) {
+    return(data_viewer_empty_series())
+  }
+
+  if (!requireNamespace("readabs", quietly = TRUE)) {
+    return(data_viewer_empty_series())
+  }
+
+  data_viewer_safe_fetch(
+    "ABS",
+    readabs::read_abs(series_id = series) %>%
       select(date, value, series) %>%
       rename(name = series) %>%
       drop_na()
-  }
+  )
 }

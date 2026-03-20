@@ -6,6 +6,10 @@
   }
 }
 
+if (!exists("provider_registry_entry", mode = "function")) {
+  source(here::here("R", "providers.R"))
+}
+
 series_input_id <- function(index, field) {
   paste0("series_", index, "_", field)
 }
@@ -170,6 +174,95 @@ resolve_valid_multi_choice <- function(current_value, restored_value = NULL, cho
   }
 
   valid_choices[1]
+}
+
+seed_selectize_choices <- function(selected_values = character()) {
+  selected_values <- unique(trimws(as.character(selected_values %||% character())))
+  selected_values <- selected_values[nzchar(selected_values)]
+
+  if (length(selected_values) == 0) {
+    character()
+  } else {
+    stats::setNames(selected_values, selected_values)
+  }
+}
+
+abs_catalogue_data <- function(catalogue_value = NULL) {
+  selected_catalogue <- resolve_valid_single_choice(catalogue_value, NULL, abs_cat)
+  catalogue_index <- match(selected_catalogue, abs_cat)
+  if (is.na(catalogue_index) || catalogue_index < 1) {
+    return(abs_ref[[1]] %||% tibble::tibble())
+  }
+
+  abs_ref[[catalogue_index]] %||% abs_ref[[1]] %||% tibble::tibble()
+}
+
+resolve_abs_control_state <- function(current_values = list(), restored_spec = NULL) {
+  restored_spec <- restored_spec %||% list()
+  current_values <- current_values %||% list()
+
+  current_catalogue <- resolve_valid_single_choice(
+    current_values$catalogue,
+    restored_spec$abs_catalogue,
+    abs_cat
+  )
+  catalogue_data <- abs_catalogue_data(current_catalogue)
+
+  desc_choices <- catalogue_data %>%
+    pull(series) %>%
+    unique() %>%
+    stats::na.omit()
+  current_desc <- resolve_valid_single_choice(
+    current_values$desc,
+    restored_spec$abs_desc,
+    desc_choices
+  )
+
+  type_choices <- catalogue_data %>%
+    filter(series == current_desc) %>%
+    pull(series_type) %>%
+    unique() %>%
+    stats::na.omit()
+  current_type <- resolve_valid_single_choice(
+    current_values$type,
+    restored_spec$abs_series_type,
+    type_choices
+  )
+
+  table_choices <- catalogue_data %>%
+    filter(series == current_desc, series_type == current_type) %>%
+    pull(table_title) %>%
+    unique() %>%
+    stats::na.omit()
+  current_table <- resolve_valid_single_choice(
+    current_values$table,
+    restored_spec$abs_table,
+    table_choices
+  )
+
+  id_choices <- catalogue_data %>%
+    filter(series == current_desc, series_type == current_type, table_title == current_table) %>%
+    pull(series_id) %>%
+    unique() %>%
+    stats::na.omit()
+  current_ids <- resolve_valid_multi_choice(
+    current_values$ids,
+    restored_spec$abs_id,
+    id_choices
+  )
+
+  list(
+    catalogue = current_catalogue,
+    catalogue_data = catalogue_data,
+    desc_choices = desc_choices,
+    desc = current_desc,
+    type_choices = type_choices,
+    series_type = current_type,
+    table_choices = table_choices,
+    table = current_table,
+    id_choices = id_choices,
+    ids = current_ids
+  )
 }
 
 resolve_distinct_choice_pair <- function(primary_value, secondary_value, choices = character()) {
@@ -423,6 +516,11 @@ restored_series_spec <- function(session, index) {
 series_source_controls_ui <- function(input, session, index, source_value = "ABS CPI", restored_spec = NULL) {
   default_cpi_series <- if (index == 1) "All groups CPI" else character()
 
+  provider_entry <- provider_registry_entry(source_value)
+  if (!is.null(provider_entry) && is.function(provider_entry$controls_ui)) {
+    return(provider_entry$controls_ui(input, session, index, restored_spec))
+  }
+
   if (identical(source_value, "FRED")) {
     current_series <- input[[series_input_id(index, "fred_series")]] %||% restored_spec$fred_series %||% "UNRATE"
     vintage_mode <- input[[series_input_id(index, "fred_vintage_mode")]] %||% restored_spec$fred_vintage_mode %||% "current"
@@ -525,69 +623,16 @@ series_source_controls_ui <- function(input, session, index, source_value = "ABS
     return(do.call(tagList, controls))
   }
 
-  if (identical(source_value, "rba")) {
-    current_table <- input[[series_input_id(index, "rba_table")]] %||% restored_spec$rba_table %||% rba_tables[[1]]
-    table_choices <- rba_series[[current_table]] %||% rba_series[[1]]
-
-    return(
-      tagList(
-        compact_single_choice_input(
-          series_input_id(index, "rba_table"),
-          "RBA table",
-          choices = rba_table_choices,
-          selected = current_table
-        ),
-        selectizeInput(
-          series_input_id(index, "rba_desc"),
-          "RBA series",
-          choices = table_choices,
-          selected = input[[series_input_id(index, "rba_desc")]] %||% restored_spec$rba_desc %||% table_choices[1],
-          multiple = TRUE
-        )
-      )
-    )
-  }
-
   if (identical(source_value, "abs")) {
-    current_catalogue <- resolve_valid_single_choice(
-      input[[series_input_id(index, "abs_catalogue")]],
-      restored_spec$abs_catalogue,
-      abs_cat
-    )
-    catalogue_index <- match(current_catalogue, abs_cat)
-    catalogue_data <- abs_ref[[catalogue_index]] %||% abs_ref[[1]]
-    desc_choices <- unique(catalogue_data$series)
-    current_desc <- resolve_valid_single_choice(
-      input[[series_input_id(index, "abs_desc")]],
-      restored_spec$abs_desc,
-      desc_choices
-    )
-    type_choices <- catalogue_data %>%
-      filter(series == current_desc) %>%
-      pull(series_type) %>%
-      unique()
-    current_type <- resolve_valid_single_choice(
-      input[[series_input_id(index, "abs_series_type")]],
-      restored_spec$abs_series_type,
-      type_choices
-    )
-    table_choices <- catalogue_data %>%
-      filter(series == current_desc, series_type == current_type) %>%
-      pull(table_title) %>%
-      unique()
-    current_table <- resolve_valid_single_choice(
-      input[[series_input_id(index, "abs_table")]],
-      restored_spec$abs_table,
-      table_choices
-    )
-    id_choices <- catalogue_data %>%
-      filter(series == current_desc, series_type == current_type, table_title == current_table) %>%
-      pull(series_id) %>%
-      unique()
-    current_ids <- resolve_valid_multi_choice(
-      input[[series_input_id(index, "abs_id")]],
-      restored_spec$abs_id,
-      id_choices
+    abs_state <- resolve_abs_control_state(
+      current_values = list(
+        catalogue = input[[series_input_id(index, "abs_catalogue")]],
+        desc = input[[series_input_id(index, "abs_desc")]],
+        type = input[[series_input_id(index, "abs_series_type")]],
+        table = input[[series_input_id(index, "abs_table")]],
+        ids = input[[series_input_id(index, "abs_id")]]
+      ),
+      restored_spec = restored_spec
     )
 
     return(
@@ -596,31 +641,31 @@ series_source_controls_ui <- function(input, session, index, source_value = "ABS
           series_input_id(index, "abs_catalogue"),
           "ABS catalogue",
           choices = abs_cat,
-          selected = current_catalogue
+          selected = abs_state$catalogue
         ),
         selectizeInput(
           series_input_id(index, "abs_desc"),
           "ABS series description",
-          choices = desc_choices,
-          selected = current_desc
+          choices = seed_selectize_choices(abs_state$desc),
+          selected = abs_state$desc
         ),
         compact_single_choice_input(
           series_input_id(index, "abs_series_type"),
           "ABS series type",
-          choices = type_choices,
-          selected = current_type
+          choices = abs_state$type_choices,
+          selected = abs_state$series_type
         ),
         compact_single_choice_input(
           series_input_id(index, "abs_table"),
           "ABS table",
-          choices = table_choices,
-          selected = current_table
+          choices = abs_state$table_choices,
+          selected = abs_state$table
         ),
         selectizeInput(
           series_input_id(index, "abs_id"),
           "ABS series ID",
-          choices = id_choices,
-          selected = current_ids,
+          choices = seed_selectize_choices(abs_state$ids),
+          selected = abs_state$ids,
           options = list(create = TRUE),
           multiple = TRUE
         )
@@ -641,6 +686,8 @@ series_source_controls_ui <- function(input, session, index, source_value = "ABS
 }
 
 register_series_dependencies <- function(input, output, session, index) {
+  provider_registry_register_dependencies(input, output, session, index)
+
   output[[series_source_controls_id(index)]] <- renderUI({
     req(series_enabled(input, index))
     source_value <- input[[series_input_id(index, "source")]] %||% "ABS CPI"
@@ -653,45 +700,21 @@ register_series_dependencies <- function(input, output, session, index) {
     series_source_controls_ui(input, session, index, source_value, restored_spec_value)
   })
 
-  observeEvent(input[[series_input_id(index, "rba_table")]], {
-    table_value <- input[[series_input_id(index, "rba_table")]]
-    series_choices <- rba_series[[table_value]] %||% character()
-
-    updateSelectizeInput(
-      session,
-      series_input_id(index, "rba_desc"),
-      choices = series_choices,
-      selected = series_choices[1],
-      server = TRUE
-    )
-  }, ignoreInit = FALSE)
-
   observeEvent(input[[series_input_id(index, "abs_catalogue")]], {
-    catalogue_value <- input[[series_input_id(index, "abs_catalogue")]]
-    if (is.null(catalogue_value) || !length(catalogue_value)) {
-      return(invisible(NULL))
-    }
-    catalogue_index <- match(catalogue_value, abs_cat)
-    if (is.na(catalogue_index) || catalogue_index < 1) {
-      return(invisible(NULL))
-    }
-    catalogue_data <- abs_ref[[catalogue_index]] %||% abs_ref[[1]]
-    desc_choices <- catalogue_data %>%
-      pull(series) %>%
-      unique() %>%
-      na.omit()
     restored_spec_value <- restored_series_spec(session, index)
-    selected_desc <- resolve_valid_single_choice(
-      input[[series_input_id(index, "abs_desc")]],
-      restored_spec_value$abs_desc %||% character(),
-      desc_choices
+    abs_state <- resolve_abs_control_state(
+      current_values = list(
+        catalogue = input[[series_input_id(index, "abs_catalogue")]],
+        desc = input[[series_input_id(index, "abs_desc")]]
+      ),
+      restored_spec = restored_spec_value
     )
 
     updateSelectizeInput(
       session,
       series_input_id(index, "abs_desc"),
-      choices = desc_choices,
-      selected = selected_desc,
+      choices = abs_state$desc_choices,
+      selected = abs_state$desc,
       server = TRUE
     )
   }, ignoreInit = FALSE)
@@ -704,34 +727,21 @@ register_series_dependencies <- function(input, output, session, index) {
       )
     },
     {
-      catalogue_value <- input[[series_input_id(index, "abs_catalogue")]]
-      desc_value <- input[[series_input_id(index, "abs_desc")]]
-      if (is.null(catalogue_value) || !length(catalogue_value) || is.null(desc_value) || !length(desc_value)) {
-        return(invisible(NULL))
-      }
-      catalogue_index <- match(catalogue_value, abs_cat)
-      if (is.na(catalogue_index) || catalogue_index < 1) {
-        return(invisible(NULL))
-      }
-      catalogue_data <- abs_ref[[catalogue_index]] %||% abs_ref[[1]]
-
-      type_choices <- catalogue_data %>%
-        filter(series == desc_value) %>%
-        pull(series_type) %>%
-        unique() %>%
-        na.omit()
       restored_spec_value <- restored_series_spec(session, index)
-      selected_type <- resolve_valid_single_choice(
-        input[[series_input_id(index, "abs_series_type")]],
-        restored_spec_value$abs_series_type %||% character(),
-        type_choices
+      abs_state <- resolve_abs_control_state(
+        current_values = list(
+          catalogue = input[[series_input_id(index, "abs_catalogue")]],
+          desc = input[[series_input_id(index, "abs_desc")]],
+          type = input[[series_input_id(index, "abs_series_type")]]
+        ),
+        restored_spec = restored_spec_value
       )
 
       updateSelectInput(
         session,
         series_input_id(index, "abs_series_type"),
-        choices = type_choices,
-        selected = selected_type
+        choices = abs_state$type_choices,
+        selected = abs_state$series_type
       )
     },
     ignoreInit = FALSE
@@ -746,35 +756,22 @@ register_series_dependencies <- function(input, output, session, index) {
       )
     },
     {
-      catalogue_value <- input[[series_input_id(index, "abs_catalogue")]]
-      desc_value <- input[[series_input_id(index, "abs_desc")]]
-      type_value <- input[[series_input_id(index, "abs_series_type")]]
-      if (is.null(catalogue_value) || !length(catalogue_value) || is.null(desc_value) || !length(desc_value) || is.null(type_value) || !length(type_value)) {
-        return(invisible(NULL))
-      }
-      catalogue_index <- match(catalogue_value, abs_cat)
-      if (is.na(catalogue_index) || catalogue_index < 1) {
-        return(invisible(NULL))
-      }
-      catalogue_data <- abs_ref[[catalogue_index]] %||% abs_ref[[1]]
-
-      table_choices <- catalogue_data %>%
-        filter(series == desc_value, series_type == type_value) %>%
-        pull(table_title) %>%
-        unique() %>%
-        na.omit()
       restored_spec_value <- restored_series_spec(session, index)
-      selected_table <- resolve_valid_single_choice(
-        input[[series_input_id(index, "abs_table")]],
-        restored_spec_value$abs_table %||% character(),
-        table_choices
+      abs_state <- resolve_abs_control_state(
+        current_values = list(
+          catalogue = input[[series_input_id(index, "abs_catalogue")]],
+          desc = input[[series_input_id(index, "abs_desc")]],
+          type = input[[series_input_id(index, "abs_series_type")]],
+          table = input[[series_input_id(index, "abs_table")]]
+        ),
+        restored_spec = restored_spec_value
       )
 
       updateSelectInput(
         session,
         series_input_id(index, "abs_table"),
-        choices = table_choices,
-        selected = selected_table
+        choices = abs_state$table_choices,
+        selected = abs_state$table
       )
     },
     ignoreInit = FALSE
@@ -790,39 +787,23 @@ register_series_dependencies <- function(input, output, session, index) {
       )
     },
     {
-      catalogue_value <- input[[series_input_id(index, "abs_catalogue")]]
-      desc_value <- input[[series_input_id(index, "abs_desc")]]
-      type_value <- input[[series_input_id(index, "abs_series_type")]]
-      table_value <- input[[series_input_id(index, "abs_table")]]
-      if (is.null(catalogue_value) || !length(catalogue_value) || is.null(desc_value) || !length(desc_value) || is.null(type_value) || !length(type_value) || is.null(table_value) || !length(table_value)) {
-        return(invisible(NULL))
-      }
-      catalogue_index <- match(catalogue_value, abs_cat)
-      if (is.na(catalogue_index) || catalogue_index < 1) {
-        return(invisible(NULL))
-      }
-      catalogue_data <- abs_ref[[catalogue_index]] %||% abs_ref[[1]]
-
-      id_choices <- catalogue_data %>%
-        filter(
-          series == desc_value,
-          series_type == type_value,
-          table_title == table_value
-        ) %>%
-        pull(series_id) %>%
-        na.omit()
       restored_spec_value <- restored_series_spec(session, index)
-      selected_ids <- resolve_valid_multi_choice(
-        input[[series_input_id(index, "abs_id")]],
-        restored_spec_value$abs_id %||% character(),
-        id_choices
+      abs_state <- resolve_abs_control_state(
+        current_values = list(
+          catalogue = input[[series_input_id(index, "abs_catalogue")]],
+          desc = input[[series_input_id(index, "abs_desc")]],
+          type = input[[series_input_id(index, "abs_series_type")]],
+          table = input[[series_input_id(index, "abs_table")]],
+          ids = input[[series_input_id(index, "abs_id")]]
+        ),
+        restored_spec = restored_spec_value
       )
 
       updateSelectizeInput(
         session,
         series_input_id(index, "abs_id"),
-        choices = id_choices,
-        selected = selected_ids,
+        choices = abs_state$id_choices,
+        selected = abs_state$ids,
         server = TRUE
       )
     },
@@ -933,6 +914,15 @@ series_spec_from_input <- function(input, index, transform_profile = default_tra
   }
 
   source_value <- input[[series_input_id(index, "source")]] %||% "ABS CPI"
+
+  provider_entry <- provider_registry_entry(source_value)
+  if (!is.null(provider_entry) && is.function(provider_entry$spec_from_input)) {
+    provider_spec <- provider_entry$spec_from_input(input, index, transform_profile, restored_spec)
+    if (!is.null(provider_spec)) {
+      return(provider_spec)
+    }
+  }
+
   spec <- list(
     index = index,
     source = source_value,
@@ -969,20 +959,22 @@ series_spec_from_input <- function(input, index, transform_profile = default_tra
     }
   }
 
-  if (identical(source_value, "rba")) {
-    spec$rba_table <- input[[series_input_id(index, "rba_table")]] %||% rba_tables[[1]]
-    spec$rba_desc <- input[[series_input_id(index, "rba_desc")]]
-    if (length(spec$rba_desc) == 0) {
-      return(NULL)
-    }
-  }
-
   if (identical(source_value, "abs")) {
-    spec$abs_catalogue <- input[[series_input_id(index, "abs_catalogue")]] %||% abs_cat[[1]]
-    spec$abs_desc <- input[[series_input_id(index, "abs_desc")]] %||% unique(abs_ref[[1]]$series)[1]
-    spec$abs_series_type <- input[[series_input_id(index, "abs_series_type")]] %||% unique(abs_ref[[1]]$series_type)[1]
-    spec$abs_table <- input[[series_input_id(index, "abs_table")]] %||% unique(abs_ref[[1]]$table_title)[1]
-    spec$abs_id <- input[[series_input_id(index, "abs_id")]]
+    abs_state <- resolve_abs_control_state(
+      current_values = list(
+        catalogue = input[[series_input_id(index, "abs_catalogue")]],
+        desc = input[[series_input_id(index, "abs_desc")]],
+        type = input[[series_input_id(index, "abs_series_type")]],
+        table = input[[series_input_id(index, "abs_table")]],
+        ids = input[[series_input_id(index, "abs_id")]]
+      ),
+      restored_spec = restored_spec
+    )
+    spec$abs_catalogue <- abs_state$catalogue
+    spec$abs_desc <- abs_state$desc
+    spec$abs_series_type <- abs_state$series_type
+    spec$abs_table <- abs_state$table
+    spec$abs_id <- abs_state$ids
     if (length(spec$abs_id) == 0) {
       return(NULL)
     }
@@ -1163,17 +1155,27 @@ normalize_series_spec <- function(spec) {
     normalized_spec$dbnomics_series <- trimws(spec$dbnomics_series %||% "")
   }
 
-  if (identical(normalized_spec$source, "rba")) {
-    normalized_spec$rba_table <- spec$rba_table %||% rba_tables[[1]]
-    normalized_spec$rba_desc <- spec$rba_desc %||% character()
+  provider_entry <- provider_registry_entry(normalized_spec$source)
+  if (!is.null(provider_entry) && is.function(provider_entry$normalize_spec)) {
+    return(provider_entry$normalize_spec(spec, normalized_spec))
   }
 
   if (identical(normalized_spec$source, "abs")) {
-    normalized_spec$abs_catalogue <- spec$abs_catalogue %||% abs_cat[[1]]
-    normalized_spec$abs_desc <- spec$abs_desc %||% unique(abs_ref[[1]]$series)[1]
-    normalized_spec$abs_series_type <- spec$abs_series_type %||% unique(abs_ref[[1]]$series_type)[1]
-    normalized_spec$abs_table <- spec$abs_table %||% unique(abs_ref[[1]]$table_title)[1]
-    normalized_spec$abs_id <- spec$abs_id %||% character()
+    abs_state <- resolve_abs_control_state(
+      current_values = list(
+        catalogue = spec$abs_catalogue,
+        desc = spec$abs_desc,
+        type = spec$abs_series_type,
+        table = spec$abs_table,
+        ids = spec$abs_id
+      ),
+      restored_spec = spec
+    )
+    normalized_spec$abs_catalogue <- abs_state$catalogue
+    normalized_spec$abs_desc <- abs_state$desc
+    normalized_spec$abs_series_type <- abs_state$series_type
+    normalized_spec$abs_table <- abs_state$table
+    normalized_spec$abs_id <- abs_state$ids
   }
 
   if (identical(normalized_spec$source, "Analysis result") || identical(normalized_spec$source, "analysis_result")) {
@@ -1316,16 +1318,17 @@ query_series_history <- function(spec) {
     return(db_data(series = spec$dbnomics_series))
   }
 
-  if (identical(spec$source, "rba")) {
-    return(rba_data(series = spec$rba_desc))
-  }
-
   if (identical(spec$source, "abs")) {
     return(abs_data(series = spec$abs_id))
   }
 
   if (identical(spec$source, "analysis_result")) {
     return(spec$analysis_data %||% tibble::tibble())
+  }
+
+  provider_entry <- provider_registry_entry(spec$source)
+  if (!is.null(provider_entry) && is.function(provider_entry$query_series_history)) {
+    return(provider_entry$query_series_history(spec))
   }
 
   tibble::tibble()
@@ -2554,50 +2557,42 @@ restore_series_spec <- function(session, index, spec = NULL) {
     }
 
     if (identical(spec$source, "abs")) {
-      catalogue_index <- match(spec$abs_catalogue, abs_cat)
-      catalogue_data <- abs_ref[[catalogue_index]] %||% abs_ref[[1]]
-      desc_choices <- unique(catalogue_data$series)
-      type_choices <- catalogue_data %>%
-        filter(series == spec$abs_desc) %>%
-        pull(series_type) %>%
-        unique()
-      table_choices <- catalogue_data %>%
-        filter(series == spec$abs_desc, series_type == spec$abs_series_type) %>%
-        pull(table_title) %>%
-        unique()
-      id_choices <- catalogue_data %>%
-        filter(
-          series == spec$abs_desc,
-          series_type == spec$abs_series_type,
-          table_title == spec$abs_table
-        ) %>%
-        pull(series_id)
+      abs_state <- resolve_abs_control_state(
+        current_values = list(
+          catalogue = spec$abs_catalogue,
+          desc = spec$abs_desc,
+          type = spec$abs_series_type,
+          table = spec$abs_table,
+          ids = spec$abs_id
+        ),
+        restored_spec = spec
+      )
 
-      updateSelectInput(session, series_input_id(index, "abs_catalogue"), selected = spec$abs_catalogue)
+      updateSelectInput(session, series_input_id(index, "abs_catalogue"), selected = abs_state$catalogue)
       updateSelectizeInput(
         session,
         series_input_id(index, "abs_desc"),
-        choices = desc_choices,
-        selected = spec$abs_desc,
+        choices = abs_state$desc_choices,
+        selected = abs_state$desc,
         server = TRUE
       )
       updateSelectInput(
         session,
         series_input_id(index, "abs_series_type"),
-        choices = type_choices,
-        selected = spec$abs_series_type
+        choices = abs_state$type_choices,
+        selected = abs_state$series_type
       )
       updateSelectInput(
         session,
         series_input_id(index, "abs_table"),
-        choices = table_choices,
-        selected = spec$abs_table
+        choices = abs_state$table_choices,
+        selected = abs_state$table
       )
       updateSelectizeInput(
         session,
         series_input_id(index, "abs_id"),
-        choices = id_choices,
-        selected = spec$abs_id,
+        choices = abs_state$id_choices,
+        selected = abs_state$ids,
         server = TRUE
       )
     }

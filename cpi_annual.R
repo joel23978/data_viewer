@@ -23,30 +23,92 @@ Sys.setenv(R_READABS_PATH = here("data_abs"))
 ## update cpi data
 #source(here::here("cpi_annual_update_data.R"))
 
-# load from disk to reduce run time
-load(file = here("data", "cpi_data_all.Rda"))
-cpi_data <- cpi_data_all
-#rm(cpi_data) ## for testing
-
-
-tmp <- sort(unique(cpi_data_all$class_1_name[cpi_data_all$class_1==1]))
-name_list <- list()
-for ( i in 1: length(tmp)) {
-  
-  name_list[[i]] <- unique(cpi_data_all$class_2_name[
-    cpi_data_all$class_2==1 &
-      cpi_data_all$class_1_name== tmp[i]
-  ])
+get_cpi_data_all <- function() {
+  data_viewer_cache_get(
+    "cpi_data_all",
+    function() data_viewer_load_rda(here("data", "cpi_data_all.Rda"), "cpi_data_all"),
+    "Load CPI data"
+  )
 }
-names(name_list) <- tmp
 
-region_list <- sort(unique(cpi_data_all$region))
+get_cpi_data <- function() {
+  data_viewer_cache_get(
+    "cpi_data",
+    function() get_cpi_data_all(),
+    "Materialize CPI data"
+  )
+}
 
+get_name_list <- function() {
+  data_viewer_cache_get(
+    "cpi_name_list",
+    function() {
+      cpi_data_all <- get_cpi_data_all()
+      tmp <- sort(unique(cpi_data_all$class_1_name[cpi_data_all$class_1 == 1]))
+      output <- vector("list", length(tmp))
 
-cat1 <- sort(unique(cpi_data_all$class_1_name[cpi_data_all$class_0==1]))
-cat2 <- sort(unique(cpi_data_all$class_1_name[cpi_data_all$class_1==1]))
-cat3 <- sort(unique(cpi_data_all$class_2_name[cpi_data_all$class_2==1]))
-cat4 <- sort(unique(cpi_data_all$class_3_name[cpi_data_all$class_3==1]))
+      for (i in seq_along(tmp)) {
+        output[[i]] <- unique(cpi_data_all$class_2_name[
+          cpi_data_all$class_2 == 1 &
+            cpi_data_all$class_1_name == tmp[[i]]
+        ])
+      }
+
+      names(output) <- tmp
+      output
+    },
+    "Build CPI category names"
+  )
+}
+
+get_region_list <- function() {
+  data_viewer_cache_get(
+    "cpi_region_list",
+    function() sort(unique(get_cpi_data_all()$region)),
+    "Build CPI region list"
+  )
+}
+
+get_cat1 <- function() {
+  data_viewer_cache_get(
+    "cpi_cat1",
+    function() sort(unique(get_cpi_data_all()$class_1_name[get_cpi_data_all()$class_0 == 1])),
+    "Build CPI cat1"
+  )
+}
+
+get_cat2 <- function() {
+  data_viewer_cache_get(
+    "cpi_cat2",
+    function() sort(unique(get_cpi_data_all()$class_1_name[get_cpi_data_all()$class_1 == 1])),
+    "Build CPI cat2"
+  )
+}
+
+get_cat3 <- function() {
+  data_viewer_cache_get(
+    "cpi_cat3",
+    function() sort(unique(get_cpi_data_all()$class_2_name[get_cpi_data_all()$class_2 == 1])),
+    "Build CPI cat3"
+  )
+}
+
+get_cat4 <- function() {
+  data_viewer_cache_get(
+    "cpi_cat4",
+    function() sort(unique(get_cpi_data_all()$class_3_name[get_cpi_data_all()$class_3 == 1])),
+    "Build CPI cat4"
+  )
+}
+
+data_viewer_register_active_binding("cpi_data_all", function() get_cpi_data_all())
+data_viewer_register_active_binding("cpi_data", function() get_cpi_data())
+data_viewer_register_active_binding("name_list", function() get_name_list())
+data_viewer_register_active_binding("region_list", function() get_region_list())
+data_viewer_register_active_binding("cat1", function() get_cat1())
+data_viewer_register_active_binding("cat2", function() get_cat2())
+data_viewer_register_active_binding("cat3", function() get_cat3())
+data_viewer_register_active_binding("cat4", function() get_cat4())
 
 
 ## functions ----

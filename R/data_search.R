@@ -19,6 +19,10 @@ empty_recent_search_index <- function() {
   empty_search_index()
 }
 
+if (!exists("provider_registry_entry", mode = "function")) {
+  source(here::here("R", "providers.R"))
+}
+
 data_search_env <- new.env(parent = emptyenv())
 
 invalidate_search_index_cache <- function() {
@@ -725,6 +729,12 @@ build_cpi_search_index <- function() {
 }
 
 build_rba_search_index <- function() {
+  provider_search_index <- provider_registry_search_index_builder("rba")
+
+  if (is.function(provider_search_index)) {
+    return(provider_search_index())
+  }
+
   rba_browse_data %>%
     distinct(table_no, table_title, description, series_id, frequency) %>%
     transmute(
@@ -1138,6 +1148,11 @@ series_slot_from_search_target <- function(builder_state, target_value) {
 }
 
 search_result_series_spec <- function(search_result, index) {
+  provider_spec <- provider_registry_search_result_to_spec(search_result$source[[1]] %||% "", search_result, index)
+  if (!is.null(provider_spec)) {
+    return(provider_spec)
+  }
+
   spec <- search_result$load_payload[[1]]
   spec$index <- index
   spec

@@ -1,13 +1,14 @@
 # app.R
 
 source(here::here("R", "bootstrap.R"))
-source(here::here("cpi_annual.R"))
-source(here::here("external_data.R"))
-source(here::here("R", "chart_helpers.R"))
-source(here::here("R", "data_search.R"))
-source(here::here("R", "chart_library.R"))
-source(here::here("R", "analysis_helpers.R"))
-source(here::here("R", "main_app.R"))
+data_viewer_source(here::here("cpi_annual.R"), "cpi_annual.R")
+data_viewer_source(here::here("external_data.R"), "external_data.R")
+data_viewer_source(here::here("R", "providers.R"), "R/providers.R")
+data_viewer_source(here::here("R", "chart_helpers.R"), "R/chart_helpers.R")
+data_viewer_source(here::here("R", "data_search.R"), "R/data_search.R")
+data_viewer_source(here::here("R", "chart_library.R"), "R/chart_library.R")
+data_viewer_source(here::here("R", "analysis_helpers.R"), "R/analysis_helpers.R")
+data_viewer_source(here::here("R", "main_app.R"), "R/main_app.R")
 
 if (!"assets" %in% names(shiny::resourcePaths())) {
   shiny::addResourcePath("assets", here::here("brand"))

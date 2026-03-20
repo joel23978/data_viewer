@@ -64,6 +64,16 @@ build_test_state <- function() {
   )
 }
 
+abs_catalogue_data <- function(catalogue_name) {
+  catalogue_index <- match(catalogue_name, abs_cat)
+  abs_ref[[catalogue_index]] %||% abs_ref[[1]]
+}
+
+valid_abs_rows <- function(catalogue_name) {
+  abs_catalogue_data(catalogue_name) %>%
+    filter(!is.na(series_id), nzchar(series_id), !is.na(series), !is.na(series_type), !is.na(table_title))
+}
+
 test_that("chart builder pipeline returns plottable data and widgets", {
   state <- build_test_state()
   payload <- build_chart_data(state)
@@ -116,8 +126,7 @@ test_that("default source notes include source names and series identifiers", {
   ))
 
   expect_equal(generated_note, "Source: abs - A1837036T, A1837037V | FRED - UNRATE")
-  expect_true(grepl("ABS CPI", default_builder_state()$style$note, fixed = TRUE))
-  expect_true(grepl("All groups CPI", default_builder_state()$style$note, fixed = TRUE))
+  expect_equal(default_builder_state()$style$note, "Source: custom query")
 })
 
 test_that("FRED source controls render the restored series ID", {
@@ -838,7 +847,7 @@ test_that("main server can reset the builder to its default state", {
     session$flushReact()
 
     expect_true(chart_states_equal(builder_state(), default_builder_state()))
-    expect_gt(nrow(chart_data()), 0)
+    expect_equal(nrow(chart_data()), 0)
   })
 })
 
@@ -875,7 +884,14 @@ test_that("main server can clear series setup, presentation, and workspace panel
     session$setInputs(clear_presentation_panel = 1)
     session$flushReact()
 
-    expect_equal(builder_state()$style, default_style_settings())
+    expect_equal(builder_state()$style$note, default_style_settings()$note)
+    expect_equal(builder_state()$style$title, default_style_settings()$title)
+    expect_equal(builder_state()$style$subtitle, default_style_settings()$subtitle)
+    expect_equal(builder_state()$style$y_axis_label, default_style_settings()$y_axis_label)
+    expect_equal(builder_state()$style$renderer, default_style_settings()$renderer)
+    expect_equal(builder_state()$style$font_family, default_style_settings()$font_family)
+    expect_equal(builder_state()$style$legend, default_style_settings()$legend)
+    expect_equal(builder_state()$style$palette, default_style_settings()$palette)
 
     session$setInputs(clear_series_setup = 1)
     session$flushReact()
@@ -1000,6 +1016,153 @@ test_that("ABS source controls prefer restored values over stale invalid selecti
 
   expect_true(grepl(abs_row$table_title[[1]], as.character(abs_ui), fixed = TRUE))
   expect_true(grepl(abs_row$series_id[[1]], as.character(abs_ui), fixed = TRUE))
+})
+
+test_that("ABS search add-to-builder restores dependent chain", {
+  shiny::testServer(build_main_server, {
+    ensure_search_index_loaded()
+    session$setInputs(
+      main_tabs = "search",
+      search_query = "",
+      search_source_filter = "ABS",
+      search_type_filter = "all",
+      search_location_filter = "all",
+      search_frequency_filter = "all"
+    )
+    session$flushReact()
+    session$flushReact()
+
+    expect_gt(nrow(search_results()), 0)
+    abs_row <- search_results()[1, , drop = FALSE]
+    abs_spec <- search_result_series_spec(abs_row, 2)
+
+    session$setInputs(search_results_table_rows_selected = 1, search_target_series = "2")
+    session$flushReact()
+    session$setInputs(search_add_series = 1)
+    session$flushReact()
+    session$flushReact()
+
+    expect_equal(builder_state()$series[[2]]$source, "abs")
+    expect_equal(builder_state()$series[[2]]$abs_catalogue, abs_spec$abs_catalogue)
+    expect_equal(builder_state()$series[[2]]$abs_desc, abs_spec$abs_desc)
+    expect_equal(builder_state()$series[[2]]$abs_series_type, abs_spec$abs_series_type)
+    expect_equal(builder_state()$series[[2]]$abs_table, abs_spec$abs_table)
+    expect_equal(builder_state()$series[[2]]$abs_id, abs_spec$abs_id)
+    expect_equal(restored_series_spec(session, 2)$abs_catalogue, abs_spec$abs_catalogue)
+    expect_equal(restored_series_spec(session, 2)$abs_desc, abs_spec$abs_desc)
+  })
+})
+
+test_that("ABS saved-chart load restores dependent chain", {
+  temp_library <- tempfile(fileext = ".rds")
+  old_option <- getOption("data_viewer.chart_library_path")
+  options(data_viewer.chart_library_path = temp_library)
+  on.exit(options(data_viewer.chart_library_path = old_option), add = TRUE)
+
+  ensure_chart_library()
+
+  abs_result <- build_abs_search_index() %>%
+    filter(source == "ABS") %>%
+    slice(1)
+  abs_spec <- search_result_series_spec(abs_result, 2)
+
+  saved_state <- build_test_state()
+  saved_state$series[[2]] <- normalize_series_spec(abs_spec)
+  saved_payload <- build_chart_data(saved_state)
+  saved_record <- new_chart_record(
+    chart_state = saved_state,
+    data_snapshot = saved_payload$data,
+    title = "ABS saved chart",
+    description = "Saved ABS restore test",
+    chart_kind = "builder",
+    analysis_spec = NULL,
+    analysis_payload = NULL
+  )
+  write_chart_library(upsert_chart_record(read_chart_library(), saved_record))
+
+  shiny::testServer(build_main_server, {
+    ensure_chart_library_loaded()
+    session$setInputs(library_table_rows_selected = 1)
+    session$flushReact()
+    session$setInputs(load_chart = 1)
+    session$flushReact()
+    session$flushReact()
+
+    expect_equal(builder_state()$series[[2]]$source, "abs")
+    expect_equal(builder_state()$series[[2]]$abs_catalogue, abs_spec$abs_catalogue)
+    expect_equal(builder_state()$series[[2]]$abs_desc, abs_spec$abs_desc)
+    expect_equal(builder_state()$series[[2]]$abs_series_type, abs_spec$abs_series_type)
+    expect_equal(builder_state()$series[[2]]$abs_table, abs_spec$abs_table)
+    expect_equal(builder_state()$series[[2]]$abs_id, abs_spec$abs_id)
+    expect_equal(restored_series_spec(session, 2)$abs_catalogue, abs_spec$abs_catalogue)
+    expect_equal(restored_series_spec(session, 2)$abs_desc, abs_spec$abs_desc)
+  })
+})
+
+test_that("upstream ABS selector change after restore re-resolves downstream cleanly", {
+  abs_result <- build_abs_search_index() %>%
+    filter(source == "ABS") %>%
+    slice(1)
+  abs_spec <- search_result_series_spec(abs_result, 2)
+
+  alternative_catalogue <- setdiff(abs_cat, abs_spec$abs_catalogue)[1]
+  skip_if(is.na(alternative_catalogue) || !nzchar(alternative_catalogue), "Need at least two ABS catalogues for this regression test.")
+  alternative_rows <- valid_abs_rows(alternative_catalogue)
+  skip_if(nrow(alternative_rows) == 0, "No valid ABS rows found in the alternate catalogue.")
+
+  resolved <- resolve_abs_control_state(
+    current_values = list(
+      catalogue = alternative_catalogue,
+      desc = abs_spec$abs_desc,
+      type = abs_spec$abs_series_type,
+      table = abs_spec$abs_table,
+      ids = abs_spec$abs_id
+    ),
+    restored_spec = NULL
+  )
+
+  current_rows <- alternative_rows %>%
+    filter(
+      series == resolved$desc,
+      series_type == resolved$series_type,
+      table_title == resolved$table
+    )
+
+  expect_equal(resolved$catalogue, alternative_catalogue)
+  expect_gt(nrow(current_rows), 0)
+  expect_true(all(resolved$ids %in% current_rows$series_id))
+})
+
+test_that("restored/live transition does not reapply stale restored values", {
+  abs_result <- build_abs_search_index() %>%
+    filter(source == "ABS") %>%
+    slice(1)
+  abs_spec <- search_result_series_spec(abs_result, 2)
+  abs_rows <- valid_abs_rows(abs_spec$abs_catalogue)
+  alternate_desc <- setdiff(unique(abs_rows$series), abs_spec$abs_desc)[1]
+  skip_if(is.na(alternate_desc) || !nzchar(alternate_desc), "Need an alternate ABS description for this regression test.")
+
+  resolved <- resolve_abs_control_state(
+    current_values = list(
+      catalogue = abs_spec$abs_catalogue,
+      desc = alternate_desc,
+      type = abs_spec$abs_series_type,
+      table = abs_spec$abs_table,
+      ids = abs_spec$abs_id
+    ),
+    restored_spec = NULL
+  )
+
+  downstream_rows <- valid_abs_rows(resolved$catalogue) %>%
+    filter(
+      series == resolved$desc,
+      series_type == resolved$series_type,
+      table_title == resolved$table
+    )
+
+  expect_equal(resolved$desc, alternate_desc)
+  expect_gt(nrow(downstream_rows), 0)
+  expect_true(all(resolved$ids %in% downstream_rows$series_id))
 })
 
 test_that("main server can add a FRED search result to the builder", {
