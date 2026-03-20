@@ -866,26 +866,13 @@ read_prebuilt_local_search_token_index <- function() {
   readRDS(LOCAL_SEARCH_TOKEN_INDEX_PATH)
 }
 
-filter_supported_local_search_index <- function(index) {
-  if (is.null(index) || nrow(index) == 0) {
-    return(index)
-  }
-
-  index %>%
-    filter(source != "ABS CPI")
-}
-
 load_prebuilt_local_search_assets <- function(force = FALSE) {
   if (force) {
     invalidate_local_search_asset_cache()
   }
 
   if (!exists("local_index", envir = data_search_env, inherits = FALSE)) {
-    assign(
-      "local_index",
-      filter_supported_local_search_index(read_prebuilt_local_search_index()),
-      envir = data_search_env
-    )
+    assign("local_index", read_prebuilt_local_search_index(), envir = data_search_env)
   }
 
   if (!exists("token_index", envir = data_search_env, inherits = FALSE)) {
