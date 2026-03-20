@@ -1884,6 +1884,8 @@ build_main_server <- function(input, output, session) {
 
   chartwell_title_slide_template_path <- function() {
     candidate_paths <- c(
+      here::here("brand", "chartwell-title-slide.pptx"),
+      here::here("brand", "chartwell-title-slide_widescreen.pptx"),
       here::here("chartwell-title-slide.pptx"),
       here::here("chartwell-title-slide_widescreen.pptx")
     )
