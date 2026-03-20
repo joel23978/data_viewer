@@ -2060,6 +2060,24 @@ build_main_server <- function(input, output, session) {
       transmute(
         Title = title,
         Source = source,
+        `Series ID` = dplyr::case_when(
+          source == "ABS" ~ vapply(
+            load_payload,
+            function(payload) {
+              trimws(payload$abs_id %||% "")
+            },
+            character(1)
+          ),
+          source == "FRED" ~ vapply(
+            load_payload,
+            function(payload) {
+              trimws(payload$fred_series %||% "")
+            },
+            character(1)
+          ),
+          source == "RBA" ~ sub("^rba::", "", search_id %||% ""),
+          TRUE ~ ""
+        ),
         Type = type_code_label(type_code),
         Location = location_code_label(location_code),
         Frequency = frequency,
@@ -2077,8 +2095,9 @@ build_main_server <- function(input, output, session) {
         scrollX = TRUE,
         autoWidth = TRUE,
         columnDefs = list(
-          list(width = "30%", targets = 0),
-          list(width = "34%", targets = 7)
+          list(width = "28%", targets = 0),
+          list(width = "12%", targets = 2),
+          list(width = "30%", targets = 8)
         )
       )
     )
