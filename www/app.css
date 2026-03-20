@@ -719,6 +719,10 @@ textarea,
   padding: 11px 13px;
 }
 
+.search-toolbar__group--segmented {
+  padding-bottom: 4px;
+}
+
 .search-toolbar__group--compact {
   min-width: 0;
 }
@@ -756,10 +760,11 @@ textarea,
   width: 100%;
 }
 
+.search-toolbar-card .radio-group-buttons > .btn-group-container-sw,
 .search-toolbar-card .btn-group-container-sw {
   align-items: flex-start;
   display: flex;
-  margin-bottom: 0;
+  margin-bottom: 0 !important;
   margin-top: 0 !important;
   padding-top: 0 !important;
   width: 100%;

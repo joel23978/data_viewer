@@ -22,7 +22,8 @@ build_search_tab_ui <- function() {
         div(
           class = "search-toolbar__filters-grid",
           div(
-            class = "search-toolbar__group search-toolbar__group--wide",
+            class = "search-toolbar__group search-toolbar__group--segmented search-toolbar__group--wide",
+            style = "padding-bottom: 0;",
             div(
               class = "search-toolbar__group-label",
               "Source"
@@ -40,7 +41,8 @@ build_search_tab_ui <- function() {
             )
           ),
           div(
-            class = "search-toolbar__group search-toolbar__group--compact",
+            class = "search-toolbar__group search-toolbar__group--segmented search-toolbar__group--compact",
+            style = "padding-bottom: 0;",
             div(
               class = "search-toolbar__group-label",
               "FRED mode"
@@ -58,7 +60,8 @@ build_search_tab_ui <- function() {
             )
           ),
           div(
-            class = "search-toolbar__group",
+            class = "search-toolbar__group search-toolbar__group--segmented",
+            style = "padding-bottom: 0;",
             div(
               class = "search-toolbar__group-label",
               "Type"
@@ -76,7 +79,8 @@ build_search_tab_ui <- function() {
             )
           ),
           div(
-            class = "search-toolbar__group",
+            class = "search-toolbar__group search-toolbar__group--segmented",
+            style = "padding-bottom: 0;",
             div(
               class = "search-toolbar__group-label",
               "Location"
