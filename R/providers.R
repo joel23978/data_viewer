@@ -111,13 +111,14 @@ provider_registry_entries <- function() {
 
 source_catalog <- function() {
   tibble::tribble(
-    ~id, ~label, ~provider_id, ~builder_value, ~search_value, ~search_kind, ~builder_enabled, ~search_enabled, ~builder_default,
-    "recent", "Recent", NA_character_, NA_character_, "Recent", "recent", FALSE, TRUE, FALSE,
-    "fred", "FRED", "fred", "FRED", "FRED", "remote", TRUE, TRUE, FALSE,
-    "dbnomics", "DBnomics", "dbnomics", "dbnomics", "DBnomics", "remote", TRUE, TRUE, FALSE,
-    "rba", "RBA", "rba", "rba", "RBA", "local", TRUE, TRUE, FALSE,
-    "abs", "ABS", "abs", "abs", "ABS", "local", TRUE, TRUE, TRUE,
-    "analysis_result", "Analysis result", NA_character_, "analysis_result", NA_character_, "none", TRUE, FALSE, FALSE
+    ~id, ~label, ~provider_id, ~builder_value, ~search_value, ~search_kind, ~builder_enabled, ~search_enabled, ~builder_default, ~series_supported,
+    "recent", "Recent", NA_character_, NA_character_, "Recent", "recent", FALSE, TRUE, FALSE, TRUE,
+    "fred", "FRED", "fred", "FRED", "FRED", "remote", TRUE, TRUE, FALSE, TRUE,
+    "dbnomics", "DBnomics", "dbnomics", "dbnomics", "DBnomics", "remote", TRUE, TRUE, FALSE, TRUE,
+    "rba", "RBA", "rba", "rba", "RBA", "local", TRUE, TRUE, FALSE, TRUE,
+    "abs", "ABS", "abs", "abs", "ABS", "local", TRUE, TRUE, TRUE, TRUE,
+    "analysis_result", "Analysis result", NA_character_, "analysis_result", NA_character_, "none", TRUE, FALSE, FALSE, TRUE,
+    "abs_cpi", "ABS CPI", NA_character_, "ABS CPI", NA_character_, "none", FALSE, FALSE, FALSE, FALSE
   )
 }
 
@@ -233,6 +234,22 @@ source_catalog_supported_builder_values <- function() {
     filter(builder_enabled) %>%
     pull(builder_value) %>%
     unique()
+}
+
+source_catalog_supports_series_source <- function(source_value) {
+  source_text <- trimws(as.character(source_value %||% ""))
+
+  if (!nzchar(source_text)) {
+    return(FALSE)
+  }
+
+  catalog_entry <- source_catalog_entry(source_text)
+
+  if (is.null(catalog_entry) || nrow(catalog_entry) == 0) {
+    return(FALSE)
+  }
+
+  isTRUE(catalog_entry$series_supported[[1]])
 }
 
 provider_registry_search_controls_ui <- function(source_filter = "all") {

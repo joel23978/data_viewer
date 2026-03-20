@@ -134,6 +134,37 @@ test_that("saved-chart series are indexed as recent search results", {
   expect_true(all(vapply(recent_results$load_payload, function(payload) !is.null(payload$source), logical(1))))
 })
 
+test_that("unsupported saved-chart sources are filtered from library and recent search", {
+  temp_library <- tempfile(fileext = ".rds")
+  temp_presentation_library <- tempfile(fileext = ".rds")
+  old_option <- getOption("data_viewer.chart_library_path")
+  old_presentation_option <- getOption("data_viewer.chart_presentation_library_path")
+  options(data_viewer.chart_library_path = temp_library)
+  options(data_viewer.chart_presentation_library_path = temp_presentation_library)
+  on.exit(options(data_viewer.chart_library_path = old_option), add = TRUE)
+  on.exit(options(data_viewer.chart_presentation_library_path = old_presentation_option), add = TRUE)
+
+  ensure_chart_library()
+
+  supported_state <- build_test_state()
+  unsupported_state <- build_test_state()
+  unsupported_state$series[[1]]$source <- "ABS CPI"
+
+  payload <- build_chart_data(supported_state)
+  supported_record <- new_chart_record(supported_state, payload$data, title = "Supported chart")
+  unsupported_record <- new_chart_record(unsupported_state, payload$data, title = "Unsupported chart")
+  write_chart_library(dplyr::bind_rows(supported_record, unsupported_record))
+  invalidate_search_index_cache()
+
+  library_data <- read_chart_library()
+  recent_index <- build_recent_search_index()
+
+  expect_equal(nrow(library_data), 1)
+  expect_equal(library_data$title[[1]], "Supported chart")
+  expect_equal(attr(library_data, "unsupported_chart_count", exact = TRUE), 1)
+  expect_false(any(grepl("Unsupported chart", recent_index$summary, fixed = TRUE)))
+})
+
 test_that("FRED API search results are formatted and cached for the search tab", {
   withr::local_envvar(FRED_API_KEY = "test-key")
   original_fred_search_remote <- fred_search_remote

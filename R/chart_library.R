@@ -88,9 +88,9 @@ ensure_chart_library <- function() {
   invisible(path)
 }
 
-chart_state_uses_removed_source <- function(chart_state) {
+chart_state_has_unsupported_source <- function(chart_state) {
   active_series <- Filter(Negate(is.null), normalize_chart_state(chart_state)$series)
-  any(vapply(active_series, function(spec) identical(spec$source %||% "", "ABS CPI"), logical(1)))
+  any(vapply(active_series, function(spec) !source_catalog_supports_series_source(spec$source %||% ""), logical(1)))
 }
 
 read_chart_library <- function() {
@@ -115,15 +115,19 @@ read_chart_library <- function() {
       mutate(saved_at = as.POSIXct(saved_at, tz = Sys.timezone()))
   }
 
-  library_data %>%
+  library_data <- library_data %>%
     mutate(
       chart_kind = coalesce(as.character(chart_kind), "builder"),
       chart_state = lapply(chart_state, normalize_chart_state),
       data_snapshot = lapply(data_snapshot, restore_chart_snapshot),
       analysis_spec = lapply(analysis_spec, function(spec) spec %||% NULL),
       analysis_payload = lapply(analysis_payload, function(payload) payload %||% NULL)
-    ) %>%
-    filter(!vapply(chart_state, chart_state_uses_removed_source, logical(1)))
+    )
+
+  unsupported_rows <- vapply(library_data$chart_state, chart_state_has_unsupported_source, logical(1))
+  library_data <- library_data[!unsupported_rows, , drop = FALSE]
+  attr(library_data, "unsupported_chart_count") <- sum(unsupported_rows)
+  library_data
 }
 
 write_chart_library <- function(chart_library) {

@@ -37,7 +37,7 @@ test_that("provider registry resolves all supported provider seams", {
 test_that("source catalog drives builder sources and search filters", {
   catalog <- source_catalog()
 
-  expect_true(all(c("fred", "dbnomics", "rba", "abs", "recent", "analysis_result") %in% catalog$id))
+  expect_true(all(c("fred", "dbnomics", "rba", "abs", "recent", "analysis_result", "abs_cpi") %in% catalog$id))
   expect_equal(default_builder_source_value(), "abs")
   expect_equal(builder_source_choices()[["ABS"]], "abs")
   expect_equal(builder_source_choices()[["Analysis result"]], "analysis_result")
@@ -49,6 +49,9 @@ test_that("source catalog drives builder sources and search filters", {
   expect_true(search_filter_includes("all", local_search_source_values()))
   expect_true(search_filter_includes("ABS", local_search_source_values()))
   expect_false(search_filter_includes("ABS", remote_search_source_values()))
+  expect_false(source_catalog_supports_series_source("ABS CPI"))
+  expect_true(source_catalog_supports_series_source("FRED"))
+  expect_false(source_catalog_supports_series_source("Unknown legacy source"))
 })
 
 test_that("RBA registry controls and fetch dispatch round-trip cleanly", {

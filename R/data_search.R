@@ -756,7 +756,7 @@ build_recent_search_index <- function() {
 
     purrr::map_dfr(Filter(Negate(is.null), chart_state$series), function(spec) {
       normalized_spec <- normalize_series_spec(spec)
-      if (identical(normalized_spec$source %||% "", "ABS CPI")) {
+      if (!source_catalog_supports_series_source(normalized_spec$source %||% "")) {
         return(tibble::tibble())
       }
       series_title <- recent_series_title(normalized_spec)

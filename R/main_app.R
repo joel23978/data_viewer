@@ -2169,7 +2169,22 @@ build_main_server <- function(input, output, session) {
 
   ensure_chart_library_loaded <- function() {
     if (is.null(shiny::isolate(chart_library_store()))) {
-      chart_library_store(read_chart_library())
+      chart_library <- read_chart_library()
+      chart_library_store(chart_library)
+
+      unsupported_chart_count <- attr(chart_library, "unsupported_chart_count", exact = TRUE) %||% 0L
+      if (unsupported_chart_count > 0) {
+        showNotification(
+          sprintf(
+            "%s saved chart%s use unsupported data sources and %s hidden.",
+            unsupported_chart_count,
+            if (unsupported_chart_count == 1) "" else "s",
+            if (unsupported_chart_count == 1) "was" else "were"
+          ),
+          type = "warning",
+          duration = 6
+        )
+      }
     }
 
     invisible(shiny::isolate(chart_library_store()))
