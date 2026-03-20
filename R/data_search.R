@@ -695,6 +695,10 @@ search_remote_provider_responses <- function(query, source_filter = "all", searc
         search_contexts[[provider_id]] %||% list()
       )
 
+      if (identical(search_context$enabled, FALSE)) {
+        return(empty_search_response())
+      }
+
       provider_registry_remote_search_response(
         source_value = source_value,
         query = query,

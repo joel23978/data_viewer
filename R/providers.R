@@ -29,6 +29,9 @@ provider_registry <- function() {
       query_series_history = provider_fred_query_series_history,
       restore_controls = provider_fred_restore_controls,
       search_remote = provider_fred_search_remote,
+      search_controls_ui = provider_fred_search_controls_ui,
+      search_context_from_input = provider_fred_search_context_from_input,
+      show_search_controls_in_all = TRUE,
       search_result_series_id = provider_fred_search_result_series_id,
       recent_title = provider_fred_recent_title,
       default_label = provider_fred_default_label,
@@ -45,6 +48,9 @@ provider_registry <- function() {
       query_series_history = provider_dbnomics_query_series_history,
       restore_controls = provider_dbnomics_restore_controls,
       search_remote = provider_dbnomics_search_remote,
+      search_controls_ui = provider_dbnomics_search_controls_ui,
+      search_context_from_input = provider_dbnomics_search_context_from_input,
+      show_search_controls_in_all = FALSE,
       search_result_series_id = provider_dbnomics_search_result_series_id,
       recent_title = provider_dbnomics_recent_title,
       default_label = provider_dbnomics_default_label,
@@ -108,7 +114,7 @@ source_catalog <- function() {
     ~id, ~label, ~provider_id, ~builder_value, ~search_value, ~search_kind, ~builder_enabled, ~search_enabled, ~builder_default,
     "recent", "Recent", NA_character_, NA_character_, "Recent", "recent", FALSE, TRUE, FALSE,
     "fred", "FRED", "fred", "FRED", "FRED", "remote", TRUE, TRUE, FALSE,
-    "dbnomics", "DBnomics", "dbnomics", "dbnomics", "DBnomics", "remote", TRUE, FALSE, FALSE,
+    "dbnomics", "DBnomics", "dbnomics", "dbnomics", "DBnomics", "remote", TRUE, TRUE, FALSE,
     "rba", "RBA", "rba", "rba", "RBA", "local", TRUE, TRUE, FALSE,
     "abs", "ABS", "abs", "abs", "ABS", "local", TRUE, TRUE, TRUE,
     "analysis_result", "Analysis result", NA_character_, "analysis_result", NA_character_, "none", TRUE, FALSE, FALSE
@@ -227,6 +233,51 @@ source_catalog_supported_builder_values <- function() {
     filter(builder_enabled) %>%
     pull(builder_value) %>%
     unique()
+}
+
+provider_registry_search_controls_ui <- function(source_filter = "all") {
+  selected_filter <- source_filter %||% "all"
+  controls <- lapply(provider_registry_entries(), function(entry) {
+    controls_ui <- entry$search_controls_ui %||% NULL
+
+    if (is.null(controls_ui)) {
+      return(NULL)
+    }
+
+    if (identical(selected_filter, "all") && !isTRUE(entry$show_search_controls_in_all)) {
+      return(NULL)
+    }
+
+    if (!identical(selected_filter, "all") &&
+        !identical(provider_registry_source_id(selected_filter), entry$id %||% "")) {
+      return(NULL)
+    }
+
+    controls_ui()
+  })
+
+  controls <- Filter(Negate(is.null), controls)
+
+  if (length(controls) == 0) {
+    return(NULL)
+  }
+
+  do.call(tagList, controls)
+}
+
+provider_registry_search_contexts_from_input <- function(input) {
+  stats::setNames(
+    lapply(provider_registry_entries(), function(entry) {
+      context_from_input <- entry$search_context_from_input %||% NULL
+
+      if (is.null(context_from_input)) {
+        return(list())
+      }
+
+      context_from_input(input)
+    }),
+    vapply(provider_registry_entries(), function(entry) entry$id %||% "", character(1))
+  )
 }
 
 provider_registry_register_dependencies <- function(input, output, session, index) {
@@ -501,6 +552,35 @@ provider_fred_restore_controls <- function(session, index, spec) {
   }
 }
 
+provider_fred_search_controls_ui <- function() {
+  div(
+    class = "search-toolbar__group search-toolbar__group--segmented search-toolbar__group--compact",
+    style = "padding-bottom: 0;",
+    div(
+      class = "search-toolbar__group-label",
+      "FRED mode"
+    ),
+    div(
+      class = "search-segmented-control",
+      radioGroupButtons(
+        "search_fred_mode",
+        NULL,
+        choices = c("Text" = "full_text", "ID" = "series_id"),
+        selected = "full_text",
+        justified = FALSE,
+        checkIcon = list(yes = icon("check"))
+      )
+    )
+  )
+}
+
+provider_fred_search_context_from_input <- function(input) {
+  list(
+    frequency_filter = input$search_frequency_filter %||% "all",
+    search_type = input$search_fred_mode %||% "full_text"
+  )
+}
+
 provider_fred_search_remote <- function(query, search_context = list(), force = FALSE) {
   search_fred_series(
     query = query,
@@ -601,6 +681,34 @@ provider_dbnomics_query_series_history <- function(spec) {
 
 provider_dbnomics_restore_controls <- function(session, index, spec) {
   updateTextInput(session, series_input_id(index, "dbnomics_series"), value = spec$dbnomics_series %||% "")
+}
+
+provider_dbnomics_search_controls_ui <- function() {
+  tagList(
+    div(
+      class = "search-toolbar__group search-toolbar__group--select",
+      div(
+        class = "search-toolbar__group-label",
+        "DBnomics provider"
+      ),
+      textInput("search_dbnomics_provider", label = NULL, value = "", placeholder = "e.g. IMF")
+    ),
+    div(
+      class = "search-toolbar__group search-toolbar__group--select",
+      div(
+        class = "search-toolbar__group-label",
+        "DBnomics dataset"
+      ),
+      textInput("search_dbnomics_dataset", label = NULL, value = "", placeholder = "e.g. WEO:2024-10")
+    )
+  )
+}
+
+provider_dbnomics_search_context_from_input <- function(input) {
+  list(
+    provider_code = trimws(input$search_dbnomics_provider %||% ""),
+    dataset_code = trimws(input$search_dbnomics_dataset %||% "")
+  )
 }
 
 provider_dbnomics_search_remote <- function(query, search_context = list(), force = FALSE) {

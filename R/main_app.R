@@ -40,25 +40,7 @@ build_search_tab_ui <- function() {
               )
             )
           ),
-          div(
-            class = "search-toolbar__group search-toolbar__group--segmented search-toolbar__group--compact",
-            style = "padding-bottom: 0;",
-            div(
-              class = "search-toolbar__group-label",
-              "FRED mode"
-            ),
-            div(
-              class = "search-segmented-control",
-              radioGroupButtons(
-                "search_fred_mode",
-                NULL,
-                choices = c("Text" = "full_text", "ID" = "series_id"),
-                selected = "full_text",
-                justified = FALSE,
-                checkIcon = list(yes = icon("check"))
-              )
-            )
-          ),
+          uiOutput("search_source_controls"),
           div(
             class = "search-toolbar__group search-toolbar__group--segmented",
             style = "padding-bottom: 0;",
@@ -2337,38 +2319,40 @@ build_main_server <- function(input, output, session) {
     DT::dataTableOutput("search_results_table")
   })
 
-  fred_search_response <- reactive({
-    if (!search_filter_includes(input$search_source_filter, "FRED")) {
-      return(empty_search_response())
-    }
-
-    search_fred_series(
-      query = search_query_debounced(),
-      frequency_filter = input$search_frequency_filter %||% "all",
-      search_type = input$search_fred_mode %||% "full_text",
-      limit = 100
-    )
+  output$search_source_controls <- renderUI({
+    provider_registry_search_controls_ui(input$search_source_filter %||% "all")
   })
 
-  dbnomics_search_response <- reactive({
-    if (!search_filter_includes(input$search_source_filter, "DBnomics")) {
-      return(empty_search_response())
-    }
+  search_remote_contexts <- reactive({
+    provider_registry_search_contexts_from_input(input)
+  })
 
-    if (identical(input$search_source_filter %||% "all", "all")) {
-      has_exact_id <- !is.null(parse_dbnomics_series_id(search_query_debounced()))
-      has_scope <- nzchar(trimws(input$search_dbnomics_provider %||% "")) &&
-        nzchar(trimws(input$search_dbnomics_dataset %||% ""))
+  remote_search_responses <- reactive({
+    source_filter <- input$search_source_filter %||% "all"
+    query_text <- search_query_debounced()
 
-      if (!has_exact_id && !has_scope) {
-        return(empty_search_response())
+    if (identical(source_filter, "all")) {
+      dbnomics_context <- search_remote_contexts()[["dbnomics"]] %||% list()
+      has_exact_dbnomics_id <- !is.null(parse_dbnomics_series_id(query_text))
+      has_dbnomics_scope <- nzchar(trimws(dbnomics_context$provider_code %||% "")) &&
+        nzchar(trimws(dbnomics_context$dataset_code %||% ""))
+
+      if (!has_exact_dbnomics_id && !has_dbnomics_scope) {
+        search_contexts <- search_remote_contexts()
+        search_contexts[["dbnomics"]] <- modifyList(dbnomics_context, list(enabled = FALSE))
+        return(search_remote_provider_responses(
+          query = query_text,
+          source_filter = source_filter,
+          search_contexts = search_contexts,
+          limit = 100
+        ))
       }
     }
 
-    search_dbnomics_series(
-      query = search_query_debounced(),
-      provider_code = input$search_dbnomics_provider %||% "",
-      dataset_code = input$search_dbnomics_dataset %||% "",
+    search_remote_provider_responses(
+      query = query_text,
+      source_filter = source_filter,
+      search_contexts = search_remote_contexts(),
       limit = 100
     )
   })
@@ -2383,8 +2367,7 @@ build_main_server <- function(input, output, session) {
       loading_message,
       if (is.null(search_index_store()) && search_filter_includes(source_filter, local_search_source_values())) "Local metadata will load when search runs." else "",
       search_runtime_status() %||% "",
-      if (isTRUE(include_remote_status)) fred_search_response()$status %||% "" else "",
-      if (isTRUE(include_remote_status)) dbnomics_search_response()$status %||% "" else ""
+      if (isTRUE(include_remote_status)) unlist(lapply(remote_search_responses(), `[[`, "status"), use.names = FALSE) else ""
     )
     search_messages <- unique(search_messages[nzchar(search_messages)])
 
@@ -2406,7 +2389,9 @@ build_main_server <- function(input, output, session) {
         input$search_type_filter,
         input$search_location_filter,
         input$search_frequency_filter,
-        input$search_fred_mode
+        input$search_fred_mode,
+        input$search_dbnomics_provider,
+        input$search_dbnomics_dataset
       )
     },
     {
@@ -2451,10 +2436,7 @@ build_main_server <- function(input, output, session) {
       )
     }
 
-    remote_results <- bind_rows(
-      fred_search_response()$results,
-      dbnomics_search_response()$results
-    ) %>%
+    remote_results <- bind_rows(lapply(remote_search_responses(), `[[`, "results")) %>%
       distinct(search_id, .keep_all = TRUE)
 
     remote_results <- filter_search_index(
