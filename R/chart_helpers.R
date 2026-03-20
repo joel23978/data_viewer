@@ -325,11 +325,12 @@ fred_vintage_choice_values <- function(series_id, selected_date = NULL) {
 }
 
 default_year_bounds <- function() {
-  min_date <- as.Date(min(cpi_data_all$date))
-  max_date <- as.Date(max(cpi_data_all$date))
-  year_min <- as.numeric(lubridate::year(min_date))
+  min_date <- as.Date("1900-01-01")
+  today <- Sys.Date()
+  max_date <- today
+  year_min <- 1900
   year_max <- as.numeric(lubridate::year(max_date))
-  default_start_date <- max(min_date, as.Date("2019-01-01"))
+  default_start_date <- today %m-% years(10)
 
   list(
     min = year_min,

@@ -1774,7 +1774,11 @@ build_main_server <- function(input, output, session) {
       return(normalize_chart_state(loaded_state))
     }
 
-    input_state$date_range <- sort(c(max(1900, input_state$date_range[[1]]), max(1900, input_state$date_range[[2]])))
+    min_builder_date <- as.Date("1900-01-01")
+    input_state$date_range <- as.Date(
+      sort(pmax(as.numeric(min_builder_date), as.numeric(input_state$date_range))),
+      origin = "1970-01-01"
+    )
     input_state
   })
 
@@ -3394,11 +3398,6 @@ build_main_server <- function(input, output, session) {
       "Saved chart updated.",
       {
         chart_state <- builder_state()
-        latest_date <- latest_chart_observation_date(chart_state)
-        if (!is.na(latest_date)) {
-          chart_state$date_range[[2]] <- latest_date
-        }
-
         refreshed_payload <- build_chart_data(chart_state)
         save_context <- build_current_save_context(chart_state, refreshed_payload$data)
         if (is.null(save_context)) {
