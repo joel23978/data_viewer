@@ -1,0 +1,358 @@
+source(here::here("R", "bootstrap.R"))
+source(here::here("cpi_annual.R"))
+source(here::here("external_data.R"))
+source(here::here("R", "chart_helpers.R"))
+source(here::here("R", "data_search.R"))
+source(here::here("R", "chart_library.R"))
+source(here::here("R", "analysis_helpers.R"))
+source(here::here("R", "main_app.R"))
+
+build_restore_test_state <- function() {
+  list(
+    date_range = c(2024, 2025),
+    show_table = TRUE,
+    series = list(
+      list(
+        index = 1,
+        source = "ABS CPI",
+        text = "All groups CPI",
+        region = region_list[[1]],
+        transform = "index",
+        rebase_date = as.Date("2019-12-31"),
+        label = "All groups CPI",
+        transform_profile = list(expression = "X", moving_average = 1, rolling_sum = 1, lagged_value = 0, lagged_pct = 0, lagged_ann = 0),
+        vis_type = "line"
+      ),
+      list(
+        index = 2,
+        source = "ABS CPI",
+        text = "Housing",
+        region = region_list[[1]],
+        transform = "index",
+        rebase_date = as.Date("2019-12-31"),
+        label = "Housing CPI",
+        transform_profile = list(expression = "X", moving_average = 1, rolling_sum = 1, lagged_value = 0, lagged_pct = 0, lagged_ann = 0),
+        vis_type = "line"
+      ),
+      NULL,
+      NULL
+    ),
+    all_series_transform = list(expression = "X", moving_average = 1, rolling_sum = 1, lagged_value = 0, lagged_pct = 0, lagged_ann = 0),
+    style = list(
+      title = "Test chart",
+      subtitle = "Test subtitle",
+      y_axis_label = "%",
+      note = "test note",
+      legend = "bottom",
+      palette = "Okabe-Ito",
+      date_format = "%b-%y",
+      x_labels = 6,
+      auto_y_axis = TRUE,
+      y_min = NA_real_,
+      y_max = NA_real_,
+      y_breaks = NA_real_,
+      invert_y_axis = FALSE,
+      horizontal_1 = NA_real_,
+      horizontal_2 = NA_real_,
+      horizontal_shading = c(NA_real_, NA_real_),
+      vertical_1 = as.Date(NA),
+      vertical_2 = as.Date(NA),
+      recession_shading = "none",
+      export_width = 8,
+      export_height = 5
+    )
+  )
+}
+
+valid_abs_restore_rows <- function(catalogue_name) {
+  abs_catalogue_data(catalogue_name) %>%
+    filter(!is.na(series_id), nzchar(series_id), !is.na(series), !is.na(series_type), !is.na(table_title))
+}
+
+test_that("presentation-selected preview takes precedence and load uses selected_preview_chart_record", {
+  temp_library <- tempfile(fileext = ".rds")
+  temp_presentation_library <- tempfile(fileext = ".rds")
+  old_option <- getOption("data_viewer.chart_library_path")
+  old_presentation_option <- getOption("data_viewer.chart_presentation_library_path")
+  options(data_viewer.chart_library_path = temp_library)
+  options(data_viewer.chart_presentation_library_path = temp_presentation_library)
+  on.exit(options(data_viewer.chart_library_path = old_option), add = TRUE)
+  on.exit(options(data_viewer.chart_presentation_library_path = old_presentation_option), add = TRUE)
+
+  first_state <- build_restore_test_state()
+  second_state <- build_restore_test_state()
+  second_state$style$title <- "Presentation-selected chart"
+  second_state$series[[2]]$label <- "Presentation-selected series"
+
+  first_record <- new_chart_record(
+    chart_state = first_state,
+    data_snapshot = build_chart_data(first_state)$data,
+    title = "Library-selected chart",
+    description = "First chart"
+  )
+  second_record <- new_chart_record(
+    chart_state = second_state,
+    data_snapshot = build_chart_data(second_state)$data,
+    title = "Presentation-selected chart",
+    description = "Second chart"
+  )
+
+  write_chart_library(
+    read_chart_library() %>%
+      upsert_chart_record(first_record) %>%
+      upsert_chart_record(second_record)
+  )
+  write_chart_presentation_library(
+    upsert_chart_presentation_record(
+      read_chart_presentation_library(),
+      new_chart_presentation_record(
+        title = "Macro deck",
+        description = "Preview precedence test",
+        chart_ids = c(first_record$chart_id[[1]], second_record$chart_id[[1]])
+      )
+    )
+  )
+
+  shiny::testServer(build_main_server, {
+    ensure_chart_library_loaded()
+    ensure_presentation_library_loaded()
+
+    session$setInputs(library_table_rows_selected = 1)
+    session$setInputs(presentation_table_rows_selected = 1)
+    session$flushReact()
+    session$setInputs(presentation_chart_table_rows_selected = 2)
+    session$flushReact()
+
+    expect_equal(selected_preview_chart_record()$chart_id[[1]], second_record$chart_id[[1]])
+
+    session$setInputs(load_chart = 1)
+    session$flushReact()
+    session$flushReact()
+
+    expect_equal(builder_state()$style$title, second_state$style$title)
+  })
+})
+
+test_that("main server suppresses stale restore callbacks from earlier apply_builder_state calls", {
+  shiny::testServer(build_main_server, {
+    first_state <- build_restore_test_state()
+    first_state$style$title <- "First restore"
+    first_state$series[[2]]$label <- "First restore series"
+
+    second_state <- build_restore_test_state()
+    second_state$style$title <- "Second restore"
+    second_state$series[[2]]$label <- "Second restore series"
+
+    apply_builder_state(first_state, selected_series_index = 2, navigate_builder = FALSE)
+    apply_builder_state(second_state, selected_series_index = 2, navigate_builder = FALSE)
+    session$flushReact()
+    session$flushReact()
+
+    expect_equal(builder_state()$style$title, second_state$style$title)
+    expect_equal(builder_state()$series[[2]]$label, second_state$series[[2]]$label)
+  })
+})
+
+test_that("ABS source controls render restored saved selections", {
+  abs_row <- abs_ref[[1]] %>%
+    filter(!is.na(series_id), nzchar(series_id), !is.na(series), !is.na(series_type), !is.na(table_title)) %>%
+    slice(1)
+
+  abs_ui <- series_source_controls_ui(
+    input = list(),
+    session = NULL,
+    index = 1,
+    source_value = "abs",
+    restored_spec = list(
+      source = "abs",
+      abs_catalogue = abs_cat[[1]],
+      abs_desc = abs_row$series[[1]],
+      abs_series_type = abs_row$series_type[[1]],
+      abs_table = abs_row$table_title[[1]],
+      abs_id = abs_row$series_id[[1]]
+    )
+  )
+
+  expect_true(grepl(abs_cat[[1]], as.character(abs_ui), fixed = TRUE))
+  expect_true(grepl(abs_row$series[[1]], as.character(abs_ui), fixed = TRUE))
+  expect_true(grepl(abs_row$series_type[[1]], as.character(abs_ui), fixed = TRUE))
+  expect_true(grepl(abs_row$table_title[[1]], as.character(abs_ui), fixed = TRUE))
+  expect_true(grepl(abs_row$series_id[[1]], as.character(abs_ui), fixed = TRUE))
+})
+
+test_that("ABS source controls prefer restored values over stale invalid selections", {
+  abs_row <- abs_ref[[1]] %>%
+    filter(!is.na(series_id), nzchar(series_id), !is.na(series), !is.na(series_type), !is.na(table_title)) %>%
+    slice(1)
+
+  abs_ui <- series_source_controls_ui(
+    input = list(
+      series_2_abs_catalogue = abs_cat[[1]],
+      series_2_abs_desc = "__stale_desc__",
+      series_2_abs_series_type = "__stale_type__",
+      series_2_abs_table = "__stale_table__",
+      series_2_abs_id = "__stale_id__"
+    ),
+    session = NULL,
+    index = 2,
+    source_value = "abs",
+    restored_spec = list(
+      source = "abs",
+      abs_catalogue = abs_cat[[1]],
+      abs_desc = abs_row$series[[1]],
+      abs_series_type = abs_row$series_type[[1]],
+      abs_table = abs_row$table_title[[1]],
+      abs_id = abs_row$series_id[[1]]
+    )
+  )
+
+  expect_true(grepl(abs_row$table_title[[1]], as.character(abs_ui), fixed = TRUE))
+  expect_true(grepl(abs_row$series_id[[1]], as.character(abs_ui), fixed = TRUE))
+})
+
+test_that("ABS search add-to-builder restores dependent chain", {
+  shiny::testServer(build_main_server, {
+    ensure_search_index_loaded()
+    session$setInputs(
+      main_tabs = "search",
+      search_query = "",
+      search_source_filter = "ABS",
+      search_type_filter = "all",
+      search_location_filter = "all",
+      search_frequency_filter = "all"
+    )
+    session$flushReact()
+    session$flushReact()
+
+    expect_gt(nrow(search_results()), 0)
+    abs_row <- search_results()[1, , drop = FALSE]
+    abs_spec <- search_result_series_spec(abs_row, 2)
+
+    session$setInputs(search_results_table_rows_selected = 1, search_target_series = "2")
+    session$flushReact()
+    session$setInputs(search_add_series = 1)
+    session$flushReact()
+    session$flushReact()
+
+    expect_equal(builder_state()$series[[2]]$source, "abs")
+    expect_equal(builder_state()$series[[2]]$abs_catalogue, abs_spec$abs_catalogue)
+    expect_equal(builder_state()$series[[2]]$abs_desc, abs_spec$abs_desc)
+    expect_equal(builder_state()$series[[2]]$abs_series_type, abs_spec$abs_series_type)
+    expect_equal(builder_state()$series[[2]]$abs_table, abs_spec$abs_table)
+    expect_equal(builder_state()$series[[2]]$abs_id, abs_spec$abs_id)
+    expect_equal(restored_series_spec(session, 2)$abs_catalogue, abs_spec$abs_catalogue)
+    expect_equal(restored_series_spec(session, 2)$abs_desc, abs_spec$abs_desc)
+  })
+})
+
+test_that("ABS saved-chart load restores dependent chain", {
+  temp_library <- tempfile(fileext = ".rds")
+  old_option <- getOption("data_viewer.chart_library_path")
+  options(data_viewer.chart_library_path = temp_library)
+  on.exit(options(data_viewer.chart_library_path = old_option), add = TRUE)
+
+  ensure_chart_library()
+
+  abs_result <- build_abs_search_index() %>%
+    filter(source == "ABS") %>%
+    slice(1)
+  abs_spec <- search_result_series_spec(abs_result, 2)
+
+  saved_state <- build_restore_test_state()
+  saved_state$series[[2]] <- normalize_series_spec(abs_spec)
+  saved_payload <- build_chart_data(saved_state)
+  saved_record <- new_chart_record(
+    chart_state = saved_state,
+    data_snapshot = saved_payload$data,
+    title = "ABS saved chart",
+    description = "Saved ABS restore test",
+    chart_kind = "builder",
+    analysis_spec = NULL,
+    analysis_payload = NULL
+  )
+  write_chart_library(upsert_chart_record(read_chart_library(), saved_record))
+
+  shiny::testServer(build_main_server, {
+    ensure_chart_library_loaded()
+    session$setInputs(library_table_rows_selected = 1)
+    session$flushReact()
+    session$setInputs(load_chart = 1)
+    session$flushReact()
+    session$flushReact()
+
+    expect_equal(builder_state()$series[[2]]$source, "abs")
+    expect_equal(builder_state()$series[[2]]$abs_catalogue, abs_spec$abs_catalogue)
+    expect_equal(builder_state()$series[[2]]$abs_desc, abs_spec$abs_desc)
+    expect_equal(builder_state()$series[[2]]$abs_series_type, abs_spec$abs_series_type)
+    expect_equal(builder_state()$series[[2]]$abs_table, abs_spec$abs_table)
+    expect_equal(builder_state()$series[[2]]$abs_id, abs_spec$abs_id)
+    expect_equal(restored_series_spec(session, 2)$abs_catalogue, abs_spec$abs_catalogue)
+    expect_equal(restored_series_spec(session, 2)$abs_desc, abs_spec$abs_desc)
+  })
+})
+
+test_that("upstream ABS selector change after restore re-resolves downstream cleanly", {
+  abs_result <- build_abs_search_index() %>%
+    filter(source == "ABS") %>%
+    slice(1)
+  abs_spec <- search_result_series_spec(abs_result, 2)
+
+  alternative_catalogue <- setdiff(abs_cat, abs_spec$abs_catalogue)[1]
+  skip_if(is.na(alternative_catalogue) || !nzchar(alternative_catalogue), "Need at least two ABS catalogues for this regression test.")
+  alternative_rows <- valid_abs_restore_rows(alternative_catalogue)
+  skip_if(nrow(alternative_rows) == 0, "No valid ABS rows found in the alternate catalogue.")
+
+  resolved <- resolve_abs_control_state(
+    current_values = list(
+      catalogue = alternative_catalogue,
+      desc = abs_spec$abs_desc,
+      type = abs_spec$abs_series_type,
+      table = abs_spec$abs_table,
+      ids = abs_spec$abs_id
+    ),
+    restored_spec = NULL
+  )
+
+  current_rows <- alternative_rows %>%
+    filter(
+      series == resolved$desc,
+      series_type == resolved$series_type,
+      table_title == resolved$table
+    )
+
+  expect_equal(resolved$catalogue, alternative_catalogue)
+  expect_gt(nrow(current_rows), 0)
+  expect_true(all(resolved$ids %in% current_rows$series_id))
+})
+
+test_that("restored/live transition does not reapply stale restored values", {
+  abs_result <- build_abs_search_index() %>%
+    filter(source == "ABS") %>%
+    slice(1)
+  abs_spec <- search_result_series_spec(abs_result, 2)
+  abs_rows <- valid_abs_restore_rows(abs_spec$abs_catalogue)
+  alternate_desc <- setdiff(unique(abs_rows$series), abs_spec$abs_desc)[1]
+  skip_if(is.na(alternate_desc) || !nzchar(alternate_desc), "Need an alternate ABS description for this regression test.")
+
+  resolved <- resolve_abs_control_state(
+    current_values = list(
+      catalogue = abs_spec$abs_catalogue,
+      desc = alternate_desc,
+      type = abs_spec$abs_series_type,
+      table = abs_spec$abs_table,
+      ids = abs_spec$abs_id
+    ),
+    restored_spec = NULL
+  )
+
+  downstream_rows <- valid_abs_restore_rows(resolved$catalogue) %>%
+    filter(
+      series == resolved$desc,
+      series_type == resolved$series_type,
+      table_title == resolved$table
+    )
+
+  expect_equal(resolved$desc, alternate_desc)
+  expect_gt(nrow(downstream_rows), 0)
+  expect_true(all(resolved$ids %in% downstream_rows$series_id))
+})
