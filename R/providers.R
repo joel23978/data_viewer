@@ -79,6 +79,7 @@ provider_generic_search_result_to_spec <- function(search_result, index) {
 provider_rba_controls_ui <- function(input, session, index, restored_spec = NULL) {
   current_table <- input[[series_input_id(index, "rba_table")]] %||% restored_spec$rba_table %||% rba_tables[[1]]
   table_choices <- rba_series[[current_table]] %||% rba_series[[1]]
+  selected_series <- input[[series_input_id(index, "rba_desc")]] %||% restored_spec$rba_desc %||% character()
 
   tagList(
     compact_single_choice_input(
@@ -91,7 +92,7 @@ provider_rba_controls_ui <- function(input, session, index, restored_spec = NULL
       series_input_id(index, "rba_desc"),
       "RBA series",
       choices = table_choices,
-      selected = input[[series_input_id(index, "rba_desc")]] %||% restored_spec$rba_desc %||% table_choices[1],
+      selected = selected_series,
       multiple = TRUE
     )
   )
@@ -110,7 +111,7 @@ provider_rba_register_dependencies <- function(input, output, session, index) {
       session,
       series_input_id(index, "rba_desc"),
       choices = series_choices,
-      selected = series_choices[1],
+      selected = character(),
       server = TRUE
     )
   }, ignoreInit = FALSE)

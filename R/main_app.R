@@ -27,13 +27,16 @@ build_search_tab_ui <- function() {
               class = "search-toolbar__group-label",
               "Source"
             ),
-            radioGroupButtons(
-              "search_source_filter",
-              NULL,
-              choices = c("All" = "all", "Recent" = "Recent", "CPI" = "ABS CPI", "FRED" = "FRED", "RBA" = "RBA", "ABS" = "ABS"),
-              selected = "all",
-              justified = FALSE,
-              checkIcon = list(yes = icon("check"))
+            div(
+              class = "search-segmented-control",
+              radioGroupButtons(
+                "search_source_filter",
+                NULL,
+                choices = c("All" = "all", "Recent" = "Recent", "CPI" = "ABS CPI", "FRED" = "FRED", "RBA" = "RBA", "ABS" = "ABS"),
+                selected = "all",
+                justified = FALSE,
+                checkIcon = list(yes = icon("check"))
+              )
             )
           ),
           div(
@@ -42,13 +45,16 @@ build_search_tab_ui <- function() {
               class = "search-toolbar__group-label",
               "FRED mode"
             ),
-            radioGroupButtons(
-              "search_fred_mode",
-              NULL,
-              choices = c("Text" = "full_text", "ID" = "series_id"),
-              selected = "full_text",
-              justified = FALSE,
-              checkIcon = list(yes = icon("check"))
+            div(
+              class = "search-segmented-control",
+              radioGroupButtons(
+                "search_fred_mode",
+                NULL,
+                choices = c("Text" = "full_text", "ID" = "series_id"),
+                selected = "full_text",
+                justified = FALSE,
+                checkIcon = list(yes = icon("check"))
+              )
             )
           ),
           div(
@@ -57,13 +63,16 @@ build_search_tab_ui <- function() {
               class = "search-toolbar__group-label",
               "Type"
             ),
-            radioGroupButtons(
-              "search_type_filter",
-              NULL,
-              choices = search_type_choices(),
-              selected = "all",
-              justified = FALSE,
-              checkIcon = list(yes = icon("check"))
+            div(
+              class = "search-segmented-control",
+              radioGroupButtons(
+                "search_type_filter",
+                NULL,
+                choices = search_type_choices(),
+                selected = "all",
+                justified = FALSE,
+                checkIcon = list(yes = icon("check"))
+              )
             )
           ),
           div(
@@ -72,13 +81,16 @@ build_search_tab_ui <- function() {
               class = "search-toolbar__group-label",
               "Location"
             ),
-            radioGroupButtons(
-              "search_location_filter",
-              NULL,
-              choices = search_location_choices(),
-              selected = "all",
-              justified = FALSE,
-              checkIcon = list(yes = icon("check"))
+            div(
+              class = "search-segmented-control",
+              radioGroupButtons(
+                "search_location_filter",
+                NULL,
+                choices = search_location_choices(),
+                selected = "all",
+                justified = FALSE,
+                checkIcon = list(yes = icon("check"))
+              )
             )
           ),
           div(
@@ -109,15 +121,18 @@ build_search_tab_ui <- function() {
           uiOutput("search_selected_meta"),
           div(
             class = "search-preview-plot",
-            plotOutput("search_preview_plot", height = "250px")
+            plotOutput("search_preview_plot", height = "236px")
           ),
-          radioGroupButtons(
-            "search_target_series",
-            "Add to",
-            choices = search_result_target_choices(),
-            selected = "next",
-            justified = FALSE,
-            checkIcon = list(yes = icon("check"))
+          div(
+            class = "search-segmented-control search-segmented-control--target",
+            radioGroupButtons(
+              "search_target_series",
+              "Add to",
+              choices = search_result_target_choices(),
+              selected = "next",
+              justified = FALSE,
+              checkIcon = list(yes = icon("check"))
+            )
           ),
           actionButton("search_add_series", "Add result to builder", class = "btn-primary btn-block")
         )
@@ -358,13 +373,16 @@ build_main_ui <- function() {
                   class = "muted-copy",
                   "Set the date window and choose whether to show the data table."
                 ),
-                radioGroupButtons(
-                  "date_window_shortcut",
-                  "Quick range",
-                  choices = c("1Y" = "1", "3Y" = "3", "5Y" = "5", "10Y" = "10", "Max" = "max"),
-                  selected = character(0),
-                  justified = TRUE,
-                  checkIcon = list(yes = icon("check"))
+                div(
+                  class = "segmented-control",
+                  radioGroupButtons(
+                    "date_window_shortcut",
+                    "Quick range",
+                    choices = c("1Y" = "1", "3Y" = "3", "5Y" = "5", "10Y" = "10", "Max" = "max"),
+                    selected = character(0),
+                    justified = TRUE,
+                    checkIcon = list(yes = icon("check"))
+                  )
                 ),
                 fluidRow(
                   column(
@@ -376,13 +394,16 @@ build_main_ui <- function() {
                     dateInput("end_date", "End date", value = year_bounds$end_date, min = year_bounds$min_date, max = year_bounds$max_date)
                   )
                 ),
-                radioGroupButtons(
-                  "viewData1",
-                  "Underlying data table",
-                  choices = c("Hide" = "0", "Show" = "1"),
-                  selected = "0",
-                  justified = TRUE,
-                  checkIcon = list(yes = icon("check"))
+                div(
+                  class = "segmented-control",
+                  radioGroupButtons(
+                    "viewData1",
+                    "Underlying data table",
+                    choices = c("Hide" = "0", "Show" = "1"),
+                    selected = "0",
+                    justified = TRUE,
+                    checkIcon = list(yes = icon("check"))
+                  )
                 )
               ),
               chart_card(
@@ -463,21 +484,27 @@ build_main_ui <- function() {
               fluidRow(
                 column(
                   width = 4,
-                  radioGroupButtons(
-                    "style_invert_y_axis",
-                    "Y-axis direction",
-                    choices = c("Standard" = "standard", "Inverted" = "inverted"),
-                    selected = "standard",
-                    justified = TRUE,
-                    checkIcon = list(yes = icon("check"))
+                  div(
+                    class = "segmented-control",
+                    radioGroupButtons(
+                      "style_invert_y_axis",
+                      "Y-axis direction",
+                      choices = c("Standard" = "standard", "Inverted" = "inverted"),
+                      selected = "standard",
+                      justified = TRUE,
+                      checkIcon = list(yes = icon("check"))
+                    )
                   ),
-                  radioGroupButtons(
-                    "style_auto_y_axis",
-                    "Y-axis range mode",
-                    choices = c("Automatic" = "auto", "Manual" = "manual"),
-                    selected = "auto",
-                    justified = TRUE,
-                    checkIcon = list(yes = icon("check"))
+                  div(
+                    class = "segmented-control",
+                    radioGroupButtons(
+                      "style_auto_y_axis",
+                      "Y-axis range mode",
+                      choices = c("Automatic" = "auto", "Manual" = "manual"),
+                      selected = "auto",
+                      justified = TRUE,
+                      checkIcon = list(yes = icon("check"))
+                    )
                   ),
                   conditionalPanel(
                     condition = "input.style_auto_y_axis == 'manual'",
@@ -502,18 +529,21 @@ build_main_ui <- function() {
                 ),
                 column(
                   width = 4,
-                  selectInput("style_date_format", "Date label format on the x-axis", choices = APP_DATE_FORMATS, selected = APP_DATE_FORMATS[[2]]),
+                  selectInput("style_date_format", "Date format on the x-axis", choices = APP_DATE_FORMATS, selected = APP_DATE_FORMATS[[2]]),
                   numericInput("style_x_labels", "X-axis labels", value = 6, min = 2, step = 1)
                 ),
                 column(
                   width = 4,
-                  radioGroupButtons(
-                    "style_legend",
-                    "Legend position",
-                    choices = c("Below" = "bottom", "Right" = "right", "Hide" = "none"),
-                    selected = "bottom",
-                    justified = TRUE,
-                    checkIcon = list(yes = icon("check"))
+                  div(
+                    class = "segmented-control",
+                    radioGroupButtons(
+                      "style_legend",
+                      "Legend position",
+                      choices = c("Below" = "bottom", "Right" = "right", "Hide" = "none"),
+                      selected = "bottom",
+                      justified = TRUE,
+                      checkIcon = list(yes = icon("check"))
+                    )
                   ),
                   tags$div(
                     class = "paired-range-input",
@@ -578,13 +608,16 @@ build_main_ui <- function() {
               "Workspace Tools",
               class = "workspace-tools-card",
               header_actions = actionButton("clear_workspace_tools", "Clear", class = "app-card__header-chip"),
-              radioGroupButtons(
-                "side_panel_mode",
-                NULL,
-                choices = c("Transformations" = "transform", "Analysis" = "analysis"),
-                selected = "transform",
-                justified = TRUE,
-                checkIcon = list(yes = icon("check"))
+              div(
+                class = "segmented-control",
+                radioGroupButtons(
+                  "side_panel_mode",
+                  NULL,
+                  choices = c("Transformations" = "transform", "Analysis" = "analysis"),
+                  selected = "transform",
+                  justified = TRUE,
+                  checkIcon = list(yes = icon("check"))
+                )
               ),
               conditionalPanel(
                 condition = "input.side_panel_mode == 'transform'",
@@ -620,13 +653,16 @@ build_main_ui <- function() {
                     tags$p(class = "muted-copy", "Run a simple regression with standard or robust errors. The chart appears in the main panel."),
                     selectInput("analysis_reg_y", "Dependent series (y)", choices = character()),
                     selectInput("analysis_reg_x", "Independent series (x)", choices = character()),
-                    radioGroupButtons(
-                      "analysis_reg_errors",
-                      "Standard error treatment",
-                      choices = c("Homoskedastic" = "classical", "Heteroskedastic-robust" = "robust"),
-                      selected = "classical",
-                      justified = TRUE,
-                      checkIcon = list(yes = icon("check"))
+                    div(
+                      class = "segmented-control",
+                      radioGroupButtons(
+                        "analysis_reg_errors",
+                        "Standard error treatment",
+                        choices = c("Homoskedastic" = "classical", "Heteroskedastic-robust" = "robust"),
+                        selected = "classical",
+                        justified = TRUE,
+                        checkIcon = list(yes = icon("check"))
+                      )
                     ),
                     uiOutput("analysis_reg_summary")
                   ),
@@ -634,25 +670,31 @@ build_main_ui <- function() {
                     "Forecast",
                     tags$p(class = "muted-copy", "Run AR, MA, or ARMA forecasts and compare holdout results. The chart appears in the main panel."),
                     selectInput("analysis_forecast_series", "Series to forecast", choices = character()),
-                    radioGroupButtons(
-                      "analysis_forecast_family",
-                      "Model family",
-                      choices = c("AR" = "AR", "MA" = "MA", "ARMA" = "ARMA"),
-                      selected = "AR",
-                      justified = TRUE,
-                      checkIcon = list(yes = icon("check"))
+                    div(
+                      class = "segmented-control",
+                      radioGroupButtons(
+                        "analysis_forecast_family",
+                        "Model family",
+                        choices = c("AR" = "AR", "MA" = "MA", "ARMA" = "ARMA"),
+                        selected = "AR",
+                        justified = TRUE,
+                        checkIcon = list(yes = icon("check"))
+                      )
                     ),
-                    radioGroupButtons(
-                      "analysis_forecast_window_mode",
-                      "Estimation strategy",
-                      choices = c(
-                        "Expanding window" = "expanding",
-                        "Fixed window" = "fixed",
-                        "Rolling window" = "rolling"
-                      ),
-                      selected = "expanding",
-                      justified = TRUE,
-                      checkIcon = list(yes = icon("check"))
+                    div(
+                      class = "segmented-control",
+                      radioGroupButtons(
+                        "analysis_forecast_window_mode",
+                        "Estimation strategy",
+                        choices = c(
+                          "Expanding window" = "expanding",
+                          "Fixed window" = "fixed",
+                          "Rolling window" = "rolling"
+                        ),
+                        selected = "expanding",
+                        justified = TRUE,
+                        checkIcon = list(yes = icon("check"))
+                      )
                     ),
                     conditionalPanel(
                       condition = "input.analysis_forecast_window_mode != 'expanding'",
@@ -680,22 +722,28 @@ build_main_ui <- function() {
                     "Seasonal Adjust",
                     tags$p(class = "muted-copy", "Run X-13ARIMA-SEATS on a monthly or quarterly series. The adjusted chart appears in the main panel."),
                     selectInput("analysis_seasonal_series", "Series to seasonally adjust", choices = character()),
-                    radioGroupButtons(
-                      "analysis_seasonal_view",
-                      "Display",
-                      choices = c("Adjusted only" = "adjusted", "Original vs adjusted" = "both"),
-                      selected = "both",
-                      justified = TRUE,
-                      checkIcon = list(yes = icon("check"))
+                    div(
+                      class = "segmented-control",
+                      radioGroupButtons(
+                        "analysis_seasonal_view",
+                        "Display",
+                        choices = c("Adjusted only" = "adjusted", "Original vs adjusted" = "both"),
+                        selected = "both",
+                        justified = TRUE,
+                        checkIcon = list(yes = icon("check"))
+                      )
                     ),
                     uiOutput("analysis_seasonal_summary"),
-                    radioGroupButtons(
-                      "analysis_seasonal_target_series",
-                      "Add adjusted result to",
-                      choices = c("Series 1" = "1", "Series 2" = "2", "Series 3" = "3", "Series 4" = "4"),
-                      selected = "1",
-                      justified = TRUE,
-                      checkIcon = list(yes = icon("check"))
+                    div(
+                      class = "segmented-control",
+                      radioGroupButtons(
+                        "analysis_seasonal_target_series",
+                        "Add adjusted result to",
+                        choices = c("Series 1" = "1", "Series 2" = "2", "Series 3" = "3", "Series 4" = "4"),
+                        selected = "1",
+                        justified = TRUE,
+                        checkIcon = list(yes = icon("check"))
+                      )
                     ),
                     actionButton("analysis_add_seasonal_series", "Add to builder", class = "btn-primary btn-block")
                   ),
@@ -703,30 +751,39 @@ build_main_ui <- function() {
                     "HP Filter",
                     tags$p(class = "muted-copy", "Estimate a Hodrick-Prescott trend and cycle. The chart appears in the main panel."),
                     selectInput("analysis_hp_series", "Series to filter", choices = character()),
-                    radioGroupButtons(
-                      "analysis_hp_side",
-                      "Filter direction",
-                      choices = c("Two-sided" = "two_sided", "One-sided" = "one_sided"),
-                      selected = "two_sided",
-                      justified = TRUE,
-                      checkIcon = list(yes = icon("check"))
+                    div(
+                      class = "segmented-control",
+                      radioGroupButtons(
+                        "analysis_hp_side",
+                        "Filter direction",
+                        choices = c("Two-sided" = "two_sided", "One-sided" = "one_sided"),
+                        selected = "two_sided",
+                        justified = TRUE,
+                        checkIcon = list(yes = icon("check"))
+                      )
                     ),
-                    radioGroupButtons(
-                      "analysis_hp_view",
-                      "Display",
-                      choices = filter_display_choices(),
-                      selected = "overlay",
-                      justified = TRUE,
-                      checkIcon = list(yes = icon("check"))
+                    div(
+                      class = "segmented-control",
+                      radioGroupButtons(
+                        "analysis_hp_view",
+                        "Display",
+                        choices = filter_display_choices(),
+                        selected = "overlay",
+                        justified = TRUE,
+                        checkIcon = list(yes = icon("check"))
+                      )
                     ),
                     uiOutput("analysis_hp_summary"),
-                    radioGroupButtons(
-                      "analysis_hp_target_series",
-                      "Add filtered result to",
-                      choices = c("Series 1" = "1", "Series 2" = "2", "Series 3" = "3", "Series 4" = "4"),
-                      selected = "1",
-                      justified = TRUE,
-                      checkIcon = list(yes = icon("check"))
+                    div(
+                      class = "segmented-control",
+                      radioGroupButtons(
+                        "analysis_hp_target_series",
+                        "Add filtered result to",
+                        choices = c("Series 1" = "1", "Series 2" = "2", "Series 3" = "3", "Series 4" = "4"),
+                        selected = "1",
+                        justified = TRUE,
+                        checkIcon = list(yes = icon("check"))
+                      )
                     ),
                     actionButton("analysis_add_hp_series", "Add to builder", class = "btn-primary btn-block")
                   ),
@@ -734,30 +791,39 @@ build_main_ui <- function() {
                     "Kalman Filter",
                     tags$p(class = "muted-copy", "Estimate a local linear trend with a Kalman filter. The chart appears in the main panel."),
                     selectInput("analysis_kalman_series", "Series to filter", choices = character()),
-                    radioGroupButtons(
-                      "analysis_kalman_side",
-                      "Filter direction",
-                      choices = c("Two-sided" = "two_sided", "One-sided" = "one_sided"),
-                      selected = "two_sided",
-                      justified = TRUE,
-                      checkIcon = list(yes = icon("check"))
+                    div(
+                      class = "segmented-control",
+                      radioGroupButtons(
+                        "analysis_kalman_side",
+                        "Filter direction",
+                        choices = c("Two-sided" = "two_sided", "One-sided" = "one_sided"),
+                        selected = "two_sided",
+                        justified = TRUE,
+                        checkIcon = list(yes = icon("check"))
+                      )
                     ),
-                    radioGroupButtons(
-                      "analysis_kalman_view",
-                      "Display",
-                      choices = filter_display_choices(),
-                      selected = "overlay",
-                      justified = TRUE,
-                      checkIcon = list(yes = icon("check"))
+                    div(
+                      class = "segmented-control",
+                      radioGroupButtons(
+                        "analysis_kalman_view",
+                        "Display",
+                        choices = filter_display_choices(),
+                        selected = "overlay",
+                        justified = TRUE,
+                        checkIcon = list(yes = icon("check"))
+                      )
                     ),
                     uiOutput("analysis_kalman_summary"),
-                    radioGroupButtons(
-                      "analysis_kalman_target_series",
-                      "Add filtered result to",
-                      choices = c("Series 1" = "1", "Series 2" = "2", "Series 3" = "3", "Series 4" = "4"),
-                      selected = "1",
-                      justified = TRUE,
-                      checkIcon = list(yes = icon("check"))
+                    div(
+                      class = "segmented-control",
+                      radioGroupButtons(
+                        "analysis_kalman_target_series",
+                        "Add filtered result to",
+                        choices = c("Series 1" = "1", "Series 2" = "2", "Series 3" = "3", "Series 4" = "4"),
+                        selected = "1",
+                        justified = TRUE,
+                        checkIcon = list(yes = icon("check"))
+                      )
                     ),
                     actionButton("analysis_add_kalman_series", "Add to builder", class = "btn-primary btn-block")
                   )

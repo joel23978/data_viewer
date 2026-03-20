@@ -599,7 +599,7 @@ textarea,
 }
 
 .search-sidebar-card .search-preview-plot {
-  margin: -4px 0 10px;
+  margin: -2px 0 16px;
   padding: 0 8px;
 }
 
@@ -793,6 +793,145 @@ textarea,
   padding: 7px 11px;
   white-space: nowrap;
   width: auto !important;
+}
+
+.segmented-control .btn-group-container-sw,
+.search-segmented-control .btn-group-container-sw {
+  background: rgba(13, 20, 32, 0.06);
+  border: 1px solid var(--color-border-sage);
+  border-radius: 12px;
+  display: inline-flex;
+  max-width: 100%;
+  overflow: hidden;
+  padding: 1px;
+  width: auto;
+}
+
+.segmented-control .btn-group-container-sw .btn-group,
+.segmented-control .btn-group-container-sw .btn-group-vertical,
+.search-segmented-control .btn-group-container-sw .btn-group,
+.search-segmented-control .btn-group-container-sw .btn-group-vertical {
+  flex: 0 1 auto;
+  flex-wrap: nowrap;
+  gap: 0;
+  width: auto;
+}
+
+.segmented-control .btn-group-container-sw .btn-group + .btn-group,
+.segmented-control .btn-group-container-sw .btn-group + .btn-group-vertical,
+.segmented-control .btn-group-container-sw .btn-group-vertical + .btn-group,
+.segmented-control .btn-group-container-sw .btn-group-vertical + .btn-group-vertical,
+.search-segmented-control .btn-group-container-sw .btn-group + .btn-group,
+.search-segmented-control .btn-group-container-sw .btn-group + .btn-group-vertical,
+.search-segmented-control .btn-group-container-sw .btn-group-vertical + .btn-group,
+.search-segmented-control .btn-group-container-sw .btn-group-vertical + .btn-group-vertical {
+  border-left: 0;
+}
+
+.segmented-control .btn-group-container-sw .btn-group .btn,
+.segmented-control .btn-group-container-sw .btn-group .btn-default,
+.segmented-control .btn-group-container-sw .btn-group .radiobtn,
+.segmented-control .btn-group-container-sw .btn-group-vertical .btn,
+.segmented-control .btn-group-container-sw .btn-group-vertical .btn-default,
+.segmented-control .btn-group-container-sw .btn-group-vertical .radiobtn,
+.segmented-control .btn-group-container-sw .radioBtn,
+.segmented-control .btn-group-container-sw .radiobtn,
+.search-segmented-control .btn-group-container-sw .btn-group .btn,
+.search-segmented-control .btn-group-container-sw .btn-group .btn-default,
+.search-segmented-control .btn-group-container-sw .btn-group .radiobtn,
+.search-segmented-control .btn-group-container-sw .btn-group-vertical .btn,
+.search-segmented-control .btn-group-container-sw .btn-group-vertical .btn-default,
+.search-segmented-control .btn-group-container-sw .btn-group-vertical .radiobtn,
+.search-segmented-control .btn-group-container-sw .radioBtn,
+.search-segmented-control .btn-group-container-sw .radiobtn {
+  background: transparent;
+  border: 0 !important;
+  border-radius: 12px !important;
+  box-shadow: none !important;
+  color: var(--color-text-primary);
+  flex: 0 1 auto;
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.15;
+  min-height: 0;
+  min-width: 0 !important;
+  padding: 8px 8px;
+  width: auto !important;
+}
+
+.segmented-control .btn-group-container-sw .btn-group .btn.active,
+.segmented-control .btn-group-container-sw .btn-group .btn-default.active,
+.segmented-control .btn-group-container-sw .btn-group .radiobtn.active,
+.segmented-control .btn-group-container-sw .btn-group .btn:active,
+.segmented-control .btn-group-container-sw .btn-group .btn-default:active,
+.segmented-control .btn-group-container-sw .btn-group .radiobtn:active,
+.segmented-control .btn-group-container-sw .btn-group-vertical .btn.active,
+.segmented-control .btn-group-container-sw .btn-group-vertical .btn-default.active,
+.segmented-control .btn-group-container-sw .btn-group-vertical .radiobtn.active,
+.segmented-control .btn-group-container-sw .radioBtn.active,
+.segmented-control .btn-group-container-sw .radiobtn.active,
+.search-segmented-control .btn-group-container-sw .btn-group .btn.active,
+.search-segmented-control .btn-group-container-sw .btn-group .btn-default.active,
+.search-segmented-control .btn-group-container-sw .btn-group .radiobtn.active,
+.search-segmented-control .btn-group-container-sw .btn-group .btn:active,
+.search-segmented-control .btn-group-container-sw .btn-group .btn-default:active,
+.search-segmented-control .btn-group-container-sw .btn-group .radiobtn:active,
+.search-segmented-control .btn-group-container-sw .btn-group-vertical .btn.active,
+.search-segmented-control .btn-group-container-sw .btn-group-vertical .btn-default.active,
+.search-segmented-control .btn-group-container-sw .btn-group-vertical .radiobtn.active,
+.search-segmented-control .btn-group-container-sw .radioBtn.active,
+.search-segmented-control .btn-group-container-sw .radiobtn.active {
+  background: #ffffff !important;
+  color: var(--color-text-primary) !important;
+}
+
+.segmented-control .btn-group-container-sw .btn-group .btn:hover,
+.segmented-control .btn-group-container-sw .btn-group .btn-default:hover,
+.segmented-control .btn-group-container-sw .btn-group .radiobtn:hover,
+.segmented-control .btn-group-container-sw .btn-group .btn:focus,
+.segmented-control .btn-group-container-sw .btn-group .btn-default:focus,
+.segmented-control .btn-group-container-sw .btn-group .radiobtn:focus,
+.segmented-control .btn-group-container-sw .btn-group-vertical .btn:hover,
+.segmented-control .btn-group-container-sw .btn-group-vertical .btn-default:hover,
+.segmented-control .btn-group-container-sw .btn-group-vertical .radiobtn:hover,
+.segmented-control .btn-group-container-sw .btn-group-vertical .btn:focus,
+.segmented-control .btn-group-container-sw .btn-group-vertical .btn-default:focus,
+.segmented-control .btn-group-container-sw .btn-group-vertical .radiobtn:focus,
+.segmented-control .btn-group-container-sw .radioBtn:hover,
+.segmented-control .btn-group-container-sw .radioBtn:focus,
+.segmented-control .btn-group-container-sw .radiobtn:hover,
+.segmented-control .btn-group-container-sw .radiobtn:focus,
+.search-segmented-control .btn-group-container-sw .btn-group .btn:hover,
+.search-segmented-control .btn-group-container-sw .btn-group .btn-default:hover,
+.search-segmented-control .btn-group-container-sw .btn-group .radiobtn:hover,
+.search-segmented-control .btn-group-container-sw .btn-group .btn:focus,
+.search-segmented-control .btn-group-container-sw .btn-group .btn-default:focus,
+.search-segmented-control .btn-group-container-sw .btn-group .radiobtn:focus,
+.search-segmented-control .btn-group-container-sw .btn-group-vertical .btn:hover,
+.search-segmented-control .btn-group-container-sw .btn-group-vertical .btn-default:hover,
+.search-segmented-control .btn-group-container-sw .btn-group-vertical .radiobtn:hover,
+.search-segmented-control .btn-group-container-sw .btn-group-vertical .btn:focus,
+.search-segmented-control .btn-group-container-sw .btn-group-vertical .btn-default:focus,
+.search-segmented-control .btn-group-container-sw .btn-group-vertical .radiobtn:focus,
+.search-segmented-control .btn-group-container-sw .radioBtn:hover,
+.search-segmented-control .btn-group-container-sw .radioBtn:focus,
+.search-segmented-control .btn-group-container-sw .radiobtn:hover,
+.search-segmented-control .btn-group-container-sw .radiobtn:focus {
+  background: rgba(255, 255, 255, 0.62) !important;
+  color: var(--color-text-primary) !important;
+}
+
+.segmented-control .check-icon,
+.segmented-control .radio-btn-icon-yes,
+.segmented-control .radio-btn-icon-no,
+.search-segmented-control .check-icon,
+.search-segmented-control .radio-btn-icon-yes,
+.search-segmented-control .radio-btn-icon-no {
+  display: none !important;
+}
+
+.search-segmented-control--target {
+  margin-bottom: 14px;
 }
 
 .search-toolbar-card .bootstrap-select,
@@ -1024,5 +1163,51 @@ textarea,
   .search-sidebar-card .btn-group-container-sw .radioBtn {
     flex: 0 1 calc(50% - 6px);
     white-space: normal;
+  }
+
+  .segmented-control .btn-group-container-sw,
+  .search-segmented-control .btn-group-container-sw {
+    border-radius: 12px;
+    display: flex;
+    width: 100%;
+  }
+
+  .segmented-control .btn-group-container-sw .btn-group,
+  .segmented-control .btn-group-container-sw .btn-group-vertical,
+  .search-segmented-control .btn-group-container-sw .btn-group,
+  .search-segmented-control .btn-group-container-sw .btn-group-vertical {
+    flex: 1 1 auto;
+    flex-wrap: wrap;
+  }
+
+  .segmented-control .btn-group-container-sw .btn-group + .btn-group,
+  .segmented-control .btn-group-container-sw .btn-group + .btn-group-vertical,
+  .segmented-control .btn-group-container-sw .btn-group-vertical + .btn-group,
+  .segmented-control .btn-group-container-sw .btn-group-vertical + .btn-group-vertical,
+  .search-segmented-control .btn-group-container-sw .btn-group + .btn-group,
+  .search-segmented-control .btn-group-container-sw .btn-group + .btn-group-vertical,
+  .search-segmented-control .btn-group-container-sw .btn-group-vertical + .btn-group,
+  .search-segmented-control .btn-group-container-sw .btn-group-vertical + .btn-group-vertical {
+    border-left: 0;
+  }
+
+  .segmented-control .btn-group-container-sw .btn-group .btn,
+  .segmented-control .btn-group-container-sw .btn-group .btn-default,
+  .segmented-control .btn-group-container-sw .btn-group .radiobtn,
+  .segmented-control .btn-group-container-sw .btn-group-vertical .btn,
+  .segmented-control .btn-group-container-sw .btn-group-vertical .btn-default,
+  .segmented-control .btn-group-container-sw .btn-group-vertical .radiobtn,
+  .segmented-control .btn-group-container-sw .radioBtn,
+  .segmented-control .btn-group-container-sw .radiobtn,
+  .search-segmented-control .btn-group-container-sw .btn-group .btn,
+  .search-segmented-control .btn-group-container-sw .btn-group .btn-default,
+  .search-segmented-control .btn-group-container-sw .btn-group .radiobtn,
+  .search-segmented-control .btn-group-container-sw .btn-group-vertical .btn,
+  .search-segmented-control .btn-group-container-sw .btn-group-vertical .btn-default,
+  .search-segmented-control .btn-group-container-sw .btn-group-vertical .radiobtn,
+  .search-segmented-control .btn-group-container-sw .radioBtn,
+  .search-segmented-control .btn-group-container-sw .radiobtn {
+    flex: 1 1 calc(50% - 6px);
+    width: 100% !important;
   }
 }

@@ -471,13 +471,16 @@ builder_series_ui <- function(index) {
 
   tabPanel(
     title = paste("Series", index),
-    radioGroupButtons(
-      enabled_id,
-      "Include this series in the chart",
-      choices = c("Included" = "1", "Excluded" = "0"),
-      selected = "1",
-      justified = TRUE,
-      checkIcon = list(yes = icon("check"))
+    div(
+      class = "segmented-control",
+      radioGroupButtons(
+        enabled_id,
+        "Include this series in the chart",
+        choices = c("Included" = "1", "Excluded" = "0"),
+        selected = "1",
+        justified = TRUE,
+        checkIcon = list(yes = icon("check"))
+      )
     ),
     conditionalPanel(
       condition = sprintf("input.%s == '1'", enabled_id),
@@ -496,13 +499,16 @@ builder_series_ui <- function(index) {
       ),
       uiOutput(series_source_controls_id(index)),
       textInput(series_input_id(index, "label"), "Chart label shown in the legend", value = ""),
-      radioGroupButtons(
-        series_input_id(index, "vis_type"),
-        "Chart style for this series",
-        choices = c("Line" = "line", "Bars" = "bar", "Dots" = "scatter"),
-        selected = "line",
-        justified = TRUE,
-        checkIcon = list(yes = icon("check"))
+      div(
+        class = "segmented-control",
+        radioGroupButtons(
+          series_input_id(index, "vis_type"),
+          "Chart style for this series",
+          choices = c("Line" = "line", "Bars" = "bar", "Dots" = "scatter"),
+          selected = "line",
+          justified = TRUE,
+          checkIcon = list(yes = icon("check"))
+        )
       )
     )
   )
@@ -514,15 +520,13 @@ restored_series_spec <- function(session, index) {
 }
 
 series_source_controls_ui <- function(input, session, index, source_value = "ABS CPI", restored_spec = NULL) {
-  default_cpi_series <- if (index == 1) "All groups CPI" else character()
-
   provider_entry <- provider_registry_entry(source_value)
   if (!is.null(provider_entry) && is.function(provider_entry$controls_ui)) {
     return(provider_entry$controls_ui(input, session, index, restored_spec))
   }
 
   if (identical(source_value, "FRED")) {
-    current_series <- input[[series_input_id(index, "fred_series")]] %||% restored_spec$fred_series %||% "UNRATE"
+    current_series <- input[[series_input_id(index, "fred_series")]] %||% restored_spec$fred_series %||% ""
     vintage_mode <- input[[series_input_id(index, "fred_vintage_mode")]] %||% restored_spec$fred_vintage_mode %||% "current"
     selected_vintage <- input[[series_input_id(index, "fred_vintage_date")]] %||%
       if (!is.null(restored_spec$fred_vintage_date) && !is.na(restored_spec$fred_vintage_date)) format(as.Date(restored_spec$fred_vintage_date), "%Y-%m-%d") else ""
@@ -589,7 +593,7 @@ series_source_controls_ui <- function(input, session, index, source_value = "ABS
           Category_3 = cat3,
           Category_4 = cat4
         ),
-        selected = input[[series_input_id(index, "text")]] %||% restored_spec$text %||% default_cpi_series,
+        selected = input[[series_input_id(index, "text")]] %||% restored_spec$text %||% character(),
         multiple = TRUE
       ),
       selectizeInput(
