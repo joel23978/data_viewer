@@ -187,6 +187,26 @@ seed_selectize_choices <- function(selected_values = character()) {
   }
 }
 
+default_series_label_from_id <- function(spec = list()) {
+  spec <- spec %||% list()
+  source_value <- spec$source %||% ""
+
+  if (identical(source_value, "FRED")) {
+    return(trimws(spec$fred_series %||% ""))
+  }
+
+  if (identical(source_value, "abs")) {
+    selected_ids <- unique(trimws(as.character(spec$abs_id %||% character())))
+    selected_ids <- selected_ids[nzchar(selected_ids)]
+
+    if (length(selected_ids) == 1) {
+      return(selected_ids[[1]])
+    }
+  }
+
+  ""
+}
+
 abs_id_lookup <- function() {
   data_viewer_cache_get(
     "abs_id_lookup",
@@ -238,7 +258,7 @@ hydrate_abs_spec_from_ids <- function(spec = list()) {
   spec$abs_table <- spec$abs_table %||% first_row$table_title[[1]]
   spec$abs_id <- selected_ids
   if (!nzchar(trimws(spec$label %||% ""))) {
-    spec$label <- first_row$series[[1]]
+    spec$label <- default_series_label_from_id(spec)
   }
   spec
 }
@@ -1164,6 +1184,10 @@ series_spec_from_input <- function(input, index, transform_profile = default_tra
     }
   }
 
+  if (!nzchar(spec$label %||% "")) {
+    spec$label <- default_series_label_from_id(spec)
+  }
+
   if (identical(source_value, "Analysis result") || identical(source_value, "analysis_result")) {
     if (is.null(restored_spec) || !identical(restored_spec$source %||% "", "analysis_result")) {
       return(NULL)
@@ -1363,6 +1387,10 @@ normalize_series_spec <- function(spec) {
     normalized_spec$abs_id <- abs_state$ids
   }
 
+  if (!nzchar(normalized_spec$label %||% "")) {
+    normalized_spec$label <- default_series_label_from_id(normalized_spec)
+  }
+
   if (identical(normalized_spec$source, "Analysis result") || identical(normalized_spec$source, "analysis_result")) {
     normalized_spec$source <- "analysis_result"
     normalized_spec$analysis_result_key <- trimws(spec$analysis_result_key %||% "")
@@ -1428,7 +1456,12 @@ apply_series_metadata <- function(data, spec) {
   data <- apply_transform_profile(data, spec$transform_profile, paste("Series", spec$index))
 
   if (nzchar(spec$label)) {
-    if (dplyr::n_distinct(data$name) == 1) {
+    unique_names <- unique(trimws(as.character(data$name)))
+    unique_names <- unique_names[nzchar(unique_names)]
+
+    if (length(unique_names) > 1 && all(startsWith(unique_names, spec$label))) {
+      data <- data
+    } else if (dplyr::n_distinct(data$name) == 1) {
       data <- data %>% mutate(name = spec$label)
     } else {
       data <- data %>% mutate(name = paste(spec$label, name, sep = " - "))

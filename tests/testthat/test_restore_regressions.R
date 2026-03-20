@@ -254,6 +254,50 @@ test_that("ABS series ID direct entry works without dropdown selections", {
   expect_equal(spec$abs_table, abs_row$table_title[[1]])
 })
 
+test_that("blank ABS and FRED labels default to series IDs", {
+  abs_row <- abs_ref[[1]] %>%
+    filter(!is.na(series_id), nzchar(series_id), !is.na(series), !is.na(series_type), !is.na(table_title)) %>%
+    slice(1)
+
+  abs_spec <- series_spec_from_input(
+    input = list(
+      series_1_enabled = TRUE,
+      series_1_source = "abs",
+      series_1_label = "",
+      series_1_vis_type = "line",
+      series_1_abs_id = abs_row$series_id[[1]]
+    ),
+    index = 1,
+    transform_profile = default_transform_profile(),
+    restored_spec = NULL
+  )
+
+  fred_spec <- series_spec_from_input(
+    input = list(
+      series_2_enabled = TRUE,
+      series_2_source = "FRED",
+      series_2_label = "",
+      series_2_vis_type = "line",
+      series_2_fred_series = "UNRATE",
+      series_2_fred_vintage_mode = "compare",
+      series_2_fred_vintage_date = "2020-01-01"
+    ),
+    index = 2,
+    transform_profile = default_transform_profile(),
+    restored_spec = NULL
+  )
+
+  fred_data <- tibble::tibble(
+    date = as.Date(c("2020-01-01", "2020-01-01")),
+    value = c(1, 2),
+    name = c("UNRATE (current)", "UNRATE (2020-01-01 vintage)")
+  )
+
+  expect_equal(abs_spec$label, abs_row$series_id[[1]])
+  expect_equal(fred_spec$label, "UNRATE")
+  expect_equal(apply_series_metadata(fred_data, fred_spec)$name, fred_data$name)
+})
+
 test_that("ABS search add-to-builder restores dependent chain", {
   shiny::testServer(build_main_server, {
     ensure_search_index_loaded()
