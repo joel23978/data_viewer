@@ -1,39 +1,85 @@
 source(here::here("R", "bootstrap.R"))
-source(here::here("cpi_annual.R"))
 source(here::here("external_data.R"))
+source(here::here("R", "providers.R"))
 source(here::here("R", "chart_helpers.R"))
 source(here::here("R", "data_search.R"))
 source(here::here("R", "chart_library.R"))
 source(here::here("R", "analysis_helpers.R"))
 source(here::here("R", "main_app.R"))
 
-build_restore_test_state <- function() {
+local_mock_abs_data <- function(env = parent.frame()) {
+  original_abs_data <- abs_data
+
+  if (length(ls(envir = series_cache_env)) > 0) {
+    rm(list = ls(envir = series_cache_env), envir = series_cache_env)
+  }
+
+  assign(
+    "abs_data",
+    function(series = NULL) {
+      selected_ids <- unique(trimws(as.character(series %||% character())))
+      selected_ids <- selected_ids[nzchar(selected_ids)]
+
+      if (length(selected_ids) == 0) {
+        return(data_viewer_empty_series())
+      }
+
+      purrr::map_dfr(seq_along(selected_ids), function(index) {
+        series_id <- selected_ids[[index]]
+        matched_row <- abs_rows_by_id(series_id) %>% slice_head(n = 1)
+        series_name <- matched_row$series[[1]] %||% series_id
+
+        tibble::tibble(
+          date = seq(as.Date("2020-01-01"), by = "quarter", length.out = 16),
+          value = seq_len(16) + (index - 1) * 10,
+          name = series_name
+        )
+      })
+    },
+    envir = .GlobalEnv
+  )
+
+  withr::defer(assign("abs_data", original_abs_data, envir = .GlobalEnv), envir = env)
+  withr::defer({
+    if (length(ls(envir = series_cache_env)) > 0) {
+      rm(list = ls(envir = series_cache_env), envir = series_cache_env)
+    }
+  }, envir = env)
+}
+
+build_restore_abs_specs <- function(env = parent.frame()) {
+  local_mock_abs_data(env)
+  abs_rows <- valid_abs_restore_rows(abs_cat[[1]]) %>% slice_head(n = 2)
+
+  if (nrow(abs_rows) < 2) {
+    stop("Need at least two ABS rows for restore tests.", call. = FALSE)
+  }
+
+  purrr::map(seq_len(2), function(index) {
+    list(
+      index = index,
+      source = "abs",
+      abs_catalogue = abs_cat[[1]],
+      abs_desc = abs_rows$series[[index]],
+      abs_series_type = abs_rows$series_type[[index]],
+      abs_table = abs_rows$table_title[[index]],
+      abs_id = abs_rows$series_id[[index]],
+      label = abs_rows$series[[index]],
+      transform_profile = list(expression = "X", moving_average = 1, rolling_sum = 1, lagged_value = 0, lagged_pct = 0, lagged_ann = 0),
+      vis_type = "line"
+    )
+  })
+}
+
+build_restore_test_state <- function(env = parent.frame()) {
+  abs_specs <- build_restore_abs_specs(env)
+
   list(
     date_range = c(2024, 2025),
     show_table = TRUE,
     series = list(
-      list(
-        index = 1,
-        source = "ABS CPI",
-        text = "All groups CPI",
-        region = region_list[[1]],
-        transform = "index",
-        rebase_date = as.Date("2019-12-31"),
-        label = "All groups CPI",
-        transform_profile = list(expression = "X", moving_average = 1, rolling_sum = 1, lagged_value = 0, lagged_pct = 0, lagged_ann = 0),
-        vis_type = "line"
-      ),
-      list(
-        index = 2,
-        source = "ABS CPI",
-        text = "Housing",
-        region = region_list[[1]],
-        transform = "index",
-        rebase_date = as.Date("2019-12-31"),
-        label = "Housing CPI",
-        transform_profile = list(expression = "X", moving_average = 1, rolling_sum = 1, lagged_value = 0, lagged_pct = 0, lagged_ann = 0),
-        vis_type = "line"
-      ),
+      abs_specs[[1]],
+      abs_specs[[2]],
       NULL,
       NULL
     ),

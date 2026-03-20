@@ -1,7 +1,6 @@
 # app.R
 
 source(here::here("R", "bootstrap.R"))
-data_viewer_source(here::here("cpi_annual.R"), "cpi_annual.R")
 data_viewer_source(here::here("external_data.R"), "external_data.R")
 data_viewer_source(here::here("R", "providers.R"), "R/providers.R")
 data_viewer_source(here::here("R", "chart_helpers.R"), "R/chart_helpers.R")

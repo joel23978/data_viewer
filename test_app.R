@@ -1,8 +1,8 @@
 # smoke test for the main app object
 
 source(here::here("R", "bootstrap.R"))
-source(here::here("cpi_annual.R"))
 source(here::here("external_data.R"))
+source(here::here("R", "providers.R"))
 source(here::here("R", "chart_helpers.R"))
 source(here::here("R", "data_search.R"))
 source(here::here("R", "chart_library.R"))

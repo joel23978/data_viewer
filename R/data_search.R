@@ -255,12 +255,6 @@ recent_series_title <- function(spec) {
     return(trimws(spec$label))
   }
 
-  if (identical(spec$source, "ABS CPI")) {
-    cpi_text <- paste(spec$text %||% character(), collapse = ", ")
-    cpi_region <- paste(spec$region %||% character(), collapse = ", ")
-    return(trimws(paste(cpi_region, "CPI", cpi_text)))
-  }
-
   if (identical(spec$source, "FRED")) {
     base_title <- trimws(spec$fred_series %||% "FRED series")
     vintage_mode <- spec$fred_vintage_mode %||% "current"
@@ -293,10 +287,6 @@ recent_series_title <- function(spec) {
 }
 
 recent_series_frequency <- function(spec) {
-  if (identical(spec$source, "ABS CPI")) {
-    return("Quarterly")
-  }
-
   if (identical(spec$source, "FRED")) {
     return("Unknown")
   }
@@ -341,7 +331,7 @@ classify_location_code <- function(title = "", summary = "", source = "") {
     return("INTL")
   }
 
-  if (identical(source, "ABS CPI") || identical(source, "ABS") || identical(source, "RBA")) {
+  if (identical(source, "ABS") || identical(source, "RBA")) {
     return("AUS")
   }
 
@@ -690,44 +680,6 @@ search_dbnomics_series <- function(query, provider_code = NULL, dataset_code = N
   search_response
 }
 
-build_cpi_search_index <- function() {
-  cpi_data_all %>%
-    filter(!is.na(class_3_name), !is.na(region)) %>%
-    group_by(class_3_name, region) %>%
-    summarise(
-      start_date = min(date, na.rm = TRUE),
-      end_date = max(date, na.rm = TRUE),
-      .groups = "drop"
-    ) %>%
-    transmute(
-      search_id = paste("cpi", region, class_3_name, sep = "::"),
-      title = paste(region, "CPI", class_3_name, sep = " - "),
-      source = "ABS CPI",
-      type_code = "ECON",
-      location_code = "STATE",
-      frequency = "Quarterly",
-      start_date = start_date,
-      end_date = end_date,
-      summary = paste("Region:", region),
-      search_text = clean_search_text(paste(region, "cpi", class_3_name)),
-      load_payload = purrr::pmap(
-        list(class_3_name, region),
-        function(class_3_name, region) {
-          list(
-            source = "ABS CPI",
-            text = class_3_name,
-            region = region,
-            transform = "index",
-            rebase_date = as.Date("2019-12-31"),
-            label = class_3_name,
-            vis_type = "line",
-            transform_profile = default_transform_profile()
-          )
-        }
-      )
-    )
-}
-
 build_rba_search_index <- function() {
   provider_search_index <- provider_registry_search_index_builder("rba")
 
@@ -851,6 +803,9 @@ build_recent_search_index <- function() {
 
     purrr::map_dfr(Filter(Negate(is.null), chart_state$series), function(spec) {
       normalized_spec <- normalize_series_spec(spec)
+      if (identical(normalized_spec$source %||% "", "ABS CPI")) {
+        return(tibble::tibble())
+      }
       series_title <- recent_series_title(normalized_spec)
       summary_text <- paste(
         c(
@@ -902,7 +857,6 @@ build_recent_search_index <- function() {
 
 build_local_search_base_index <- function() {
   bind_rows(
-    build_cpi_search_index(),
     build_rba_search_index(),
     build_abs_search_index()
   ) %>%
@@ -954,13 +908,26 @@ read_prebuilt_local_search_token_index <- function() {
   readRDS(LOCAL_SEARCH_TOKEN_INDEX_PATH)
 }
 
+filter_supported_local_search_index <- function(index) {
+  if (is.null(index) || nrow(index) == 0) {
+    return(index)
+  }
+
+  index %>%
+    filter(source != "ABS CPI")
+}
+
 load_prebuilt_local_search_assets <- function(force = FALSE) {
   if (force) {
     invalidate_local_search_asset_cache()
   }
 
   if (!exists("local_index", envir = data_search_env, inherits = FALSE)) {
-    assign("local_index", read_prebuilt_local_search_index(), envir = data_search_env)
+    assign(
+      "local_index",
+      filter_supported_local_search_index(read_prebuilt_local_search_index()),
+      envir = data_search_env
+    )
   }
 
   if (!exists("token_index", envir = data_search_env, inherits = FALSE)) {

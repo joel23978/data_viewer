@@ -33,7 +33,7 @@ build_search_tab_ui <- function() {
               radioGroupButtons(
                 "search_source_filter",
                 NULL,
-                choices = c("All" = "all", "Recent" = "Recent", "CPI" = "ABS CPI", "FRED" = "FRED", "RBA" = "RBA", "ABS" = "ABS"),
+                choices = c("All" = "all", "Recent" = "Recent", "FRED" = "FRED", "RBA" = "RBA", "ABS" = "ABS"),
                 selected = "all",
                 justified = FALSE,
                 checkIcon = list(yes = icon("check"))
@@ -319,7 +319,6 @@ search_activity_message <- function(source_filter = "all", query_text = "") {
     source_filter %||% "all",
     "FRED" = "FRED",
     "Recent" = "recent saved series",
-    "ABS CPI" = "local CPI metadata",
     "RBA" = "local RBA metadata",
     "ABS" = "local ABS metadata",
     "all" = if (nzchar(cleaned_query)) "recent series, local metadata, and FRED" else "recent series and local metadata",
@@ -1714,7 +1713,7 @@ build_main_server <- function(input, output, session) {
   observe({
     series_sources <- vapply(
       seq_len(MAX_SERIES),
-      function(index) input[[series_input_id(index, "source")]] %||% "ABS CPI",
+      function(index) input[[series_input_id(index, "source")]] %||% "abs",
       character(1)
     )
 
@@ -2343,7 +2342,7 @@ build_main_server <- function(input, output, session) {
   })
 
   output$search_results_panel <- renderUI({
-    local_source_selected <- (input$search_source_filter %||% "all") %in% c("all", "Recent", "ABS CPI", "RBA", "ABS")
+    local_source_selected <- (input$search_source_filter %||% "all") %in% c("all", "Recent", "RBA", "ABS")
 
     if (identical(tab_load_state$search, "error")) {
       return(div(class = "message-banner", tab_load_error$search %||% "Unable to load local search metadata."))
@@ -2400,7 +2399,7 @@ build_main_server <- function(input, output, session) {
 
     search_messages <- c(
       loading_message,
-      if (is.null(search_index_store()) && source_filter %in% c("all", "Recent", "ABS CPI", "RBA", "ABS")) "Local metadata will load when search runs." else "",
+      if (is.null(search_index_store()) && source_filter %in% c("all", "Recent", "RBA", "ABS")) "Local metadata will load when search runs." else "",
       search_runtime_status() %||% "",
       if (isTRUE(include_remote_status)) fred_search_response()$status %||% "" else "",
       if (isTRUE(include_remote_status)) dbnomics_search_response()$status %||% "" else ""
@@ -2452,7 +2451,7 @@ build_main_server <- function(input, output, session) {
     location_filter <- input$search_location_filter %||% "all"
     frequency_filter <- input$search_frequency_filter %||% "all"
     query_text <- search_query_debounced()
-    local_source_selected <- source_filter %in% c("all", "Recent", "ABS CPI", "RBA", "ABS")
+    local_source_selected <- source_filter %in% c("all", "Recent", "RBA", "ABS")
     search_started_at <- Sys.time()
 
     local_results <- if (!local_source_selected || is.null(search_index_store())) {

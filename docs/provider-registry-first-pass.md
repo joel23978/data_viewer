@@ -34,7 +34,6 @@ The registry now owns the RBA path for:
 
 The first pass intentionally leaves these areas in their existing structure:
 
-- `ABS CPI`
 - `FRED`
 - `dbnomics`
 - `abs` deep dependent selector logic

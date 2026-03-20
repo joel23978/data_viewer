@@ -2,7 +2,7 @@
 
 ## Scope
 
-- Build a local metadata index for CPI, RBA, and ABS.
+- Build a local metadata index for RBA and ABS.
 - Add live FRED metadata search via the FRED API.
 - Add live DBnomics metadata search via the `rdbnomics` package.
 - Add a dedicated `Data Search` tab to the app.
@@ -19,9 +19,6 @@
 
 ## Source Coverage
 
-- CPI:
-  - Index one row per `class_3_name + region`.
-  - Store coverage dates from `cpi_data_all`.
 - RBA:
   - Index one row per series description.
   - Store table metadata and frequency from `browse_rba_series()`.

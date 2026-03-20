@@ -1,39 +1,85 @@
 source(here::here("R", "bootstrap.R"))
-source(here::here("cpi_annual.R"))
 source(here::here("external_data.R"))
+source(here::here("R", "providers.R"))
 source(here::here("R", "chart_helpers.R"))
 source(here::here("R", "data_search.R"))
 source(here::here("R", "chart_library.R"))
 source(here::here("R", "analysis_helpers.R"))
 source(here::here("R", "main_app.R"))
 
-build_test_state <- function() {
+local_mock_abs_data <- function(env = parent.frame()) {
+  original_abs_data <- abs_data
+
+  if (length(ls(envir = series_cache_env)) > 0) {
+    rm(list = ls(envir = series_cache_env), envir = series_cache_env)
+  }
+
+  assign(
+    "abs_data",
+    function(series = NULL) {
+      selected_ids <- unique(trimws(as.character(series %||% character())))
+      selected_ids <- selected_ids[nzchar(selected_ids)]
+
+      if (length(selected_ids) == 0) {
+        return(data_viewer_empty_series())
+      }
+
+      purrr::map_dfr(seq_along(selected_ids), function(index) {
+        series_id <- selected_ids[[index]]
+        matched_row <- abs_rows_by_id(series_id) %>% slice_head(n = 1)
+        series_name <- matched_row$series[[1]] %||% series_id
+
+        tibble::tibble(
+          date = seq(as.Date("2020-01-01"), by = "quarter", length.out = 16),
+          value = seq_len(16) + (index - 1) * 10,
+          name = series_name
+        )
+      })
+    },
+    envir = .GlobalEnv
+  )
+
+  withr::defer(assign("abs_data", original_abs_data, envir = .GlobalEnv), envir = env)
+  withr::defer({
+    if (length(ls(envir = series_cache_env)) > 0) {
+      rm(list = ls(envir = series_cache_env), envir = series_cache_env)
+    }
+  }, envir = env)
+}
+
+build_test_abs_specs <- function(env = parent.frame()) {
+  local_mock_abs_data(env)
+  abs_rows <- valid_abs_rows(abs_cat[[1]]) %>% slice_head(n = 2)
+
+  if (nrow(abs_rows) < 2) {
+    stop("Need at least two ABS rows for tests.", call. = FALSE)
+  }
+
+  purrr::map(seq_len(2), function(index) {
+    list(
+      index = index,
+      source = "abs",
+      abs_catalogue = abs_cat[[1]],
+      abs_desc = abs_rows$series[[index]],
+      abs_series_type = abs_rows$series_type[[index]],
+      abs_table = abs_rows$table_title[[index]],
+      abs_id = abs_rows$series_id[[index]],
+      label = abs_rows$series[[index]],
+      transform_profile = list(expression = "X", moving_average = 1, rolling_sum = 1, lagged_value = 0, lagged_pct = 0, lagged_ann = 0),
+      vis_type = "line"
+    )
+  })
+}
+
+build_test_state <- function(env = parent.frame()) {
+  abs_specs <- build_test_abs_specs(env)
+
   list(
     date_range = c(2024, 2025),
     show_table = TRUE,
     series = list(
-      list(
-        index = 1,
-        source = "ABS CPI",
-        text = "All groups CPI",
-        region = region_list[[1]],
-        transform = "index",
-        rebase_date = as.Date("2019-12-31"),
-        label = "All groups CPI",
-        transform_profile = list(expression = "X", moving_average = 1, rolling_sum = 1, lagged_value = 0, lagged_pct = 0, lagged_ann = 0),
-        vis_type = "line"
-      ),
-      list(
-        index = 2,
-        source = "ABS CPI",
-        text = "Housing",
-        region = region_list[[1]],
-        transform = "index",
-        rebase_date = as.Date("2019-12-31"),
-        label = "Housing CPI",
-        transform_profile = list(expression = "X", moving_average = 1, rolling_sum = 1, lagged_value = 0, lagged_pct = 0, lagged_ann = 0),
-        vis_type = "line"
-      ),
+      abs_specs[[1]],
+      abs_specs[[2]],
       NULL,
       NULL
     ),
@@ -289,11 +335,9 @@ test_that("data search index builds and returns relevant local metadata", {
   expect_gt(nrow(search_index), 1000)
   expect_true(all(c("title", "source", "type_code", "location_code", "frequency", "load_payload") %in% names(search_index)))
 
-  cpi_results <- filter_search_index(search_index, query = "housing", source_filter = "ABS CPI")
-  expect_gt(nrow(cpi_results), 0)
-  expect_true(any(grepl("Housing", cpi_results$title, fixed = TRUE)))
-  expect_true(all(cpi_results$type_code == "ECON"))
-  expect_true(all(cpi_results$location_code == "STATE"))
+  abs_results <- filter_search_index(search_index, query = "housing", source_filter = "ABS")
+  expect_gt(nrow(abs_results), 0)
+  expect_true(any(grepl("Housing", abs_results$title, fixed = TRUE)))
 
   abs_full_results <- filter_search_index(
     search_index,
@@ -336,8 +380,8 @@ test_that("data search index builds and returns relevant local metadata", {
   expect_gt(nrow(abs_australia_results), 0)
   expect_true(all(abs_australia_results$location_code == "AUS"))
 
-  expect_equal(classify_location_code("Australia CPI", "", "ABS CPI"), "AUS")
-  expect_equal(classify_location_code("Sydney CPI", "", "ABS CPI"), "STATE")
+  expect_equal(classify_location_code("Australia CPI", "", "ABS"), "AUS")
+  expect_equal(classify_location_code("Sydney CPI", "", "ABS"), "STATE")
   expect_equal(classify_location_code("United States Industrial Production", "", "FRED"), "INTL")
 })
 
@@ -516,17 +560,18 @@ test_that("DBnomics API search results are formatted and cached for the search t
 test_that("analysis helpers produce rolling correlations, regressions, and forecasts", {
   payload <- build_chart_data(build_test_state())
   chart_data <- payload$data
+  series_names <- unique(chart_data$name)
 
-  rolling <- rolling_correlation_data(chart_data, "All groups CPI", "Housing CPI", window = 4)
+  rolling <- rolling_correlation_data(chart_data, series_names[[1]], series_names[[2]], window = 4)
   expect_gt(nrow(rolling), 0)
   expect_true(all(c("date", "correlation") %in% colnames(rolling)))
 
-  regression <- regression_analysis(chart_data, dependent = "All groups CPI", independent = "Housing CPI", error_assumption = "robust")
+  regression <- regression_analysis(chart_data, dependent = series_names[[1]], independent = series_names[[2]], error_assumption = "robust")
   expect_true(all(c("term", "Estimate") %in% colnames(regression$coefficients)))
   expect_true(any(grepl("Std", colnames(regression$coefficients))))
   expect_gt(regression$metrics$observations, 5)
 
-  regression_classical <- regression_analysis(chart_data, dependent = "All groups CPI", independent = "Housing CPI", error_assumption = "classical")
+  regression_classical <- regression_analysis(chart_data, dependent = series_names[[1]], independent = series_names[[2]], error_assumption = "classical")
   expect_gt(regression_classical$metrics$observations, 5)
   expect_equal(regression$metrics$model_label, "Heteroskedastic-adjusted")
   expect_equal(regression_classical$metrics$model_label, "Homoskedastic OLS")
@@ -636,6 +681,7 @@ test_that("chart library uses the configured path and persists records", {
 })
 
 test_that("main server supports save and load flows with transform copying", {
+  abs_specs <- build_test_abs_specs()
   temp_library <- tempfile(fileext = ".rds")
   temp_presentation_library <- tempfile(fileext = ".rds")
   old_option <- getOption("data_viewer.chart_library_path")
@@ -651,18 +697,14 @@ test_that("main server supports save and load flows with transform copying", {
       end_date = as.Date("2025-12-31"),
       viewData1 = "1",
       series_1_enabled = TRUE,
-      series_1_source = "ABS CPI",
-      series_1_text = "All groups CPI",
-      series_1_region = region_list[[1]],
-      series_1_transform = "index",
-      series_1_label = "All groups CPI",
+      series_1_source = "abs",
+      series_1_abs_id = abs_specs[[1]]$abs_id,
+      series_1_label = abs_specs[[1]]$label,
       series_1_vis_type = "line",
       series_2_enabled = TRUE,
-      series_2_source = "ABS CPI",
-      series_2_text = "Housing",
-      series_2_region = region_list[[1]],
-      series_2_transform = "index",
-      series_2_label = "Housing CPI",
+      series_2_source = "abs",
+      series_2_abs_id = abs_specs[[2]]$abs_id,
+      series_2_label = abs_specs[[2]]$label,
       series_2_vis_type = "line",
       transform_1_expression = "X * 2",
       transform_1_moving_average = 2,
@@ -755,8 +797,8 @@ test_that("main server supports save and load flows with transform copying", {
     session$setInputs(
       side_panel_mode = "analysis",
       analysis_tabs = "Correlations",
-      analysis_corr_x = "All groups CPI",
-      analysis_corr_y = "Housing CPI",
+      analysis_corr_x = abs_specs[[1]]$label,
+      analysis_corr_y = abs_specs[[2]]$label,
       analysis_corr_window = 4
     )
     session$flushReact()
@@ -764,22 +806,20 @@ test_that("main server supports save and load flows with transform copying", {
     expect_s3_class(main_panel_widget(), "plotly")
 
     session$setInputs(
-      search_query = "housing OR balance",
-      search_source_filter = "ABS CPI",
-      search_type_filter = "ECON",
-      search_location_filter = "STATE",
-      search_frequency_filter = "Quarterly"
+      search_query = "",
+      search_source_filter = "ABS",
+      search_type_filter = "all",
+      search_location_filter = "all",
+      search_frequency_filter = "all"
     )
     session$flushReact()
     expect_gt(nrow(search_results()), 0)
-    expect_true(all(search_results()$type_code == "ECON"))
-    expect_true(all(search_results()$location_code == "STATE"))
 
     session$setInputs(search_results_table_rows_selected = 1, search_target_series = "3")
     session$setInputs(search_add_series = 1)
     session$flushReact()
-    expect_equal(builder_state()$series[[3]]$source, "ABS CPI")
-    expect_true(length(builder_state()$series[[3]]$text) > 0)
+    expect_equal(builder_state()$series[[3]]$source, "abs")
+    expect_true(length(builder_state()$series[[3]]$abs_id) > 0)
 
     session$setInputs(library_table_rows_selected = c(1))
     session$setInputs(
@@ -796,11 +836,9 @@ test_that("main server supports save and load flows with transform copying", {
       start_date = as.Date("2024-01-01"),
       end_date = as.Date("2025-12-31"),
       series_3_enabled = TRUE,
-      series_3_source = "ABS CPI",
-      series_3_text = "Food and non-alcoholic beverages",
-      series_3_region = region_list[[1]],
-      series_3_transform = "index",
-      series_3_label = "Food CPI",
+      series_3_source = "abs",
+      series_3_abs_id = abs_specs[[1]]$abs_id,
+      series_3_label = paste(abs_specs[[1]]$label, "copy"),
       series_3_vis_type = "line"
     )
     session$flushReact()
@@ -1056,30 +1094,27 @@ test_that("main server can add an ABS search result to the builder without losin
 })
 
 test_that("forecast analysis falls back to the first available series and uses shared styling", {
+  abs_specs <- build_test_abs_specs()
   shiny::testServer(build_main_server, {
     session$setInputs(
       start_date = as.Date("2024-01-01"),
       end_date = as.Date("2025-12-31"),
       series_1_enabled = TRUE,
-      series_1_source = "ABS CPI",
-      series_1_text = "All groups CPI",
-      series_1_region = region_list[[1]],
-      series_1_transform = "index",
-      series_1_label = "All groups CPI",
+      series_1_source = "abs",
+      series_1_abs_id = abs_specs[[1]]$abs_id,
+      series_1_label = abs_specs[[1]]$label,
       series_1_vis_type = "line",
       series_2_enabled = TRUE,
-      series_2_source = "ABS CPI",
-      series_2_text = "Housing",
-      series_2_region = region_list[[1]],
-      series_2_transform = "index",
-      series_2_label = "Housing CPI",
+      series_2_source = "abs",
+      series_2_abs_id = abs_specs[[2]]$abs_id,
+      series_2_label = abs_specs[[2]]$label,
       series_2_vis_type = "line",
       side_panel_mode = "analysis",
       analysis_tabs = "Forecast"
     )
     session$flushReact()
 
-    expect_equal(selected_forecast_series(), "All groups CPI")
+    expect_equal(selected_forecast_series(), abs_specs[[1]]$label)
     expect_equal(nrow(forecast_result()$forecast), 4)
     expect_s3_class(selected_analysis_widget(), "plotly")
     expect_equal(selected_analysis_widget()$x$layout$paper_bgcolor, "#f5f8f4")

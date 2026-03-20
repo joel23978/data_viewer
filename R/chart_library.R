@@ -88,6 +88,11 @@ ensure_chart_library <- function() {
   invisible(path)
 }
 
+chart_state_uses_removed_source <- function(chart_state) {
+  active_series <- Filter(Negate(is.null), normalize_chart_state(chart_state)$series)
+  any(vapply(active_series, function(spec) identical(spec$source %||% "", "ABS CPI"), logical(1)))
+}
+
 read_chart_library <- function() {
   ensure_chart_library()
 
@@ -117,7 +122,8 @@ read_chart_library <- function() {
       data_snapshot = lapply(data_snapshot, restore_chart_snapshot),
       analysis_spec = lapply(analysis_spec, function(spec) spec %||% NULL),
       analysis_payload = lapply(analysis_payload, function(payload) payload %||% NULL)
-    )
+    ) %>%
+    filter(!vapply(chart_state, chart_state_uses_removed_source, logical(1)))
 }
 
 write_chart_library <- function(chart_library) {

@@ -51,10 +51,6 @@ series_source_note_value <- function(spec) {
   source_label <- spec$source %||% "Unknown"
   id_values <- character()
 
-  if (identical(source_label, "ABS CPI")) {
-    id_values <- as.character(spec$text %||% character())
-  }
-
   if (identical(source_label, "FRED")) {
     id_values <- as.character(spec$fred_series %||% character())
   }
@@ -664,14 +660,13 @@ builder_series_ui <- function(index) {
         source_id,
         "Data source",
         choices = c(
-          "ABS CPI" = "ABS CPI",
           "FRED" = "FRED",
           "dbnomics" = "dbnomics",
           "rba" = "rba",
           "abs" = "abs",
           "Analysis result" = "analysis_result"
         ),
-        selected = "ABS CPI"
+        selected = "abs"
       ),
       uiOutput(series_source_controls_id(index)),
       textInput(series_input_id(index, "label"), "Chart label shown in the legend", value = ""),
@@ -695,7 +690,7 @@ restored_series_spec <- function(session, index) {
   restored_specs[[as.character(index)]] %||% NULL
 }
 
-series_source_controls_ui <- function(input, session, index, source_value = "ABS CPI", restored_spec = NULL) {
+series_source_controls_ui <- function(input, session, index, source_value = "abs", restored_spec = NULL) {
   provider_entry <- provider_registry_entry(source_value)
   if (!is.null(provider_entry) && is.function(provider_entry$controls_ui)) {
     return(provider_entry$controls_ui(input, session, index, restored_spec))
@@ -761,53 +756,6 @@ series_source_controls_ui <- function(input, session, index, source_value = "ABS
         value = input[[series_input_id(index, "dbnomics_series")]] %||% restored_spec$dbnomics_series %||% "AMECO/ZUTN/EA19.0.0.0.0.ZUTN"
       )
     )
-  }
-
-  if (identical(source_value, "ABS CPI")) {
-    selected_transform <- input[[series_input_id(index, "transform")]] %||% restored_spec$transform %||% "index"
-
-    controls <- list(
-      selectizeInput(
-        series_input_id(index, "text"),
-        "CPI series to include",
-        choices = list(
-          Category_1 = cat1,
-          Category_2 = cat2,
-          Category_3 = cat3,
-          Category_4 = cat4
-        ),
-        selected = input[[series_input_id(index, "text")]] %||% restored_spec$text %||% character(),
-        multiple = TRUE
-      ),
-      selectizeInput(
-        series_input_id(index, "region"),
-        "Geographic areas to include",
-        choices = region_list,
-        multiple = TRUE,
-        selected = input[[series_input_id(index, "region")]] %||% restored_spec$region %||% region_list[[1]]
-      ),
-      selectInput(
-        series_input_id(index, "transform"),
-        "Base CPI calculation before panel transforms",
-        choices = c("index", "y.y", "q.q", "rebased index"),
-        selected = selected_transform
-      )
-    )
-
-    if (identical(selected_transform, "rebased index")) {
-      controls <- c(
-        controls,
-        list(
-          dateInput(
-            series_input_id(index, "rebase_date"),
-            "Reference date for the rebased index",
-            value = as.Date(input[[series_input_id(index, "rebase_date")]] %||% restored_spec$rebase_date %||% "2019-12-31")
-          )
-        )
-      )
-    }
-
-    return(do.call(tagList, controls))
   }
 
   if (identical(source_value, "abs")) {
@@ -885,7 +833,7 @@ register_series_dependencies <- function(input, output, session, index) {
 
   output[[series_source_controls_id(index)]] <- renderUI({
     req(series_enabled(input, index))
-    source_value <- input[[series_input_id(index, "source")]] %||% "ABS CPI"
+    source_value <- input[[series_input_id(index, "source")]] %||% "abs"
     restored_spec_value <- restored_series_spec(session, index)
 
     if (!is.null(restored_spec_value) && !identical(restored_spec_value$source %||% source_value, source_value)) {
@@ -1109,7 +1057,7 @@ series_spec_from_input <- function(input, index, transform_profile = default_tra
     return(NULL)
   }
 
-  source_value <- input[[series_input_id(index, "source")]] %||% "ABS CPI"
+  source_value <- input[[series_input_id(index, "source")]] %||% "abs"
 
   provider_entry <- provider_registry_entry(source_value)
   if (!is.null(provider_entry) && is.function(provider_entry$spec_from_input)) {
@@ -1126,18 +1074,6 @@ series_spec_from_input <- function(input, index, transform_profile = default_tra
     transform_profile = transform_profile,
     vis_type = input[[series_input_id(index, "vis_type")]] %||% "line"
   )
-
-  if (identical(source_value, "ABS CPI")) {
-    selected_series <- input[[series_input_id(index, "text")]]
-    if (length(selected_series) == 0) {
-      return(NULL)
-    }
-
-    spec$text <- selected_series
-    spec$region <- input[[series_input_id(index, "region")]] %||% region_list[[1]]
-    spec$transform <- input[[series_input_id(index, "transform")]] %||% "index"
-    spec$rebase_date <- as.Date(input[[series_input_id(index, "rebase_date")]] %||% "2019-12-31")
-  }
 
   if (identical(source_value, "FRED")) {
     spec$fred_series <- trimws(input[[series_input_id(index, "fred_series")]] %||% "")
@@ -1340,18 +1276,11 @@ normalize_series_spec <- function(spec) {
 
   normalized_spec <- list(
     index = as.integer(spec$index),
-    source = spec$source %||% "ABS CPI",
+    source = spec$source %||% "abs",
     label = trimws(spec$label %||% ""),
     transform_profile = normalize_transform_profile(spec$transform_profile),
     vis_type = spec$vis_type %||% "line"
   )
-
-  if (identical(normalized_spec$source, "ABS CPI")) {
-    normalized_spec$text <- spec$text %||% character()
-    normalized_spec$region <- spec$region %||% region_list[[1]]
-    normalized_spec$transform <- spec$transform %||% "index"
-    normalized_spec$rebase_date <- as.Date(spec$rebase_date %||% "2019-12-31")
-  }
 
   if (identical(normalized_spec$source, "FRED")) {
     normalized_spec$fred_series <- trimws(spec$fred_series %||% "")
@@ -1473,24 +1402,6 @@ apply_series_metadata <- function(data, spec) {
 }
 
 query_series_history <- function(spec) {
-  if (identical(spec$source, "ABS CPI")) {
-    full_year_range <- c(
-      as.numeric(lubridate::year(min(cpi_data_all$date))),
-      as.numeric(lubridate::year(max(cpi_data_all$date)))
-    )
-
-    return(
-      cpi_splits_cust(
-        cpi_data = cpi_data_all,
-        transformation = spec$transform,
-        dates = full_year_range,
-        pick_split_1 = spec$text,
-        region_1_split = spec$region,
-        rebase_date = spec$rebase_date
-      )
-    )
-  }
-
   if (identical(spec$source, "FRED")) {
     vintage_mode <- spec$fred_vintage_mode %||% "current"
     vintage_date <- parse_vintage_date(spec$fred_vintage_date %||% NA)
@@ -2746,13 +2657,6 @@ restore_series_spec <- function(session, index, spec = NULL, restore_token = NUL
     current_restore_token <- session$userData$builder_restore_token %||% 0L
     if (!identical(current_restore_token, expected_restore_token)) {
       return(invisible(NULL))
-    }
-
-    if (identical(spec$source, "ABS CPI")) {
-      updateSelectizeInput(session, series_input_id(index, "text"), selected = spec$text, server = TRUE)
-      updateSelectizeInput(session, series_input_id(index, "region"), selected = spec$region, server = TRUE)
-      updateSelectInput(session, series_input_id(index, "transform"), selected = spec$transform)
-      updateDateInput(session, series_input_id(index, "rebase_date"), value = spec$rebase_date)
     }
 
     if (identical(spec$source, "FRED")) {
