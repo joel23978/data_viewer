@@ -930,6 +930,601 @@ init_builder_restore_state <- function(session) {
   )
 }
 
+init_builder_sync_handlers <- function(
+    input,
+    session,
+    builder_state,
+    restored_state,
+    builder_restore_mode,
+    clear_builder_restore_state,
+    apply_builder_state,
+    synced_library_title,
+    synced_source_note
+) {
+  observe({
+    current_chart_title <- trimws(input$style_title %||% "")
+    current_library_title <- trimws(input$library_title %||% "")
+    prior_synced_title <- trimws(synced_library_title() %||% "")
+
+    if (!nzchar(current_library_title) || identical(current_library_title, prior_synced_title)) {
+      updateTextInput(session, "library_title", value = current_chart_title)
+      synced_library_title(current_chart_title)
+    }
+  })
+
+  observe({
+    if (identical(builder_restore_mode(), "applying")) {
+      return(invisible(NULL))
+    }
+
+    generated_source_note <- default_source_note(normalize_chart_state(builder_state_from_input(input, session))$series)
+    current_source_note <- trimws(input$style_note %||% "")
+    prior_synced_note <- trimws(synced_source_note() %||% "")
+
+    if (!nzchar(current_source_note) || identical(current_source_note, prior_synced_note)) {
+      updateTextInput(session, "style_note", value = generated_source_note)
+      synced_source_note(generated_source_note)
+    }
+  })
+
+  observeEvent(input$reset_builder, {
+    default_state <- normalize_chart_state(default_builder_state())
+    apply_builder_state(default_state, selected_series_index = 1, navigate_builder = TRUE)
+    updateTextInput(session, "library_title", value = default_state$style$title)
+    updateTextAreaInput(session, "library_description", value = "")
+    synced_library_title(default_state$style$title)
+    synced_source_note(default_state$style$note)
+    showNotification("Builder reset to the default view.", type = "message")
+  })
+
+  observeEvent(input$clear_series_setup, {
+    cleared_state <- builder_state()
+    cleared_state$series <- rep(list(NULL), MAX_SERIES)
+    apply_builder_state(cleared_state, selected_series_index = 1, navigate_builder = FALSE)
+    updateTabsetPanel(session, "series_tabs", selected = "Series 1")
+    showNotification("Series setup cleared.", type = "message")
+  })
+
+  observeEvent(input$clear_presentation_panel, {
+    cleared_state <- builder_state()
+    cleared_state$style <- default_style_settings()
+    cleared_state$style$note <- default_source_note(cleared_state$series)
+    apply_builder_state(cleared_state, navigate_builder = FALSE)
+    synced_source_note(cleared_state$style$note)
+    showNotification("Presentation inputs cleared.", type = "message")
+  })
+
+  observeEvent(input$clear_workspace_tools, {
+    cleared_state <- builder_state()
+    cleared_state$all_series_transform <- default_transform_profile()
+    cleared_state$series <- lapply(cleared_state$series, function(spec) {
+      if (is.null(spec)) {
+        return(NULL)
+      }
+
+      spec$transform_profile <- default_transform_profile()
+      spec
+    })
+
+    apply_builder_state(cleared_state, navigate_builder = FALSE)
+    updateRadioGroupButtons(session, "side_panel_mode", selected = "transform")
+    updateTabsetPanel(session, "transform_tabs", selected = "All")
+    updateTabsetPanel(session, "analysis_tabs", selected = "Correlations")
+    updateNumericInput(session, "analysis_corr_window", value = 4)
+    updateRadioGroupButtons(session, "analysis_reg_errors", selected = "classical")
+    updateRadioGroupButtons(session, "analysis_forecast_family", selected = "AR")
+    updateRadioGroupButtons(session, "analysis_forecast_window_mode", selected = "expanding")
+    updateNumericInput(session, "analysis_forecast_window_size", value = 12)
+    updateNumericInput(session, "analysis_forecast_ar", value = 1)
+    updateNumericInput(session, "analysis_forecast_ma", value = 0)
+    updateNumericInput(session, "analysis_forecast_holdout", value = 0)
+    updateNumericInput(session, "analysis_forecast_horizon", value = 4)
+    updateRadioGroupButtons(session, "analysis_seasonal_view", selected = "both")
+    updateRadioGroupButtons(session, "analysis_hp_side", selected = "two_sided")
+    updateRadioGroupButtons(session, "analysis_hp_view", selected = "overlay")
+    updateRadioGroupButtons(session, "analysis_kalman_side", selected = "two_sided")
+    updateRadioGroupButtons(session, "analysis_kalman_view", selected = "overlay")
+    showNotification("Workspace tools cleared.", type = "message")
+  })
+
+  observeEvent(
+    {
+      c(
+        list(
+          input$start_date,
+          input$end_date,
+          input$style_title,
+          input$style_subtitle,
+          input$style_y_axis_label,
+          input$style_note,
+          input$style_renderer,
+          input$style_font_family,
+          input$style_legend,
+          input$style_palette,
+          input$style_date_format,
+          input$style_x_labels,
+          input$style_auto_y_axis,
+          input$style_y_min,
+          input$style_y_max,
+          input$style_y_breaks,
+          input$style_invert_y_axis,
+          input$style_horizontal_1,
+          input$style_horizontal_2,
+          input$style_horizontal_shading_min,
+          input$style_horizontal_shading_max,
+          input$style_vertical_1,
+          input$style_vertical_2,
+          input$style_recession_shading,
+          input$export_width,
+          input$export_height,
+          input$viewData1,
+          input$transform_all_moving_average,
+          input$transform_all_rolling_sum,
+          input$transform_all_lagged_value,
+          input$transform_all_lagged_pct,
+          input$transform_all_lagged_ann,
+          input$transform_all_subtract_series,
+          input$transform_all_expression
+        ),
+        unlist(lapply(seq_len(MAX_SERIES), function(index) {
+          list(
+            input[[series_input_id(index, "enabled")]],
+            input[[series_input_id(index, "source")]],
+            input[[series_input_id(index, "label")]],
+            input[[series_input_id(index, "vis_type")]],
+            input[[series_input_id(index, "text")]],
+            input[[series_input_id(index, "region")]],
+            input[[series_input_id(index, "transform")]],
+            input[[series_input_id(index, "rebase_date")]],
+            input[[series_input_id(index, "fred_series")]],
+            input[[series_input_id(index, "fred_vintage_mode")]],
+            input[[series_input_id(index, "fred_vintage_date")]],
+            input[[series_input_id(index, "dbnomics_series")]],
+            input[[series_input_id(index, "rba_table")]],
+            input[[series_input_id(index, "rba_desc")]],
+            input[[series_input_id(index, "abs_catalogue")]],
+            input[[series_input_id(index, "abs_desc")]],
+            input[[series_input_id(index, "abs_series_type")]],
+            input[[series_input_id(index, "abs_table")]],
+            input[[series_input_id(index, "abs_id")]],
+            input[[transform_input_id(paste0("transform_", index), "moving_average")]],
+            input[[transform_input_id(paste0("transform_", index), "rolling_sum")]],
+            input[[transform_input_id(paste0("transform_", index), "lagged_value")]],
+            input[[transform_input_id(paste0("transform_", index), "lagged_pct")]],
+            input[[transform_input_id(paste0("transform_", index), "lagged_ann")]],
+            input[[transform_input_id(paste0("transform_", index), "subtract_series")]],
+            input[[transform_input_id(paste0("transform_", index), "expression")]]
+          )
+        }), recursive = FALSE)
+      )
+    },
+    {
+      if (identical(builder_restore_mode(), "applying")) {
+        return(invisible(NULL))
+      }
+
+      loaded_state <- restored_state()
+      req(!is.null(loaded_state))
+
+      current_state <- normalize_chart_state(builder_state_from_input(input, session))
+      if (!identical(current_state, loaded_state)) {
+        clear_builder_restore_state()
+      }
+    },
+    ignoreInit = TRUE
+  )
+
+  invisible(NULL)
+}
+
+init_search_builder_handlers <- function(
+    input,
+    output,
+    session,
+    loaded_main_tabs,
+    search_results,
+    search_query_notification_id,
+    builder_state,
+    apply_builder_state,
+    run_with_status
+) {
+  build_search_preview_style <- function(preview_state, preview_payload) {
+    preview_style <- preview_state$style
+    preview_style$title <- ""
+    preview_style$subtitle <- ""
+    preview_style$legend <- "none"
+    preview_style$note <- ""
+    preview_style$y_axis_label <- ""
+    preview_style$x_labels <- 3
+    preview_style$y_breaks <- pretty(preview_payload$data$value, n = 3)
+    preview_style$auto_y_axis <- TRUE
+    preview_style
+  }
+
+  observe({
+    req("search" %in% loaded_main_tabs())
+    result_count <- nrow(search_results())
+    notification_id <- search_query_notification_id() %||% "search-query-status"
+
+    showNotification(
+      sprintf("Search ready: %s result%s.", scales::comma(result_count), if (identical(result_count, 1L)) "" else "s"),
+      id = notification_id,
+      duration = 2.5,
+      closeButton = TRUE,
+      type = "message"
+    )
+  })
+
+  output$search_results_table <- DT::renderDataTable({
+    search_rows <- search_results() %>%
+      transmute(
+        Title = title,
+        Source = source,
+        `Series ID` = dplyr::case_when(
+          source == "ABS" ~ vapply(
+            load_payload,
+            function(payload) {
+              trimws(payload$abs_id %||% "")
+            },
+            character(1)
+          ),
+          source == "FRED" ~ vapply(
+            load_payload,
+            function(payload) {
+              trimws(payload$fred_series %||% "")
+            },
+            character(1)
+          ),
+          source == "RBA" ~ sub("^rba::", "", search_id %||% ""),
+          TRUE ~ ""
+        ),
+        Type = type_code_label(type_code),
+        Location = location_code_label(location_code),
+        Frequency = frequency,
+        Start = if_else(is.na(start_date), "", format(start_date, "%Y-%m-%d")),
+        End = if_else(is.na(end_date), "", format(end_date, "%Y-%m-%d")),
+        Summary = summary
+      )
+
+    DT::datatable(
+      search_rows,
+      selection = "single",
+      rownames = FALSE,
+      options = list(
+        pageLength = 25,
+        scrollX = TRUE,
+        autoWidth = TRUE,
+        columnDefs = list(
+          list(width = "28%", targets = 0),
+          list(width = "12%", targets = 2),
+          list(width = "30%", targets = 8)
+        )
+      )
+    )
+  }, server = TRUE)
+
+  selected_search_result <- reactive({
+    selected_row <- input$search_results_table_rows_selected
+    search_rows <- search_results()
+
+    if (length(selected_row) == 0 || nrow(search_rows) == 0) {
+      return(NULL)
+    }
+
+    search_rows[selected_row, , drop = FALSE]
+  })
+
+  output$search_selected_meta <- renderUI({
+    search_row <- selected_search_result()
+
+    if (is.null(search_row)) {
+      return(div(class = "empty-state", "Select a result to inspect it."))
+    }
+
+    div(
+      class = "library-meta",
+      tags$h3(search_row$title[[1]]),
+      tags$p(class = "muted-copy", search_row$summary[[1]]),
+      div(
+        class = "summary-chip-row",
+        summary_chip("Source", search_row$source[[1]]),
+        summary_chip("Type", type_code_label(search_row$type_code[[1]])),
+        summary_chip("Location", location_code_label(search_row$location_code[[1]])),
+        summary_chip("Frequency", search_row$frequency[[1]]),
+        summary_chip("Start", if (is.na(search_row$start_date[[1]])) "Unknown" else format(search_row$start_date[[1]], "%Y-%m-%d"))
+      )
+    )
+  })
+
+  search_preview_context <- reactive({
+    search_row <- selected_search_result()
+
+    if (is.null(search_row)) {
+      return(NULL)
+    }
+
+    preview_spec <- search_result_series_spec(search_row, 1)
+    preview_state <- preview_chart_state(
+      preview_spec,
+      date_range = c(search_row$start_date[[1]], search_row$end_date[[1]])
+    )
+    preview_payload <- build_chart_data(preview_state)
+
+    if (nrow(preview_payload$data) == 0) {
+      return(list(search_row = search_row, payload = preview_payload, style = NULL))
+    }
+
+    list(
+      search_row = search_row,
+      payload = preview_payload,
+      style = build_search_preview_style(preview_state, preview_payload)
+    )
+  })
+
+  search_preview_widget <- reactive({
+    preview_context <- search_preview_context()
+
+    if (is.null(preview_context)) {
+      return(empty_plotly_widget("Select a result to preview it."))
+    }
+
+    if (nrow(preview_context$payload$data) == 0) {
+      return(empty_plotly_widget("No preview data is available for this result."))
+    }
+
+    build_chart_widget(preview_context$payload$data, preview_context$style)
+  })
+
+  search_preview_plot <- reactive({
+    preview_context <- search_preview_context()
+
+    if (is.null(preview_context)) {
+      return(
+        ggplot() +
+          annotate("text", x = 0.5, y = 0.5, label = "Select a result to preview it.", size = 5, colour = "#64748b") +
+          xlim(0, 1) +
+          ylim(0, 1) +
+          theme_void()
+      )
+    }
+
+    if (nrow(preview_context$payload$data) == 0) {
+      return(
+        ggplot() +
+          annotate("text", x = 0.5, y = 0.5, label = "No preview data is available for this result.", size = 5, colour = "#64748b") +
+          xlim(0, 1) +
+          ylim(0, 1) +
+          theme_void()
+      )
+    }
+
+    build_chart_plot(preview_context$payload$data, preview_context$style) +
+      theme(
+        plot.title = element_blank(),
+        plot.subtitle = element_blank(),
+        plot.caption = element_blank(),
+        plot.tag = element_blank(),
+        plot.margin = margin(t = -10, r = 0, b = -6, l = 0),
+        axis.text.y.right = element_text(margin = margin(l = 10))
+      )
+  })
+
+  output$search_preview_plot <- renderPlot({
+    search_preview_plot()
+  })
+
+  observeEvent(input$search_add_series, {
+    search_row <- selected_search_result()
+    req(!is.null(search_row))
+
+    run_with_status(
+      "Adding the selected search result to the builder...",
+      "Search result added to the builder.",
+      {
+        target_index <- series_slot_from_search_target(builder_state(), input$search_target_series)
+        series_spec <- search_result_series_spec(search_row, target_index)
+        updated_state <- builder_state()
+        updated_state$series[[target_index]] <- normalize_series_spec(series_spec)
+        apply_builder_state(
+          updated_state,
+          selected_series_index = target_index,
+          navigate_builder = FALSE,
+          restore_scope = "single_series"
+        )
+      },
+      failure_prefix = "Unable to add the search result:"
+    )
+  })
+
+  list(
+    selected_search_result = selected_search_result,
+    search_preview_widget = search_preview_widget
+  )
+}
+
+init_saved_analysis_restore_handlers <- function(session) {
+  restore_saved_analysis_state <- function(chart_record) {
+    chart_kind <- chart_record$chart_kind[[1]] %||% "builder"
+    analysis_spec <- chart_record$analysis_spec[[1]] %||% list()
+
+    if (identical(chart_kind, "builder")) {
+      updateRadioGroupButtons(session, "side_panel_mode", selected = "transform")
+      return(invisible(NULL))
+    }
+
+    updateRadioGroupButtons(session, "side_panel_mode", selected = "analysis")
+    updateTabsetPanel(session, "analysis_tabs", selected = analysis_spec$tab %||% "Correlations")
+
+    session$onFlushed(function() {
+      if (identical(chart_kind, "correlation")) {
+        updateSelectInput(session, "analysis_corr_x", selected = analysis_spec$series_x %||% "")
+        updateSelectInput(session, "analysis_corr_y", selected = analysis_spec$series_y %||% "")
+        updateNumericInput(session, "analysis_corr_window", value = analysis_spec$window %||% 4)
+      } else if (identical(chart_kind, "regression")) {
+        updateSelectInput(session, "analysis_reg_y", selected = analysis_spec$dependent %||% "")
+        updateSelectInput(session, "analysis_reg_x", selected = analysis_spec$independent %||% "")
+        updateRadioGroupButtons(session, "analysis_reg_errors", selected = analysis_spec$error_assumption %||% "classical")
+      } else if (identical(chart_kind, "forecast")) {
+        updateSelectInput(session, "analysis_forecast_series", selected = analysis_spec$series_name %||% "")
+        updateRadioGroupButtons(session, "analysis_forecast_family", selected = analysis_spec$model_family %||% "AR")
+        updateRadioGroupButtons(session, "analysis_forecast_window_mode", selected = analysis_spec$window_mode %||% "expanding")
+        updateNumericInput(session, "analysis_forecast_window_size", value = analysis_spec$window_size %||% 12)
+        updateNumericInput(session, "analysis_forecast_ar", value = analysis_spec$ar_lag %||% 1)
+        updateNumericInput(session, "analysis_forecast_ma", value = analysis_spec$ma_lag %||% 0)
+        updateNumericInput(session, "analysis_forecast_holdout", value = analysis_spec$holdout_size %||% 0)
+        updateNumericInput(session, "analysis_forecast_horizon", value = analysis_spec$horizon %||% 4)
+      } else if (identical(chart_kind, "seasonal_adjustment")) {
+        updateSelectInput(session, "analysis_seasonal_series", selected = analysis_spec$series_name %||% "")
+        updateRadioGroupButtons(session, "analysis_seasonal_view", selected = analysis_spec$display_mode %||% "both")
+      } else if (identical(chart_kind, "hp_filter")) {
+        updateSelectInput(session, "analysis_hp_series", selected = analysis_spec$series_name %||% "")
+        updateRadioGroupButtons(session, "analysis_hp_side", selected = analysis_spec$side %||% "two_sided")
+        updateRadioGroupButtons(session, "analysis_hp_view", selected = analysis_spec$display_mode %||% "overlay")
+      } else if (identical(chart_kind, "kalman_filter")) {
+        updateSelectInput(session, "analysis_kalman_series", selected = analysis_spec$series_name %||% "")
+        updateRadioGroupButtons(session, "analysis_kalman_side", selected = analysis_spec$side %||% "two_sided")
+        updateRadioGroupButtons(session, "analysis_kalman_view", selected = analysis_spec$display_mode %||% "overlay")
+      }
+    }, once = TRUE)
+
+    invisible(NULL)
+  }
+
+  list(
+    restore_saved_analysis_state = restore_saved_analysis_state
+  )
+}
+
+init_library_preview_handlers <- function(
+    input,
+    output,
+    session,
+    ensure_chart_library_loaded,
+    selected_chart_record,
+    selected_chart_records,
+    selected_presentation_charts,
+    library_renderer,
+    build_saved_chart_widget,
+    build_saved_chart_plot,
+    run_with_status,
+    apply_builder_state,
+    restore_saved_analysis_state
+) {
+  selected_presentation_chart_record <- reactive({
+    selected_row <- input$presentation_chart_table_rows_selected
+    presentation_rows <- selected_presentation_charts()
+
+    if (length(selected_row) == 0 || nrow(presentation_rows) == 0) {
+      return(NULL)
+    }
+
+    presentation_rows[selected_row[1], , drop = FALSE]
+  })
+
+  selected_preview_chart_record <- reactive({
+    presentation_chart_record <- selected_presentation_chart_record()
+    if (!is.null(presentation_chart_record)) {
+      return(presentation_chart_record)
+    }
+
+    selected_chart_record()
+  })
+
+  output$library_selected_meta <- renderUI({
+    chart_record <- selected_preview_chart_record()
+    selected_records <- selected_chart_records()
+
+    if (is.null(chart_record)) {
+      return(div(class = "empty-state", "Select a saved chart to preview it."))
+    }
+
+    description_text <- chart_record$description[[1]] %||% ""
+    if (!nzchar(description_text)) {
+      description_text <- "No notes saved."
+    }
+
+    div(
+      class = "library-meta",
+      tags$h3(chart_record$title[[1]]),
+      tags$p(class = "muted-copy", description_text),
+      if (!is.null(selected_records) && nrow(selected_records) > 1) {
+        tags$p(class = "muted-copy", paste("Showing the first of", nrow(selected_records), "selected charts."))
+      },
+      div(
+        class = "summary-chip-row",
+        summary_chip("Sources", chart_record$source_summary[[1]]),
+        summary_chip("Series", chart_record$series_count[[1]]),
+        summary_chip("Saved", format(chart_record$saved_at[[1]], "%d %b %Y %H:%M"))
+      )
+    )
+  })
+
+  output$library_plot <- renderPlotly({
+    chart_record <- selected_preview_chart_record()
+    if (is.null(chart_record)) {
+      return(empty_plotly_widget("Select a saved chart to preview it."))
+    }
+
+    build_saved_chart_widget(chart_record)
+  })
+
+  library_plot_height <- reactive({
+    chart_record <- selected_preview_chart_record()
+    if (is.null(chart_record) || nrow(chart_record) == 0) {
+      return(500L)
+    }
+
+    chart_kind <- chart_record$chart_kind[[1]] %||% "builder"
+    chart_state <- chart_record$chart_state[[1]] %||% list(style = default_style_settings())
+    chart_style <- chart_state$style %||% default_style_settings()
+
+    if (!identical(chart_kind, "builder")) {
+      return(500L)
+    }
+
+    plotly_widget_height(chart_record$data_snapshot[[1]], chart_style, base_height = 500)
+  })
+
+  output$library_plot_container <- renderUI({
+    if (identical(library_renderer(), "plotly")) {
+      return(plotlyOutput("library_plot", height = paste0(library_plot_height(), "px")))
+    }
+
+    plotOutput("library_plot_static", height = paste0(library_plot_height(), "px"))
+  })
+
+  output$library_plot_static <- renderPlot({
+    chart_record <- selected_preview_chart_record()
+    if (is.null(chart_record)) {
+      return(empty_static_plot("Select a saved chart to preview it."))
+    }
+
+    build_saved_chart_plot(chart_record)
+  })
+
+  observeEvent(input$load_chart, {
+    ensure_chart_library_loaded()
+    chart_record <- selected_preview_chart_record()
+    req(!is.null(chart_record), nrow(chart_record) == 1)
+
+    run_with_status(
+      paste("Loading", chart_record$title[[1]], "into the builder..."),
+      "Saved chart loaded into the builder.",
+      {
+        apply_builder_state(chart_record$chart_state[[1]], navigate_builder = TRUE)
+        restore_saved_analysis_state(chart_record)
+        updateTextInput(session, "library_title", value = chart_record$title[[1]])
+        updateTextAreaInput(session, "library_description", value = chart_record$description[[1]] %||% "")
+      },
+      failure_prefix = "Unable to load the saved chart:"
+    )
+  })
+
+  list(
+    selected_preview_chart_record = selected_preview_chart_record
+  )
+}
+
 build_main_server <- function(input, output, session) {
   ensure_chart_library()
   session$userData$restored_series_specs <- list()
@@ -1131,92 +1726,6 @@ build_main_server <- function(input, output, session) {
   synced_library_title <- reactiveVal("")
   synced_source_note <- reactiveVal(default_builder_state()$style$note)
 
-  observe({
-    current_chart_title <- trimws(input$style_title %||% "")
-    current_library_title <- trimws(input$library_title %||% "")
-    prior_synced_title <- trimws(synced_library_title() %||% "")
-
-    if (!nzchar(current_library_title) || identical(current_library_title, prior_synced_title)) {
-      updateTextInput(session, "library_title", value = current_chart_title)
-      synced_library_title(current_chart_title)
-    }
-  })
-
-  observe({
-    if (identical(builder_restore_mode(), "applying")) {
-      return(invisible(NULL))
-    }
-
-    generated_source_note <- default_source_note(normalize_chart_state(builder_state_from_input(input, session))$series)
-    current_source_note <- trimws(input$style_note %||% "")
-    prior_synced_note <- trimws(synced_source_note() %||% "")
-
-    if (!nzchar(current_source_note) || identical(current_source_note, prior_synced_note)) {
-      updateTextInput(session, "style_note", value = generated_source_note)
-      synced_source_note(generated_source_note)
-    }
-  })
-
-  observeEvent(input$reset_builder, {
-    default_state <- normalize_chart_state(default_builder_state())
-    apply_builder_state(default_state, selected_series_index = 1, navigate_builder = TRUE)
-    updateTextInput(session, "library_title", value = default_state$style$title)
-    updateTextAreaInput(session, "library_description", value = "")
-    synced_library_title(default_state$style$title)
-    synced_source_note(default_state$style$note)
-    showNotification("Builder reset to the default view.", type = "message")
-  })
-
-  observeEvent(input$clear_series_setup, {
-    cleared_state <- builder_state()
-    cleared_state$series <- rep(list(NULL), MAX_SERIES)
-    apply_builder_state(cleared_state, selected_series_index = 1, navigate_builder = FALSE)
-    updateTabsetPanel(session, "series_tabs", selected = "Series 1")
-    showNotification("Series setup cleared.", type = "message")
-  })
-
-  observeEvent(input$clear_presentation_panel, {
-    cleared_state <- builder_state()
-    cleared_state$style <- default_style_settings()
-    cleared_state$style$note <- default_source_note(cleared_state$series)
-    apply_builder_state(cleared_state, navigate_builder = FALSE)
-    synced_source_note(cleared_state$style$note)
-    showNotification("Presentation inputs cleared.", type = "message")
-  })
-
-  observeEvent(input$clear_workspace_tools, {
-    cleared_state <- builder_state()
-    cleared_state$all_series_transform <- default_transform_profile()
-    cleared_state$series <- lapply(cleared_state$series, function(spec) {
-      if (is.null(spec)) {
-        return(NULL)
-      }
-
-      spec$transform_profile <- default_transform_profile()
-      spec
-    })
-
-    apply_builder_state(cleared_state, navigate_builder = FALSE)
-    updateRadioGroupButtons(session, "side_panel_mode", selected = "transform")
-    updateTabsetPanel(session, "transform_tabs", selected = "All")
-    updateTabsetPanel(session, "analysis_tabs", selected = "Correlations")
-    updateNumericInput(session, "analysis_corr_window", value = 4)
-    updateRadioGroupButtons(session, "analysis_reg_errors", selected = "classical")
-    updateRadioGroupButtons(session, "analysis_forecast_family", selected = "AR")
-    updateRadioGroupButtons(session, "analysis_forecast_window_mode", selected = "expanding")
-    updateNumericInput(session, "analysis_forecast_window_size", value = 12)
-    updateNumericInput(session, "analysis_forecast_ar", value = 1)
-    updateNumericInput(session, "analysis_forecast_ma", value = 0)
-    updateNumericInput(session, "analysis_forecast_holdout", value = 0)
-    updateNumericInput(session, "analysis_forecast_horizon", value = 4)
-    updateRadioGroupButtons(session, "analysis_seasonal_view", selected = "both")
-    updateRadioGroupButtons(session, "analysis_hp_side", selected = "two_sided")
-    updateRadioGroupButtons(session, "analysis_hp_view", selected = "overlay")
-    updateRadioGroupButtons(session, "analysis_kalman_side", selected = "two_sided")
-    updateRadioGroupButtons(session, "analysis_kalman_view", selected = "overlay")
-    showNotification("Workspace tools cleared.", type = "message")
-  })
-
   apply_date_window_shortcut <- function(shortcut_value) {
     shortcut_value <- as.character(shortcut_value %||% "")
     if (!nzchar(shortcut_value)) {
@@ -1260,91 +1769,16 @@ build_main_server <- function(input, output, session) {
     input_state
   })
 
-  observeEvent(
-    {
-      c(
-        list(
-          input$start_date,
-          input$end_date,
-          input$style_title,
-          input$style_subtitle,
-          input$style_y_axis_label,
-          input$style_note,
-          input$style_renderer,
-          input$style_font_family,
-          input$style_legend,
-          input$style_palette,
-          input$style_date_format,
-          input$style_x_labels,
-          input$style_auto_y_axis,
-          input$style_y_min,
-          input$style_y_max,
-          input$style_y_breaks,
-          input$style_invert_y_axis,
-          input$style_horizontal_1,
-          input$style_horizontal_2,
-          input$style_horizontal_shading_min,
-          input$style_horizontal_shading_max,
-          input$style_vertical_1,
-          input$style_vertical_2,
-          input$style_recession_shading,
-          input$export_width,
-          input$export_height,
-          input$viewData1,
-          input$transform_all_moving_average,
-          input$transform_all_rolling_sum,
-          input$transform_all_lagged_value,
-          input$transform_all_lagged_pct,
-          input$transform_all_lagged_ann,
-          input$transform_all_subtract_series,
-          input$transform_all_expression
-        ),
-        unlist(lapply(seq_len(MAX_SERIES), function(index) {
-          list(
-            input[[series_input_id(index, "enabled")]],
-            input[[series_input_id(index, "source")]],
-            input[[series_input_id(index, "label")]],
-            input[[series_input_id(index, "vis_type")]],
-            input[[series_input_id(index, "text")]],
-            input[[series_input_id(index, "region")]],
-            input[[series_input_id(index, "transform")]],
-            input[[series_input_id(index, "rebase_date")]],
-            input[[series_input_id(index, "fred_series")]],
-            input[[series_input_id(index, "fred_vintage_mode")]],
-            input[[series_input_id(index, "fred_vintage_date")]],
-            input[[series_input_id(index, "dbnomics_series")]],
-            input[[series_input_id(index, "rba_table")]],
-            input[[series_input_id(index, "rba_desc")]],
-            input[[series_input_id(index, "abs_catalogue")]],
-            input[[series_input_id(index, "abs_desc")]],
-            input[[series_input_id(index, "abs_series_type")]],
-            input[[series_input_id(index, "abs_table")]],
-            input[[series_input_id(index, "abs_id")]],
-            input[[transform_input_id(paste0("transform_", index), "moving_average")]],
-            input[[transform_input_id(paste0("transform_", index), "rolling_sum")]],
-            input[[transform_input_id(paste0("transform_", index), "lagged_value")]],
-            input[[transform_input_id(paste0("transform_", index), "lagged_pct")]],
-            input[[transform_input_id(paste0("transform_", index), "lagged_ann")]],
-            input[[transform_input_id(paste0("transform_", index), "subtract_series")]],
-            input[[transform_input_id(paste0("transform_", index), "expression")]]
-          )
-        }), recursive = FALSE)
-      )
-    },
-    {
-      if (identical(builder_restore_mode(), "applying")) {
-        return(invisible(NULL))
-      }
-
-      loaded_state <- restored_state()
-      req(!is.null(loaded_state))
-
-      current_state <- normalize_chart_state(builder_state_from_input(input, session))
-      if (!identical(current_state, loaded_state)) {
-        clear_builder_restore_state()
-      }
-    },
-    ignoreInit = TRUE
+  init_builder_sync_handlers(
+    input = input,
+    session = session,
+    builder_state = builder_state,
+    restored_state = restored_state,
+    builder_restore_mode = builder_restore_mode,
+    clear_builder_restore_state = clear_builder_restore_state,
+    apply_builder_state = apply_builder_state,
+    synced_library_title = synced_library_title,
+    synced_source_note = synced_source_note
   )
 
   chart_payload <- reactive({
@@ -2041,178 +2475,19 @@ build_main_server <- function(input, output, session) {
     combined_results
   })
 
-  observe({
-    req("search" %in% loaded_main_tabs())
-    result_count <- nrow(search_results())
-    notification_id <- search_query_notification_id() %||% "search-query-status"
-
-    showNotification(
-      sprintf("Search ready: %s result%s.", scales::comma(result_count), if (identical(result_count, 1L)) "" else "s"),
-      id = notification_id,
-      duration = 2.5,
-      closeButton = TRUE,
-      type = "message"
-    )
-  })
-
-  output$search_results_table <- DT::renderDataTable({
-    search_rows <- search_results() %>%
-      transmute(
-        Title = title,
-        Source = source,
-        `Series ID` = dplyr::case_when(
-          source == "ABS" ~ vapply(
-            load_payload,
-            function(payload) {
-              trimws(payload$abs_id %||% "")
-            },
-            character(1)
-          ),
-          source == "FRED" ~ vapply(
-            load_payload,
-            function(payload) {
-              trimws(payload$fred_series %||% "")
-            },
-            character(1)
-          ),
-          source == "RBA" ~ sub("^rba::", "", search_id %||% ""),
-          TRUE ~ ""
-        ),
-        Type = type_code_label(type_code),
-        Location = location_code_label(location_code),
-        Frequency = frequency,
-        Start = if_else(is.na(start_date), "", format(start_date, "%Y-%m-%d")),
-        End = if_else(is.na(end_date), "", format(end_date, "%Y-%m-%d")),
-        Summary = summary
-      )
-
-    DT::datatable(
-      search_rows,
-      selection = "single",
-      rownames = FALSE,
-      options = list(
-        pageLength = 25,
-        scrollX = TRUE,
-        autoWidth = TRUE,
-        columnDefs = list(
-          list(width = "28%", targets = 0),
-          list(width = "12%", targets = 2),
-          list(width = "30%", targets = 8)
-        )
-      )
-    )
-  }, server = TRUE)
-
-  selected_search_result <- reactive({
-    selected_row <- input$search_results_table_rows_selected
-    search_rows <- search_results()
-
-    if (length(selected_row) == 0 || nrow(search_rows) == 0) {
-      return(NULL)
-    }
-
-    search_rows[selected_row, , drop = FALSE]
-  })
-
-  output$search_selected_meta <- renderUI({
-    search_row <- selected_search_result()
-
-    if (is.null(search_row)) {
-      return(div(class = "empty-state", "Select a result to inspect it."))
-    }
-
-    div(
-      class = "library-meta",
-      tags$h3(search_row$title[[1]]),
-      tags$p(class = "muted-copy", search_row$summary[[1]]),
-      div(
-        class = "summary-chip-row",
-        summary_chip("Source", search_row$source[[1]]),
-        summary_chip("Type", type_code_label(search_row$type_code[[1]])),
-        summary_chip("Location", location_code_label(search_row$location_code[[1]])),
-        summary_chip("Frequency", search_row$frequency[[1]]),
-        summary_chip("Start", if (is.na(search_row$start_date[[1]])) "Unknown" else format(search_row$start_date[[1]], "%Y-%m-%d"))
-      )
-    )
-  })
-
-  search_preview_plot <- reactive({
-    search_row <- selected_search_result()
-
-    if (is.null(search_row)) {
-      return(
-        ggplot() +
-          annotate("text", x = 0.5, y = 0.5, label = "Select a result to preview it.", size = 5, colour = "#64748b") +
-          xlim(0, 1) +
-          ylim(0, 1) +
-          theme_void()
-      )
-    }
-
-    preview_spec <- search_result_series_spec(search_row, 1)
-    preview_state <- preview_chart_state(
-      preview_spec,
-      date_range = c(search_row$start_date[[1]], search_row$end_date[[1]])
-    )
-    preview_payload <- build_chart_data(preview_state)
-
-    if (nrow(preview_payload$data) == 0) {
-      return(
-        ggplot() +
-          annotate("text", x = 0.5, y = 0.5, label = "No preview data is available for this result.", size = 5, colour = "#64748b") +
-          xlim(0, 1) +
-          ylim(0, 1) +
-          theme_void()
-      )
-    }
-
-    preview_style <- preview_state$style
-    preview_style$title <- ""
-    preview_style$subtitle <- ""
-    preview_style$legend <- "none"
-    preview_style$note <- ""
-    preview_style$y_axis_label <- ""
-    preview_style$x_labels <- 3
-    preview_style$y_breaks <- pretty(preview_payload$data$value, n = 3)
-    preview_style$auto_y_axis <- TRUE
-
-    build_chart_plot(preview_payload$data, preview_style) +
-      theme(
-        plot.title = element_blank(),
-        plot.subtitle = element_blank(),
-        plot.caption = element_blank(),
-        plot.tag = element_blank(),
-        plot.margin = margin(t = -10, r = 0, b = -6, l = 0),
-        axis.text.y.right = element_text(margin = margin(l = 10))
-      )
-  })
-
-  output$search_preview_plot <- renderPlot({
-    search_preview_plot()
-  })
-
-  observeEvent(input$search_add_series, {
-    search_row <- selected_search_result()
-    req(!is.null(search_row))
-
-    run_with_status(
-      "Adding the selected search result to the builder...",
-      "Search result added to the builder.",
-      {
-        target_index <- series_slot_from_search_target(builder_state(), input$search_target_series)
-        series_spec <- search_result_series_spec(search_row, target_index)
-        updated_state <- builder_state()
-        updated_state$series[[target_index]] <- normalize_series_spec(series_spec)
-        apply_builder_state(
-          updated_state,
-          selected_series_index = target_index,
-          navigate_builder = FALSE,
-          restore_scope = "single_series"
-        )
-      },
-      failure_prefix = "Unable to add the search result:"
-    )
-  })
+  search_builder_handlers <- init_search_builder_handlers(
+    input = input,
+    output = output,
+    session = session,
+    loaded_main_tabs = loaded_main_tabs,
+    search_results = search_results,
+    search_query_notification_id = search_query_notification_id,
+    builder_state = builder_state,
+    apply_builder_state = apply_builder_state,
+    run_with_status = run_with_status
+  )
+  selected_search_result <- search_builder_handlers$selected_search_result
+  search_preview_widget <- search_builder_handlers$search_preview_widget
 
   output$builder_summary <- renderUI({
     metrics <- chart_summary_metrics(chart_data())
@@ -2848,52 +3123,8 @@ build_main_server <- function(input, output, session) {
     chart_record$data_snapshot[[1]] %||% empty_chart_data()
   }
 
-  restore_saved_analysis_state <- function(chart_record) {
-    chart_kind <- chart_record$chart_kind[[1]] %||% "builder"
-    analysis_spec <- chart_record$analysis_spec[[1]] %||% list()
-
-    if (identical(chart_kind, "builder")) {
-      updateRadioGroupButtons(session, "side_panel_mode", selected = "transform")
-      return(invisible(NULL))
-    }
-
-    updateRadioGroupButtons(session, "side_panel_mode", selected = "analysis")
-    updateTabsetPanel(session, "analysis_tabs", selected = analysis_spec$tab %||% "Correlations")
-
-    session$onFlushed(function() {
-      if (identical(chart_kind, "correlation")) {
-        updateSelectInput(session, "analysis_corr_x", selected = analysis_spec$series_x %||% "")
-        updateSelectInput(session, "analysis_corr_y", selected = analysis_spec$series_y %||% "")
-        updateNumericInput(session, "analysis_corr_window", value = analysis_spec$window %||% 4)
-      } else if (identical(chart_kind, "regression")) {
-        updateSelectInput(session, "analysis_reg_y", selected = analysis_spec$dependent %||% "")
-        updateSelectInput(session, "analysis_reg_x", selected = analysis_spec$independent %||% "")
-        updateRadioGroupButtons(session, "analysis_reg_errors", selected = analysis_spec$error_assumption %||% "classical")
-      } else if (identical(chart_kind, "forecast")) {
-        updateSelectInput(session, "analysis_forecast_series", selected = analysis_spec$series_name %||% "")
-        updateRadioGroupButtons(session, "analysis_forecast_family", selected = analysis_spec$model_family %||% "AR")
-        updateRadioGroupButtons(session, "analysis_forecast_window_mode", selected = analysis_spec$window_mode %||% "expanding")
-        updateNumericInput(session, "analysis_forecast_window_size", value = analysis_spec$window_size %||% 12)
-        updateNumericInput(session, "analysis_forecast_ar", value = analysis_spec$ar_lag %||% 1)
-        updateNumericInput(session, "analysis_forecast_ma", value = analysis_spec$ma_lag %||% 0)
-        updateNumericInput(session, "analysis_forecast_holdout", value = analysis_spec$holdout_size %||% 0)
-        updateNumericInput(session, "analysis_forecast_horizon", value = analysis_spec$horizon %||% 4)
-      } else if (identical(chart_kind, "seasonal_adjustment")) {
-        updateSelectInput(session, "analysis_seasonal_series", selected = analysis_spec$series_name %||% "")
-        updateRadioGroupButtons(session, "analysis_seasonal_view", selected = analysis_spec$display_mode %||% "both")
-      } else if (identical(chart_kind, "hp_filter")) {
-        updateSelectInput(session, "analysis_hp_series", selected = analysis_spec$series_name %||% "")
-        updateRadioGroupButtons(session, "analysis_hp_side", selected = analysis_spec$side %||% "two_sided")
-        updateRadioGroupButtons(session, "analysis_hp_view", selected = analysis_spec$display_mode %||% "overlay")
-      } else if (identical(chart_kind, "kalman_filter")) {
-        updateSelectInput(session, "analysis_kalman_series", selected = analysis_spec$series_name %||% "")
-        updateRadioGroupButtons(session, "analysis_kalman_side", selected = analysis_spec$side %||% "two_sided")
-        updateRadioGroupButtons(session, "analysis_kalman_view", selected = analysis_spec$display_mode %||% "overlay")
-      }
-    }, once = TRUE)
-
-    invisible(NULL)
-  }
+  saved_analysis_restore_handlers <- init_saved_analysis_restore_handlers(session)
+  restore_saved_analysis_state <- saved_analysis_restore_handlers$restore_saved_analysis_state
 
   observeEvent(input$save_chart, {
     ensure_chart_library_loaded()
@@ -3117,115 +3348,22 @@ build_main_server <- function(input, output, session) {
     presentation_rows$chart_id[[selected_row[1]]]
   })
 
-  selected_presentation_chart_record <- reactive({
-    selected_row <- input$presentation_chart_table_rows_selected
-    presentation_rows <- selected_presentation_charts()
-
-    if (length(selected_row) == 0 || nrow(presentation_rows) == 0) {
-      return(NULL)
-    }
-
-    presentation_rows[selected_row[1], , drop = FALSE]
-  })
-
-  selected_preview_chart_record <- reactive({
-    selected_presentation_record <- selected_presentation_chart_record()
-    if (!is.null(selected_presentation_record)) {
-      return(selected_presentation_record)
-    }
-
-    selected_chart_record()
-  })
-
-  output$library_selected_meta <- renderUI({
-    chart_record <- selected_preview_chart_record()
-    selected_records <- selected_chart_records()
-
-    if (is.null(chart_record)) {
-      return(div(class = "empty-state", "Select a saved chart to preview it."))
-    }
-
-    description_text <- chart_record$description[[1]] %||% ""
-    if (!nzchar(description_text)) {
-      description_text <- "No notes saved."
-    }
-
-    div(
-      class = "library-meta",
-      tags$h3(chart_record$title[[1]]),
-      tags$p(class = "muted-copy", description_text),
-      if (!is.null(selected_records) && nrow(selected_records) > 1) {
-        tags$p(class = "muted-copy", paste("Showing the first of", nrow(selected_records), "selected charts."))
-      },
-      div(
-        class = "summary-chip-row",
-        summary_chip("Sources", chart_record$source_summary[[1]]),
-        summary_chip("Series", chart_record$series_count[[1]]),
-        summary_chip("Saved", format(chart_record$saved_at[[1]], "%d %b %Y %H:%M"))
-      )
-    )
-  })
-
-  output$library_plot <- renderPlotly({
-    chart_record <- selected_preview_chart_record()
-    if (is.null(chart_record)) {
-      return(empty_plotly_widget("Select a saved chart to preview it."))
-    }
-
-    build_saved_chart_widget(chart_record)
-  })
-
-  library_plot_height <- reactive({
-    chart_record <- selected_preview_chart_record()
-    if (is.null(chart_record) || nrow(chart_record) == 0) {
-      return(500L)
-    }
-
-    chart_kind <- chart_record$chart_kind[[1]] %||% "builder"
-    chart_state <- chart_record$chart_state[[1]] %||% list(style = default_style_settings())
-    chart_style <- chart_state$style %||% default_style_settings()
-
-    if (!identical(chart_kind, "builder")) {
-      return(500L)
-    }
-
-    plotly_widget_height(chart_record$data_snapshot[[1]], chart_style, base_height = 500)
-  })
-
-  output$library_plot_container <- renderUI({
-    if (identical(library_renderer(), "plotly")) {
-      return(plotlyOutput("library_plot", height = paste0(library_plot_height(), "px")))
-    }
-
-    plotOutput("library_plot_static", height = paste0(library_plot_height(), "px"))
-  })
-
-  output$library_plot_static <- renderPlot({
-    chart_record <- selected_preview_chart_record()
-    if (is.null(chart_record)) {
-      return(empty_static_plot("Select a saved chart to preview it."))
-    }
-
-    build_saved_chart_plot(chart_record)
-  })
-
-  observeEvent(input$load_chart, {
-    ensure_chart_library_loaded()
-    chart_record <- selected_preview_chart_record()
-    req(!is.null(chart_record), nrow(chart_record) == 1)
-
-    run_with_status(
-      paste("Loading", chart_record$title[[1]], "into the builder..."),
-      "Saved chart loaded into the builder.",
-      {
-        apply_builder_state(chart_record$chart_state[[1]], navigate_builder = TRUE)
-        restore_saved_analysis_state(chart_record)
-        updateTextInput(session, "library_title", value = chart_record$title[[1]])
-        updateTextAreaInput(session, "library_description", value = chart_record$description[[1]] %||% "")
-      },
-      failure_prefix = "Unable to load the saved chart:"
-    )
-  })
+  library_preview_handlers <- init_library_preview_handlers(
+    input = input,
+    output = output,
+    session = session,
+    ensure_chart_library_loaded = ensure_chart_library_loaded,
+    selected_chart_record = selected_chart_record,
+    selected_chart_records = selected_chart_records,
+    selected_presentation_charts = selected_presentation_charts,
+    library_renderer = library_renderer,
+    build_saved_chart_widget = build_saved_chart_widget,
+    build_saved_chart_plot = build_saved_chart_plot,
+    run_with_status = run_with_status,
+    apply_builder_state = apply_builder_state,
+    restore_saved_analysis_state = restore_saved_analysis_state
+  )
+  selected_preview_chart_record <- library_preview_handlers$selected_preview_chart_record
 
   observeEvent(input$update_chart, {
     ensure_chart_library_loaded()

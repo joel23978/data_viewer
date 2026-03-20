@@ -828,6 +828,70 @@ test_that("main server supports save and load flows with transform copying", {
   })
 })
 
+test_that("presentation-selected preview takes precedence over library selection", {
+  temp_library <- tempfile(fileext = ".rds")
+  temp_presentation_library <- tempfile(fileext = ".rds")
+  old_option <- getOption("data_viewer.chart_library_path")
+  old_presentation_option <- getOption("data_viewer.chart_presentation_library_path")
+  options(data_viewer.chart_library_path = temp_library)
+  options(data_viewer.chart_presentation_library_path = temp_presentation_library)
+  on.exit(options(data_viewer.chart_library_path = old_option), add = TRUE)
+  on.exit(options(data_viewer.chart_presentation_library_path = old_presentation_option), add = TRUE)
+
+  first_state <- build_test_state()
+  second_state <- build_test_state()
+  second_state$style$title <- "Presentation-selected chart"
+  second_state$series[[2]]$label <- "Presentation-selected series"
+
+  first_record <- new_chart_record(
+    chart_state = first_state,
+    data_snapshot = build_chart_data(first_state)$data,
+    title = "Library-selected chart",
+    description = "First chart"
+  )
+  second_record <- new_chart_record(
+    chart_state = second_state,
+    data_snapshot = build_chart_data(second_state)$data,
+    title = "Presentation-selected chart",
+    description = "Second chart"
+  )
+
+  write_chart_library(
+    read_chart_library() %>%
+      upsert_chart_record(first_record) %>%
+      upsert_chart_record(second_record)
+  )
+  write_chart_presentation_library(
+    upsert_chart_presentation_record(
+      read_chart_presentation_library(),
+      new_chart_presentation_record(
+        title = "Macro deck",
+        description = "Preview precedence test",
+        chart_ids = c(first_record$chart_id[[1]], second_record$chart_id[[1]])
+      )
+    )
+  )
+
+  shiny::testServer(build_main_server, {
+    ensure_chart_library_loaded()
+    ensure_presentation_library_loaded()
+
+    session$setInputs(library_table_rows_selected = 1)
+    session$setInputs(presentation_table_rows_selected = 1)
+    session$flushReact()
+    session$setInputs(presentation_chart_table_rows_selected = 2)
+    session$flushReact()
+
+    expect_equal(selected_preview_chart_record()$chart_id[[1]], second_record$chart_id[[1]])
+
+    session$setInputs(load_chart = 1)
+    session$flushReact()
+    session$flushReact()
+
+    expect_equal(builder_state()$style$title, second_state$style$title)
+  })
+})
+
 test_that("main server can reset the builder to its default state", {
   shiny::testServer(build_main_server, {
     session$setInputs(
