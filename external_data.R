@@ -1,16 +1,22 @@
 # fredr ----
 
-Sys.getenv("FRED_API_KEY")
-
 fred_vintage_cache_env <- new.env(parent = emptyenv())
+
+data_viewer_provider_available <- function(series, package_name) {
+  data_viewer_has_text(series) && requireNamespace(package_name, quietly = TRUE)
+}
+
+data_viewer_provider_series_fetch <- function(series, package_name, provider_label, expr) {
+  if (!data_viewer_provider_available(series, package_name)) {
+    return(data_viewer_empty_series())
+  }
+
+  data_viewer_safe_fetch(provider_label, force(expr))
+}
 
 fred_vintage_dates <- function(series, force = FALSE) {
   cleaned_series <- trimws(if (is.null(series) || length(series) == 0) "" else as.character(series)[1])
-  if (!nzchar(cleaned_series)) {
-    return(as.Date(character()))
-  }
-
-  if (!requireNamespace("fredr", quietly = TRUE)) {
+  if (!data_viewer_provider_available(cleaned_series, "fredr")) {
     return(as.Date(character()))
   }
 
@@ -44,14 +50,6 @@ fred_data <- function(
     , vintage_dates = NULL
     , name_override = NULL
 ){
-  if (!data_viewer_has_text(series)) {
-    return(data_viewer_empty_series())
-  }
-
-  if (!requireNamespace("fredr", quietly = TRUE)) {
-    return(data_viewer_empty_series())
-  }
-
   query_args <- list(series_id = series)
   if (!is.null(start_date)) {
     query_args$observation_start <- start_date
@@ -69,7 +67,9 @@ fred_data <- function(
     query_args$vintage_dates <- vintage_dates
   }
 
-  data_viewer_safe_fetch(
+  data_viewer_provider_series_fetch(
+    series,
+    "fredr",
     "FRED",
     {
       fred_result <- do.call(fredr::fredr_series_observations, query_args) %>%
@@ -88,43 +88,7 @@ fred_data <- function(
 
 # recession shading ----
 
-rec_series <- c("AUSRECDP", "USRECDP", "GBRRECDP", "EURORECDP", "CANRECDP", "CHNRECDP", "JPNRECDP")
 rec_regions <- c("Australia", "United States", "United Kingdom", "Euro area",  "Canada", "China", "Japan")
-# 
-# rec_data <- data.frame(peak=as.Date(character()),
-#                    trough=as.Date(character()),
-#                    region=character(), 
-#                    stringsAsFactors=FALSE)
-# 
-# # aus recession (extract peak and trough dates rather than boolean values.
-# for (i in 1:length(rec_series)){
-#   tmp <- fredr(series_id = rec_series[i]) %>%
-#     select(date, value) %>%
-#     filter(value != lag(value, 1)
-#            | value != lead(value, 1)
-#            | date == min(date)
-#            | date == max(date)) %>%
-#     mutate(dummy = ifelse(value != lag(value) | date == min(date), "peak", "trough")) %>%
-#     filter(value == 1) %>%
-#     select(date, dummy)
-#   
-#   rec_data <- rec_data %>%
-#     rbind(
-#       tmp %>%
-#         filter(dummy == "peak") %>%
-#         select(date) %>%
-#         rename(peak = date) %>%
-#         cbind(
-#           tmp %>%
-#             filter(dummy == "trough") %>%
-#             select(date) %>%
-#             rename(trough = date)
-#         ) %>%
-#         mutate(region = rec_regions[i])
-#     )
-# }
-# 
-# save(rec_data, file = here("data", "rec_data.Rda"))
 
 
 
@@ -136,15 +100,9 @@ db_data <- function(
     , start_date = NULL
     , end_date = NULL
 ){
-  if (!data_viewer_has_text(series)) {
-    return(data_viewer_empty_series())
-  }
-
-  if (!requireNamespace("rdbnomics", quietly = TRUE)) {
-    return(data_viewer_empty_series())
-  }
-
-  data_viewer_safe_fetch(
+  data_viewer_provider_series_fetch(
+    series,
+    "rdbnomics",
     "DBnomics",
     rdbnomics::rdb(
       ids = series
@@ -298,15 +256,9 @@ compact_rba_table_title <- function(table_no, table_title) {
 rba_data <- function(
     series = NULL
 ){
-  if (!data_viewer_has_text(series)) {
-    return(data_viewer_empty_series())
-  }
-
-  if (!requireNamespace("readrba", quietly = TRUE)) {
-    return(data_viewer_empty_series())
-  }
-
-  data_viewer_safe_fetch(
+  data_viewer_provider_series_fetch(
+    series,
+    "readrba",
     "RBA",
     {
       tmp <- get_rba_desc_id() %>%
@@ -337,38 +289,6 @@ rba_data <- function(
   )
 }
 
-# tmp7 <- c("Australian Government Deposits", "Australian dollar investments")
-# 
-# rba_data(series = tmp7)
-
-
-# readabs
-
-# abs_catalogue <- read_csv(here("data", "abs_catalogue.csv")) %>%
-#   filter(`Catalogue Number` %!in% c("3101.0"
-#                                     , "3201.0 (Ceased)"
-#                                     , "5368.0"
-#                                     , "5676.0"
-#                                     , "6416.0 (Ceased)"
-#                                     , "7218.0.55.001 (Ceased)"
-#                                     , "8782.0.65.001 (Ceased)"))
-# 
-# 
-# abs_ref <- list()
-# for (i in 1:nrow(abs_catalogue)){
-#   abs_ref[[i]] <- read_abs(abs_catalogue$`Catalogue Number`[i]) %>%
-#     select(-c(date, value, sheet_no)) %>%
-#    # select(c(series, series_type, frequency, series_id)) %>%
-#     unique()
-# }
-# names(abs_ref) <- abs_catalogue$`Catalogue Number` %>% head(39)
-# names(abs_ref) <- paste(abs_catalogue$`Catalogue Number`, abs_catalogue$`Topic`) %>% head(39)
-# 
-# save(abs_ref, file = here("data", "abs_ref.Rda"))
-# abs_cat <- paste(abs_catalogue$`Catalogue Number`, abs_catalogue$`Topic`) %>% head(39)
-# save(abs_cat, file = here("data", "abs_cat.Rda"))
-
-
 get_abs_ref <- function() {
   data_viewer_cache_get(
     "abs_ref",
@@ -392,15 +312,9 @@ data_viewer_register_active_binding("abs_cat", function() get_abs_cat())
 abs_data <- function(
   series = NULL
 ){
-  if (!data_viewer_has_text(series)) {
-    return(data_viewer_empty_series())
-  }
-
-  if (!requireNamespace("readabs", quietly = TRUE)) {
-    return(data_viewer_empty_series())
-  }
-
-  data_viewer_safe_fetch(
+  data_viewer_provider_series_fetch(
+    series,
+    "readabs",
     "ABS",
     readabs::read_abs(series_id = series) %>%
       select(date, value, series) %>%

@@ -5,28 +5,15 @@
 
 ## setup ----
 
-library(tidyverse)
-library(readabs)
-library(here)
-library(readxl)
-library(janitor)
-library(zoo)
-library(ggplot2)
-library(plotly)
-library(writexl)
-library(fuzzyjoin)
-library(lubridate)
-
-'%!in%' <- function(x,y)!('%in%'(x,y))
-Sys.setenv(R_READABS_PATH = here("data_abs"))
-
 ## update cpi data
 #source(here::here("cpi_annual_update_data.R"))
 
 get_cpi_data_all <- function() {
+  Sys.setenv(R_READABS_PATH = here::here("data_abs"))
+
   data_viewer_cache_get(
     "cpi_data_all",
-    function() data_viewer_load_rda(here("data", "cpi_data_all.Rda"), "cpi_data_all"),
+    function() data_viewer_load_rda(here::here("data", "cpi_data_all.Rda"), "cpi_data_all"),
     "Load CPI data"
   )
 }

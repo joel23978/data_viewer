@@ -48,16 +48,21 @@ test_that("provider metadata loads lazily and is cached", {
   first_rba_browse <- rba_browse_data
   expect_equal(browse_calls, 1L)
   expect_equal(first_rba_browse, rba_browse_data)
+  expect_equal(load_calls, 0L)
   expect_equal(browse_calls, 1L)
 
   first_cpi <- cpi_data_all
-  expect_gt(load_calls, 0L)
+  expect_equal(load_calls, 1L)
+  expect_equal(browse_calls, 1L)
+  expect_identical(first_cpi, cpi_data_all)
+  expect_true(all(c("date", "value") %in% names(first_cpi)))
   expect_gt(nrow(first_cpi), 0L)
 })
 
 test_that("provider fetch helpers accept explicit empty inputs", {
-  expect_equal(nrow(fred_data()), 0L)
-  expect_equal(nrow(db_data()), 0L)
-  expect_equal(nrow(rba_data()), 0L)
-  expect_equal(nrow(abs_data()), 0L)
+  empty_helpers <- list(fred_data(), db_data(), rba_data(), abs_data())
+
+  expect_true(all(vapply(empty_helpers, function(x) {
+    nrow(x) == 0L && identical(names(x), c("name", "date", "value"))
+  }, logical(1))))
 })
