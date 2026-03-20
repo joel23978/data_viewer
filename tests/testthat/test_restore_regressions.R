@@ -298,6 +298,92 @@ test_that("blank ABS and FRED labels default to series IDs", {
   expect_equal(apply_series_metadata(fred_data, fred_spec)$name, fred_data$name)
 })
 
+test_that("builder restore updates plotted data when loading different charts", {
+  temp_library <- tempfile(fileext = ".rds")
+  temp_presentation_library <- tempfile(fileext = ".rds")
+  old_option <- getOption("data_viewer.chart_library_path")
+  old_presentation_option <- getOption("data_viewer.chart_presentation_library_path")
+  original_fred_data <- fred_data
+  on.exit(options(data_viewer.chart_library_path = old_option), add = TRUE)
+  on.exit(options(data_viewer.chart_presentation_library_path = old_presentation_option), add = TRUE)
+  on.exit(assign("fred_data", original_fred_data, envir = .GlobalEnv), add = TRUE)
+  options(data_viewer.chart_library_path = temp_library)
+  options(data_viewer.chart_presentation_library_path = temp_presentation_library)
+
+  assign(
+    "fred_data",
+    function(series, start_date = NULL, end_date = NULL, realtime_start = NULL, realtime_end = NULL, vintage_dates = NULL, name_override = NULL) {
+      tibble::tibble(
+        date = as.Date(c("2020-01-01", "2020-02-01")),
+        value = if (identical(series, "UNRATE")) c(1, 2) else c(10, 20),
+        name = if (!is.null(name_override) && nzchar(name_override)) name_override else series
+      )
+    },
+    envir = .GlobalEnv
+  )
+
+  build_fred_state <- function(series_id, title) {
+    state <- default_builder_state()
+    state$series[[1]] <- normalize_series_spec(list(
+      index = 1,
+      source = "FRED",
+      fred_series = series_id,
+      label = "",
+      transform_profile = default_transform_profile(),
+      vis_type = "line"
+    ))
+    state$style$title <- title
+    state
+  }
+
+  first_record <- new_chart_record(
+    chart_state = build_fred_state("UNRATE", "First"),
+    data_snapshot = build_chart_data(build_fred_state("UNRATE", "First"))$data,
+    title = "First",
+    description = ""
+  )
+  second_record <- new_chart_record(
+    chart_state = build_fred_state("CPIAUCSL", "Second"),
+    data_snapshot = build_chart_data(build_fred_state("CPIAUCSL", "Second"))$data,
+    title = "Second",
+    description = ""
+  )
+
+  write_chart_library(
+    read_chart_library() %>%
+      upsert_chart_record(first_record) %>%
+      upsert_chart_record(second_record)
+  )
+
+  shiny::testServer(build_main_server, {
+    ensure_chart_library_loaded()
+
+    session$setInputs(library_table_rows_selected = 1)
+    suppressWarnings({
+      session$setInputs(load_chart = 1)
+      session$flushReact()
+      session$flushReact()
+      session$flushReact()
+    })
+    first_loaded_id <- builder_state()$series[[1]]$fred_series
+    first_loaded_names <- unique(chart_data()$name)
+
+    session$setInputs(library_table_rows_selected = 2)
+    suppressWarnings({
+      session$setInputs(load_chart = 2)
+      session$flushReact()
+      session$flushReact()
+      session$flushReact()
+    })
+    second_loaded_id <- builder_state()$series[[1]]$fred_series
+    second_loaded_names <- unique(chart_data()$name)
+
+    expect_false(identical(first_loaded_id, second_loaded_id))
+    expect_identical(first_loaded_names, first_loaded_id)
+    expect_identical(second_loaded_names, second_loaded_id)
+  })
+})
+
 test_that("ABS search add-to-builder restores dependent chain", {
   shiny::testServer(build_main_server, {
     ensure_search_index_loaded()

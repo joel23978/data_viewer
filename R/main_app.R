@@ -884,6 +884,29 @@ init_builder_restore_state <- function(session) {
     invisible(NULL)
   }
 
+  settle_builder_restore_state <- function(expected_token = NULL) {
+    current_context <- shiny::isolate(builder_restore_context())
+    current_token <- current_context$token %||% 0L
+    target_token <- expected_token %||% current_token
+
+    if (!identical(current_context$mode %||% "idle", "applying")) {
+      return(invisible(NULL))
+    }
+
+    if (!identical(current_token, target_token)) {
+      return(invisible(NULL))
+    }
+
+    builder_restore_context(list(
+      mode = "settled",
+      token = current_token,
+      scope = current_context$scope %||% "full",
+      selected_series_index = current_context$selected_series_index
+    ))
+
+    invisible(NULL)
+  }
+
   apply_builder_state <- function(chart_state, selected_series_index = NULL, navigate_builder = FALSE, restore_scope = "full") {
     normalized_state <- normalize_chart_state(chart_state)
     next_token <- (shiny::isolate(builder_restore_context())$token %||% 0L) + 1L
@@ -907,20 +930,6 @@ init_builder_restore_state <- function(session) {
       updateNavbarPage(session, "main_tabs", selected = "builder")
     }
 
-    session$onFlushed(function() {
-      current_context <- shiny::isolate(builder_restore_context())
-      if (!identical(current_context$token %||% 0L, next_token)) {
-        return(invisible(NULL))
-      }
-
-      builder_restore_context(list(
-        mode = "settled",
-        token = next_token,
-        scope = restore_scope %||% "full",
-        selected_series_index = selected_series_index
-      ))
-    }, once = TRUE)
-
     invisible(NULL)
   }
 
@@ -929,6 +938,7 @@ init_builder_restore_state <- function(session) {
     builder_restore_context = builder_restore_context,
     builder_restore_mode = builder_restore_mode,
     clear_builder_restore_state = clear_builder_restore_state,
+    settle_builder_restore_state = settle_builder_restore_state,
     apply_builder_state = apply_builder_state
   )
 }
@@ -940,6 +950,7 @@ init_builder_sync_handlers <- function(
     restored_state,
     builder_restore_mode,
     clear_builder_restore_state,
+    settle_builder_restore_state,
     apply_builder_state,
     synced_library_title,
     synced_source_note
@@ -1102,14 +1113,17 @@ init_builder_sync_handlers <- function(
       )
     },
     {
-      if (identical(builder_restore_mode(), "applying")) {
-        return(invisible(NULL))
-      }
-
       loaded_state <- restored_state()
       req(!is.null(loaded_state))
 
       current_state <- normalize_chart_state(builder_state_from_input(input, session))
+      if (identical(builder_restore_mode(), "applying")) {
+        if (identical(current_state, loaded_state)) {
+          settle_builder_restore_state()
+        }
+        return(invisible(NULL))
+      }
+
       if (!identical(current_state, loaded_state)) {
         clear_builder_restore_state()
       }
@@ -1789,6 +1803,7 @@ build_main_server <- function(input, output, session) {
     restored_state = restored_state,
     builder_restore_mode = builder_restore_mode,
     clear_builder_restore_state = clear_builder_restore_state,
+    settle_builder_restore_state = restore_manager$settle_builder_restore_state,
     apply_builder_state = apply_builder_state,
     synced_library_title = synced_library_title,
     synced_source_note = synced_source_note
