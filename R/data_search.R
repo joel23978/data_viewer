@@ -255,50 +255,15 @@ recent_series_title <- function(spec) {
     return(trimws(spec$label))
   }
 
-  if (identical(spec$source, "FRED")) {
-    base_title <- trimws(spec$fred_series %||% "FRED series")
-    vintage_mode <- spec$fred_vintage_mode %||% "current"
-    vintage_date <- spec$fred_vintage_date
-
-    if (identical(vintage_mode, "historical") && !is.na(as.Date(vintage_date))) {
-      return(sprintf("%s (%s vintage)", base_title, format(as.Date(vintage_date), "%Y-%m-%d")))
-    }
-
-    if (identical(vintage_mode, "compare") && !is.na(as.Date(vintage_date))) {
-      return(sprintf("%s current vs %s vintage", base_title, format(as.Date(vintage_date), "%Y-%m-%d")))
-    }
-
-    return(base_title)
-  }
-
-  if (identical(spec$source, "rba")) {
-    return(paste(spec$rba_desc %||% character(), collapse = ", "))
-  }
-
-  if (identical(spec$source, "abs")) {
-    return(trimws(spec$abs_desc %||% spec$abs_id %||% "ABS series"))
-  }
-
-  if (identical(spec$source, "dbnomics")) {
-    return(trimws(spec$dbnomics_series %||% "DBnomics series"))
+  provider_title <- provider_registry_recent_title(spec)
+  if (nzchar(provider_title)) {
+    return(provider_title)
   }
 
   trimws(spec$source %||% "Saved series")
 }
 
 recent_series_frequency <- function(spec) {
-  if (identical(spec$source, "FRED")) {
-    return("Unknown")
-  }
-
-  if (identical(spec$source, "rba")) {
-    return("Unknown")
-  }
-
-  if (identical(spec$source, "abs")) {
-    return("Unknown")
-  }
-
   "Unknown"
 }
 
@@ -687,97 +652,85 @@ build_rba_search_index <- function() {
     return(provider_search_index())
   }
 
-  rba_browse_data %>%
-    distinct(table_no, table_title, description, series_id, frequency) %>%
-    transmute(
-      search_id = paste("rba", series_id, sep = "::"),
-      title = paste(table_no, description),
-      source = "RBA",
-      type_code = vapply(
-        seq_along(description),
-        function(index) classify_data_type(description[[index]], table_title[[index]], "RBA"),
-        character(1)
-      ),
-      location_code = vapply(
-        seq_along(description),
-        function(index) classify_location_code(description[[index]], table_title[[index]], "RBA"),
-        character(1)
-      ),
-      frequency = vapply(frequency, format_frequency, character(1)),
-      start_date = as.Date(NA),
-      end_date = as.Date(NA),
-      summary = compact_rba_table_title(table_no, table_title),
-      search_text = clean_search_text(paste(table_no, table_title, description, series_id, "rba")),
-      load_payload = purrr::pmap(
-        list(table_no, description, series_id),
-        function(table_no, description, series_id) {
-          list(
-            source = "rba",
-            rba_table = table_no,
-            rba_desc = description,
-            rba_series_id = series_id,
-            label = description,
-            vis_type = "line",
-            transform_profile = default_transform_profile()
-          )
-        }
-      )
-    )
+  empty_search_index()
 }
 
 build_abs_search_index <- function() {
-  catalogue_labels <- abs_cat
+  provider_search_index <- provider_registry_search_index_builder("abs")
 
-  if (length(catalogue_labels) < length(abs_ref)) {
-    fallback_names <- names(abs_ref)
-    catalogue_labels <- c(
-      catalogue_labels,
-      fallback_names[seq.int(length(catalogue_labels) + 1, length(abs_ref))]
-    )
+  if (is.function(provider_search_index)) {
+    return(provider_search_index())
   }
 
-  purrr::map2_dfr(abs_ref, catalogue_labels, function(reference_data, catalogue_name) {
-    catalogue_name <- catalogue_name %||% ""
+  empty_search_index()
+}
 
-    reference_data %>%
-      distinct(table_title, series, series_type, frequency, unit, series_id) %>%
-      transmute(
-        search_id = paste("abs", series_id, sep = "::"),
-        title = paste(series, series_type, sep = " - "),
-        source = "ABS",
-        type_code = vapply(
-          seq_along(series),
-          function(index) classify_data_type(series[[index]], paste(series_type[[index]], table_title[[index]], unit[[index]]), "ABS"),
-          character(1)
-        ),
-        location_code = vapply(
-          seq_along(series),
-          function(index) classify_location_code(series[[index]], paste(series_type[[index]], table_title[[index]], unit[[index]]), "ABS"),
-          character(1)
-        ),
-        frequency = vapply(frequency, format_frequency, character(1)),
-        start_date = as.Date(NA),
-        end_date = as.Date(NA),
-        summary = paste(catalogue_name, table_title, sep = " | "),
-        search_text = clean_search_text(paste(catalogue_name, table_title, series, series_type, unit, series_id, "abs")),
-        load_payload = purrr::pmap(
-          list(catalogue_name, series, series_type, table_title, series_id),
-          function(catalogue_name, series, series_type, table_title, series_id) {
-            list(
-              source = "abs",
-              abs_catalogue = catalogue_name,
-              abs_desc = series,
-              abs_series_type = series_type,
-              abs_table = table_title,
-              abs_id = series_id,
-              label = series,
-              vis_type = "line",
-              transform_profile = default_transform_profile()
-            )
-          }
-        )
+search_remote_provider_sources <- function(source_filter = "all") {
+  all_sources <- vapply(
+    Filter(function(entry) !is.null(entry$search_remote %||% NULL), provider_registry_entries()),
+    function(entry) entry$source %||% "",
+    character(1)
+  )
+  selected_source <- source_filter %||% "all"
+
+  if (identical(selected_source, "all")) {
+    return(all_sources)
+  }
+
+  all_sources[vapply(
+    all_sources,
+    function(source_value) identical(provider_registry_source_id(source_value), provider_registry_source_id(selected_source)),
+    logical(1)
+  )]
+}
+
+search_remote_provider_responses <- function(query, source_filter = "all", search_contexts = list(), limit = 100, force = FALSE) {
+  remote_sources <- search_remote_provider_sources(source_filter)
+
+  if (length(remote_sources) == 0) {
+    return(list())
+  }
+
+  setNames(
+    lapply(remote_sources, function(source_value) {
+      provider_id <- provider_registry_source_id(source_value)
+      search_context <- modifyList(
+        list(limit = limit),
+        search_contexts[[provider_id]] %||% list()
       )
-  })
+
+      provider_registry_remote_search_response(
+        source_value = source_value,
+        query = query,
+        search_context = search_context,
+        force = force
+      )
+    }),
+    remote_sources
+  )
+}
+
+search_remote_provider_results <- function(query, source_filter = "all", search_contexts = list(), limit = 100, force = FALSE) {
+  bind_rows(search_remote_provider_responses(
+    query = query,
+    source_filter = source_filter,
+    search_contexts = search_contexts,
+    limit = limit,
+    force = force
+  ) %>% lapply(`[[`, "results")) %>%
+    distinct(search_id, .keep_all = TRUE)
+}
+
+search_remote_provider_status <- function(query, source_filter = "all", search_contexts = list(), limit = 100, force = FALSE) {
+  responses <- search_remote_provider_responses(
+    query = query,
+    source_filter = source_filter,
+    search_contexts = search_contexts,
+    limit = limit,
+    force = force
+  )
+
+  unique(vapply(responses, function(response) trimws(response$status %||% ""), character(1)))
 }
 
 build_recent_search_index <- function() {
@@ -856,10 +809,15 @@ build_recent_search_index <- function() {
 }
 
 build_local_search_base_index <- function() {
-  bind_rows(
-    build_rba_search_index(),
-    build_abs_search_index()
-  ) %>%
+  bind_rows(lapply(provider_registry_entries(), function(entry) {
+    search_index_builder <- entry$search_index_builder %||% NULL
+
+    if (is.null(search_index_builder)) {
+      return(NULL)
+    }
+
+    search_index_builder()
+  })) %>%
     mutate(
       frequency = coalesce(frequency, "Unknown"),
       summary = coalesce(summary, ""),

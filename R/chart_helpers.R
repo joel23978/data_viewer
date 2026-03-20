@@ -48,36 +48,18 @@ series_source_note_value <- function(spec) {
     return(NULL)
   }
 
-  source_label <- spec$source %||% "Unknown"
-  id_values <- character()
-
-  if (identical(source_label, "FRED")) {
-    id_values <- as.character(spec$fred_series %||% character())
-  }
-
-  if (identical(source_label, "dbnomics")) {
-    id_values <- as.character(spec$dbnomics_series %||% character())
-  }
-
-  if (identical(source_label, "rba")) {
-    id_values <- as.character(spec$rba_desc %||% character())
-  }
-
-  if (identical(source_label, "abs")) {
-    id_values <- as.character(spec$abs_id %||% character())
-  }
-
-  if (identical(source_label, "analysis_result")) {
+  if (identical(spec$source %||% "", "analysis_result")) {
     id_values <- as.character(spec$analysis_result_name %||% character())
+    id_values <- unique(trimws(id_values[nzchar(trimws(id_values))]))
+
+    if (length(id_values) == 0) {
+      return("analysis_result")
+    }
+
+    return(paste0("analysis_result - ", paste(id_values, collapse = ", ")))
   }
 
-  id_values <- unique(trimws(id_values[nzchar(trimws(id_values))]))
-
-  if (length(id_values) == 0) {
-    source_label
-  } else {
-    paste0(source_label, " - ", paste(id_values, collapse = ", "))
-  }
+  provider_registry_source_note_value(spec)
 }
 
 default_source_note <- function(series_specs = NULL) {
@@ -185,22 +167,7 @@ seed_selectize_choices <- function(selected_values = character()) {
 
 default_series_label_from_id <- function(spec = list()) {
   spec <- spec %||% list()
-  source_value <- spec$source %||% ""
-
-  if (identical(source_value, "FRED")) {
-    return(trimws(spec$fred_series %||% ""))
-  }
-
-  if (identical(source_value, "abs")) {
-    selected_ids <- unique(trimws(as.character(spec$abs_id %||% character())))
-    selected_ids <- selected_ids[nzchar(selected_ids)]
-
-    if (length(selected_ids) == 1) {
-      return(selected_ids[[1]])
-    }
-  }
-
-  ""
+  provider_registry_default_label(spec)
 }
 
 abs_id_lookup <- function() {
@@ -600,28 +567,25 @@ cache_key_value <- function(value) {
 }
 
 series_cache_key <- function(spec) {
-  base_parts <- c(
-    spec$source %||% "",
-    cache_key_value(spec$text),
-    cache_key_value(spec$region),
-    cache_key_value(spec$transform),
-    cache_key_value(spec$rebase_date),
-    cache_key_value(spec$fred_series),
-    cache_key_value(spec$fred_vintage_mode),
-    cache_key_value(spec$fred_vintage_date),
-    cache_key_value(spec$dbnomics_series),
-    cache_key_value(spec$rba_table),
-    cache_key_value(spec$rba_desc),
-    cache_key_value(spec$rba_series_id),
-    cache_key_value(spec$abs_catalogue),
-    cache_key_value(spec$abs_desc),
-    cache_key_value(spec$abs_series_type),
-    cache_key_value(spec$abs_table),
-    cache_key_value(spec$abs_id),
-    cache_key_value(spec$analysis_result_key)
-  )
+  if (identical(spec$source %||% "", "analysis_result")) {
+    return(paste("analysis_result", cache_key_value(spec$analysis_result_key), sep = "::"))
+  }
 
-  paste(base_parts, collapse = "::")
+  provider_cache_key <- provider_registry_cache_key(spec)
+  if (!is.null(provider_cache_key)) {
+    return(provider_cache_key)
+  }
+
+  paste(
+    c(
+      spec$source %||% "",
+      cache_key_value(spec$text),
+      cache_key_value(spec$region),
+      cache_key_value(spec$transform),
+      cache_key_value(spec$rebase_date)
+    ),
+    collapse = "::"
+  )
 }
 
 read_cached_series <- function(cache_key) {
@@ -696,126 +660,6 @@ series_source_controls_ui <- function(input, session, index, source_value = "abs
     return(provider_entry$controls_ui(input, session, index, restored_spec))
   }
 
-  if (identical(source_value, "FRED")) {
-    current_series <- input[[series_input_id(index, "fred_series")]] %||% restored_spec$fred_series %||% ""
-    vintage_mode <- input[[series_input_id(index, "fred_vintage_mode")]] %||% restored_spec$fred_vintage_mode %||% "current"
-    selected_vintage <- input[[series_input_id(index, "fred_vintage_date")]] %||%
-      if (!is.null(restored_spec$fred_vintage_date) && !is.na(restored_spec$fred_vintage_date)) format(as.Date(restored_spec$fred_vintage_date), "%Y-%m-%d") else ""
-    vintage_choices <- fred_vintage_choice_values(current_series, selected_vintage)
-    default_vintage <- if (nzchar(trimws(selected_vintage %||% ""))) {
-      trimws(selected_vintage)
-    } else if (length(vintage_choices) > 0) {
-      unname(tail(vintage_choices, 1))
-    } else {
-      NULL
-    }
-
-    return(
-      tagList(
-        selectizeInput(
-          series_input_id(index, "fred_series"),
-          "FRED series ID",
-          choices = seed_selectize_choices(current_series),
-          selected = if (nzchar(trimws(current_series))) current_series else NULL,
-          options = list(
-            create = TRUE,
-            maxItems = 1,
-            persist = FALSE,
-            placeholder = "Type a FRED series ID and press Enter"
-          )
-        ),
-        radioGroupButtons(
-          series_input_id(index, "fred_vintage_mode"),
-          "Vintage mode",
-          choices = fred_vintage_mode_choices(),
-          selected = vintage_mode,
-          justified = TRUE,
-          checkIcon = list(yes = icon("check"))
-        ),
-        if (!identical(vintage_mode, "current")) {
-          selectizeInput(
-            series_input_id(index, "fred_vintage_date"),
-            "Vintage date",
-            choices = vintage_choices,
-            selected = default_vintage,
-            options = list(
-              create = TRUE,
-              placeholder = "YYYY-MM-DD"
-            )
-          )
-        }
-      )
-    )
-  }
-
-  if (identical(source_value, "dbnomics")) {
-    return(
-      textInput(
-        series_input_id(index, "dbnomics_series"),
-        "DBnomics series ID",
-        value = input[[series_input_id(index, "dbnomics_series")]] %||% restored_spec$dbnomics_series %||% "AMECO/ZUTN/EA19.0.0.0.0.ZUTN"
-      )
-    )
-  }
-
-  if (identical(source_value, "abs")) {
-    current_abs_ids <- unique(trimws(as.character(input[[series_input_id(index, "abs_id")]] %||% restored_spec$abs_id %||% character())))
-    current_abs_ids <- current_abs_ids[nzchar(current_abs_ids)]
-    abs_state <- resolve_abs_control_state(
-      current_values = list(
-        catalogue = input[[series_input_id(index, "abs_catalogue")]],
-        desc = input[[series_input_id(index, "abs_desc")]],
-        type = input[[series_input_id(index, "abs_series_type")]],
-        table = input[[series_input_id(index, "abs_table")]],
-        ids = input[[series_input_id(index, "abs_id")]]
-      ),
-      restored_spec = restored_spec
-    )
-
-    return(
-      tagList(
-        selectizeInput(
-          series_input_id(index, "abs_catalogue"),
-          "ABS catalogue",
-          choices = abs_cat,
-          selected = abs_state$catalogue,
-          multiple = FALSE,
-          options = list(placeholder = "Select a catalogue")
-        ),
-        selectizeInput(
-          series_input_id(index, "abs_desc"),
-          "ABS series description",
-          choices = abs_state$desc_choices,
-          selected = abs_state$desc,
-          multiple = FALSE,
-          options = list(placeholder = "Select a series description")
-        ),
-        selectizeInput(
-          series_input_id(index, "abs_series_type"),
-          "ABS series type",
-          choices = abs_state$type_choices,
-          selected = abs_state$series_type,
-          multiple = FALSE,
-          options = list(placeholder = "Select a series type")
-        ),
-        selectInput(
-          series_input_id(index, "abs_table"),
-          "ABS table",
-          choices = c("Select a table" = "", stats::setNames(abs_state$table_choices, abs_state$table_choices)),
-          selected = abs_state$table
-        ),
-        selectizeInput(
-          series_input_id(index, "abs_id"),
-          "ABS series ID",
-          choices = seed_selectize_choices(c(abs_state$id_choices, current_abs_ids)),
-          selected = current_abs_ids %||% abs_state$ids,
-          options = list(create = TRUE, placeholder = "Select a series ID"),
-          multiple = TRUE
-        )
-      )
-    )
-  }
-
   if (identical(source_value, "Analysis result") || identical(source_value, "analysis_result")) {
     return(
       div(
@@ -842,117 +686,6 @@ register_series_dependencies <- function(input, output, session, index) {
 
     series_source_controls_ui(input, session, index, source_value, restored_spec_value)
   })
-
-  observeEvent(input[[series_input_id(index, "abs_catalogue")]], {
-    restored_spec_value <- restored_series_spec(session, index)
-    abs_state <- resolve_abs_control_state(
-      current_values = list(
-        catalogue = input[[series_input_id(index, "abs_catalogue")]],
-        desc = input[[series_input_id(index, "abs_desc")]]
-      ),
-      restored_spec = restored_spec_value
-    )
-
-    updateSelectizeInput(
-      session,
-      series_input_id(index, "abs_desc"),
-      choices = abs_state$desc_choices,
-      selected = abs_state$desc,
-      server = TRUE
-    )
-  }, ignoreInit = FALSE)
-
-  observeEvent(
-    {
-      list(
-        input[[series_input_id(index, "abs_catalogue")]],
-        input[[series_input_id(index, "abs_desc")]]
-      )
-    },
-    {
-      restored_spec_value <- restored_series_spec(session, index)
-      abs_state <- resolve_abs_control_state(
-        current_values = list(
-          catalogue = input[[series_input_id(index, "abs_catalogue")]],
-          desc = input[[series_input_id(index, "abs_desc")]],
-          type = input[[series_input_id(index, "abs_series_type")]]
-        ),
-        restored_spec = restored_spec_value
-      )
-
-      updateSelectizeInput(
-        session,
-        series_input_id(index, "abs_series_type"),
-        choices = abs_state$type_choices,
-        selected = abs_state$series_type,
-        server = TRUE
-      )
-    },
-    ignoreInit = FALSE
-  )
-
-  observeEvent(
-    {
-      list(
-        input[[series_input_id(index, "abs_catalogue")]],
-        input[[series_input_id(index, "abs_desc")]],
-        input[[series_input_id(index, "abs_series_type")]]
-      )
-    },
-    {
-      restored_spec_value <- restored_series_spec(session, index)
-      abs_state <- resolve_abs_control_state(
-        current_values = list(
-          catalogue = input[[series_input_id(index, "abs_catalogue")]],
-          desc = input[[series_input_id(index, "abs_desc")]],
-          type = input[[series_input_id(index, "abs_series_type")]],
-          table = input[[series_input_id(index, "abs_table")]]
-        ),
-        restored_spec = restored_spec_value
-      )
-
-      updateSelectInput(
-        session,
-        series_input_id(index, "abs_table"),
-        choices = c("Select a table" = "", stats::setNames(abs_state$table_choices, abs_state$table_choices)),
-        selected = abs_state$table
-      )
-    },
-    ignoreInit = FALSE
-  )
-
-  observeEvent(
-    {
-      list(
-        input[[series_input_id(index, "abs_catalogue")]],
-        input[[series_input_id(index, "abs_desc")]],
-        input[[series_input_id(index, "abs_series_type")]],
-        input[[series_input_id(index, "abs_table")]]
-      )
-    },
-    {
-      restored_spec_value <- restored_series_spec(session, index)
-      abs_state <- resolve_abs_control_state(
-        current_values = list(
-          catalogue = input[[series_input_id(index, "abs_catalogue")]],
-          desc = input[[series_input_id(index, "abs_desc")]],
-          type = input[[series_input_id(index, "abs_series_type")]],
-          table = input[[series_input_id(index, "abs_table")]],
-          ids = input[[series_input_id(index, "abs_id")]]
-        ),
-        restored_spec = restored_spec_value
-      )
-
-      updateSelectizeInput(
-        session,
-        series_input_id(index, "abs_id"),
-        choices = abs_state$id_choices,
-        selected = abs_state$ids,
-        server = TRUE
-      )
-    },
-    ignoreInit = FALSE
-  )
 }
 
 transform_input_id <- function(prefix, field) {
@@ -1074,51 +807,6 @@ series_spec_from_input <- function(input, index, transform_profile = default_tra
     transform_profile = transform_profile,
     vis_type = input[[series_input_id(index, "vis_type")]] %||% "line"
   )
-
-  if (identical(source_value, "FRED")) {
-    spec$fred_series <- trimws(input[[series_input_id(index, "fred_series")]] %||% "")
-    if (!nzchar(spec$fred_series)) {
-      return(NULL)
-    }
-    spec$fred_vintage_mode <- input[[series_input_id(index, "fred_vintage_mode")]] %||% "current"
-    spec$fred_vintage_date <- parse_vintage_date(input[[series_input_id(index, "fred_vintage_date")]] %||% NA)
-  }
-
-  if (identical(source_value, "dbnomics")) {
-    spec$dbnomics_series <- trimws(input[[series_input_id(index, "dbnomics_series")]] %||% "")
-    if (!nzchar(spec$dbnomics_series)) {
-      return(NULL)
-    }
-  }
-
-  if (identical(source_value, "abs")) {
-    direct_abs_ids <- unique(trimws(as.character(input[[series_input_id(index, "abs_id")]] %||% restored_spec$abs_id %||% character())))
-    direct_abs_ids <- direct_abs_ids[nzchar(direct_abs_ids)]
-    if (length(direct_abs_ids) > 0) {
-      spec$abs_id <- direct_abs_ids
-      spec <- hydrate_abs_spec_from_ids(spec)
-      return(spec)
-    }
-
-    abs_state <- resolve_abs_control_state(
-      current_values = list(
-        catalogue = input[[series_input_id(index, "abs_catalogue")]],
-        desc = input[[series_input_id(index, "abs_desc")]],
-        type = input[[series_input_id(index, "abs_series_type")]],
-        table = input[[series_input_id(index, "abs_table")]],
-        ids = input[[series_input_id(index, "abs_id")]]
-      ),
-      restored_spec = restored_spec
-    )
-    spec$abs_catalogue <- abs_state$catalogue
-    spec$abs_desc <- abs_state$desc
-    spec$abs_series_type <- abs_state$series_type
-    spec$abs_table <- abs_state$table
-    spec$abs_id <- abs_state$ids
-    if (length(spec$abs_id) == 0) {
-      return(NULL)
-    }
-  }
 
   if (!nzchar(spec$label %||% "")) {
     spec$label <- default_series_label_from_id(spec)
@@ -1282,38 +970,9 @@ normalize_series_spec <- function(spec) {
     vis_type = spec$vis_type %||% "line"
   )
 
-  if (identical(normalized_spec$source, "FRED")) {
-    normalized_spec$fred_series <- trimws(spec$fred_series %||% "")
-    normalized_spec$fred_vintage_mode <- spec$fred_vintage_mode %||% "current"
-    normalized_spec$fred_vintage_date <- parse_vintage_date(spec$fred_vintage_date %||% NA)
-  }
-
-  if (identical(normalized_spec$source, "dbnomics")) {
-    normalized_spec$dbnomics_series <- trimws(spec$dbnomics_series %||% "")
-  }
-
   provider_entry <- provider_registry_entry(normalized_spec$source)
   if (!is.null(provider_entry) && is.function(provider_entry$normalize_spec)) {
     return(provider_entry$normalize_spec(spec, normalized_spec))
-  }
-
-  if (identical(normalized_spec$source, "abs")) {
-    hydrated_spec <- hydrate_abs_spec_from_ids(spec)
-    abs_state <- resolve_abs_control_state(
-      current_values = list(
-        catalogue = hydrated_spec$abs_catalogue,
-        desc = hydrated_spec$abs_desc,
-        type = hydrated_spec$abs_series_type,
-        table = hydrated_spec$abs_table,
-        ids = hydrated_spec$abs_id
-      ),
-      restored_spec = hydrated_spec
-    )
-    normalized_spec$abs_catalogue <- abs_state$catalogue
-    normalized_spec$abs_desc <- abs_state$desc
-    normalized_spec$abs_series_type <- abs_state$series_type
-    normalized_spec$abs_table <- abs_state$table
-    normalized_spec$abs_id <- abs_state$ids
   }
 
   if (!nzchar(normalized_spec$label %||% "")) {
@@ -1402,55 +1061,6 @@ apply_series_metadata <- function(data, spec) {
 }
 
 query_series_history <- function(spec) {
-  if (identical(spec$source, "FRED")) {
-    vintage_mode <- spec$fred_vintage_mode %||% "current"
-    vintage_date <- parse_vintage_date(spec$fred_vintage_date %||% NA)
-
-    if (identical(vintage_mode, "historical")) {
-      if (is.na(vintage_date)) {
-        stop("Choose a FRED vintage date.", call. = FALSE)
-      }
-
-      return(
-        fred_data(
-          series = spec$fred_series,
-          realtime_start = vintage_date,
-          realtime_end = vintage_date,
-          name_override = sprintf("%s (%s vintage)", spec$fred_series, format(vintage_date, "%Y-%m-%d"))
-        )
-      )
-    }
-
-    if (identical(vintage_mode, "compare")) {
-      if (is.na(vintage_date)) {
-        stop("Choose a FRED vintage date.", call. = FALSE)
-      }
-
-      return(bind_rows(
-        fred_data(
-          series = spec$fred_series,
-          name_override = sprintf("%s (current)", spec$fred_series)
-        ),
-        fred_data(
-          series = spec$fred_series,
-          realtime_start = vintage_date,
-          realtime_end = vintage_date,
-          name_override = sprintf("%s (%s vintage)", spec$fred_series, format(vintage_date, "%Y-%m-%d"))
-        )
-      ))
-    }
-
-    return(fred_data(series = spec$fred_series))
-  }
-
-  if (identical(spec$source, "dbnomics")) {
-    return(db_data(series = spec$dbnomics_series))
-  }
-
-  if (identical(spec$source, "abs")) {
-    return(abs_data(series = spec$abs_id))
-  }
-
   if (identical(spec$source, "analysis_result")) {
     return(spec$analysis_data %||% tibble::tibble())
   }
@@ -2659,89 +2269,7 @@ restore_series_spec <- function(session, index, spec = NULL, restore_token = NUL
       return(invisible(NULL))
     }
 
-    if (identical(spec$source, "FRED")) {
-      updateSelectizeInput(
-        session,
-        series_input_id(index, "fred_series"),
-        choices = seed_selectize_choices(spec$fred_series %||% ""),
-        selected = spec$fred_series %||% "",
-        server = TRUE
-      )
-      updateRadioGroupButtons(session, series_input_id(index, "fred_vintage_mode"), selected = spec$fred_vintage_mode %||% "current")
-      if (!identical(spec$fred_vintage_mode %||% "current", "current")) {
-        updateSelectizeInput(
-          session,
-          series_input_id(index, "fred_vintage_date"),
-          choices = fred_vintage_choice_values(spec$fred_series %||% "", spec$fred_vintage_date),
-          selected = if (!is.null(spec$fred_vintage_date) && !is.na(spec$fred_vintage_date)) format(as.Date(spec$fred_vintage_date), "%Y-%m-%d") else NULL,
-          server = TRUE
-        )
-      }
-    }
-
-    if (identical(spec$source, "dbnomics")) {
-      updateTextInput(session, series_input_id(index, "dbnomics_series"), value = spec$dbnomics_series %||% "")
-    }
-
-    if (identical(spec$source, "rba")) {
-      rba_choices <- rba_series[[spec$rba_table]] %||% character()
-      updateSelectInput(session, series_input_id(index, "rba_table"), selected = spec$rba_table)
-      updateSelectizeInput(
-        session,
-        series_input_id(index, "rba_desc"),
-        choices = rba_choices,
-        selected = spec$rba_desc,
-        server = TRUE
-      )
-    }
-
-    if (identical(spec$source, "abs")) {
-      abs_state <- resolve_abs_control_state(
-        current_values = list(
-          catalogue = spec$abs_catalogue,
-          desc = spec$abs_desc,
-          type = spec$abs_series_type,
-          table = spec$abs_table,
-          ids = spec$abs_id
-        ),
-        restored_spec = spec
-      )
-
-      updateSelectizeInput(
-        session,
-        series_input_id(index, "abs_catalogue"),
-        choices = abs_cat,
-        selected = abs_state$catalogue,
-        server = TRUE
-      )
-      updateSelectizeInput(
-        session,
-        series_input_id(index, "abs_desc"),
-        choices = abs_state$desc_choices,
-        selected = abs_state$desc,
-        server = TRUE
-      )
-      updateSelectizeInput(
-        session,
-        series_input_id(index, "abs_series_type"),
-        choices = abs_state$type_choices,
-        selected = abs_state$series_type,
-        server = TRUE
-      )
-      updateSelectInput(
-        session,
-        series_input_id(index, "abs_table"),
-        choices = c("Select a table" = "", stats::setNames(abs_state$table_choices, abs_state$table_choices)),
-        selected = abs_state$table
-      )
-      updateSelectizeInput(
-        session,
-        series_input_id(index, "abs_id"),
-        choices = seed_selectize_choices(c(abs_state$id_choices, spec$abs_id %||% character())),
-        selected = spec$abs_id %||% abs_state$ids,
-        server = TRUE
-      )
-    }
+    provider_registry_restore_controls(session, index, spec)
   }, once = TRUE)
 
   invisible(NULL)

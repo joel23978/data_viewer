@@ -1176,28 +1176,18 @@ init_search_builder_handlers <- function(
   })
 
   output$search_results_table <- DT::renderDataTable({
-    search_rows <- search_results() %>%
+    search_result_rows <- search_results()
+    series_ids <- vapply(
+      seq_len(nrow(search_result_rows)),
+      function(index) provider_registry_search_result_series_id(search_result_rows[index, , drop = FALSE]),
+      character(1)
+    )
+
+    search_rows <- search_result_rows %>%
       transmute(
         Title = title,
         Source = source,
-        `Series ID` = dplyr::case_when(
-          source == "ABS" ~ vapply(
-            load_payload,
-            function(payload) {
-              trimws(payload$abs_id %||% "")
-            },
-            character(1)
-          ),
-          source == "FRED" ~ vapply(
-            load_payload,
-            function(payload) {
-              trimws(payload$fred_series %||% "")
-            },
-            character(1)
-          ),
-          source == "RBA" ~ sub("^rba::", "", search_id %||% ""),
-          TRUE ~ ""
-        ),
+        `Series ID` = series_ids,
         Type = type_code_label(type_code),
         Location = location_code_label(location_code),
         Frequency = frequency,
