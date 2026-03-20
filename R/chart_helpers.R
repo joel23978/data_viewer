@@ -187,68 +187,222 @@ seed_selectize_choices <- function(selected_values = character()) {
   }
 }
 
-abs_catalogue_data <- function(catalogue_value = NULL) {
-  selected_catalogue <- resolve_valid_single_choice(catalogue_value, NULL, abs_cat)
-  catalogue_index <- match(selected_catalogue, abs_cat)
-  if (is.na(catalogue_index) || catalogue_index < 1) {
-    return(abs_ref[[1]] %||% tibble::tibble())
+abs_id_lookup <- function() {
+  data_viewer_cache_get(
+    "abs_id_lookup",
+    function() {
+      purrr::map2_dfr(
+        abs_ref,
+        seq_along(abs_ref),
+        function(catalogue_rows, index) {
+          catalogue_rows %>%
+            mutate(abs_catalogue = abs_cat[[index]] %||% "")
+        }
+      )
+    },
+    "Build ABS series ID lookup"
+  )
+}
+
+abs_rows_by_id <- function(series_ids = character()) {
+  selected_ids <- unique(trimws(as.character(series_ids %||% character())))
+  selected_ids <- selected_ids[nzchar(selected_ids)]
+
+  if (length(selected_ids) == 0) {
+    return(tibble::tibble())
   }
 
-  abs_ref[[catalogue_index]] %||% abs_ref[[1]] %||% tibble::tibble()
+  abs_id_lookup() %>%
+    filter(series_id %in% selected_ids)
+}
+
+hydrate_abs_spec_from_ids <- function(spec = list()) {
+  spec <- spec %||% list()
+  selected_ids <- unique(trimws(as.character(spec$abs_id %||% character())))
+  selected_ids <- selected_ids[nzchar(selected_ids)]
+
+  if (length(selected_ids) == 0) {
+    return(spec)
+  }
+
+  matching_rows <- abs_rows_by_id(selected_ids)
+  if (nrow(matching_rows) == 0) {
+    spec$abs_id <- selected_ids
+    return(spec)
+  }
+
+  first_row <- matching_rows %>% slice(1)
+  spec$abs_catalogue <- spec$abs_catalogue %||% first_row$abs_catalogue[[1]]
+  spec$abs_desc <- spec$abs_desc %||% first_row$series[[1]]
+  spec$abs_series_type <- spec$abs_series_type %||% first_row$series_type[[1]]
+  spec$abs_table <- spec$abs_table %||% first_row$table_title[[1]]
+  spec$abs_id <- selected_ids
+  if (!nzchar(trimws(spec$label %||% ""))) {
+    spec$label <- first_row$series[[1]]
+  }
+  spec
+}
+
+abs_catalogue_data <- function(catalogue_value = NULL) {
+  selected_catalogue <- trimws(as.character(catalogue_value %||% character()))
+  selected_catalogue <- selected_catalogue[nzchar(selected_catalogue)][1] %||% character()
+  if (length(selected_catalogue) == 0 || !selected_catalogue %in% abs_cat) {
+    return(tibble::tibble())
+  }
+
+  catalogue_index <- match(selected_catalogue, abs_cat)
+  if (is.na(catalogue_index) || catalogue_index < 1) {
+    return(tibble::tibble())
+  }
+
+  abs_ref[[catalogue_index]] %||% tibble::tibble()
+}
+
+abs_choice_values <- function(data, ..., column) {
+  column_name <- rlang::as_name(rlang::ensym(column))
+
+  if (!is.data.frame(data) || !column_name %in% names(data) || nrow(data) == 0) {
+    return(character())
+  }
+
+  filtered_data <- dplyr::filter(data, ...)
+  if (!column_name %in% names(filtered_data) || nrow(filtered_data) == 0) {
+    return(character())
+  }
+
+  filtered_data %>%
+    dplyr::pull(!!rlang::sym(column_name)) %>%
+    unique() %>%
+    stats::na.omit()
+}
+
+abs_restored_spec_present <- function(restored_spec = NULL) {
+  restored_spec <- restored_spec %||% list()
+
+  any(c(
+    nzchar(trimws(restored_spec$abs_catalogue %||% "")),
+    nzchar(trimws(restored_spec$abs_desc %||% "")),
+    nzchar(trimws(restored_spec$abs_series_type %||% "")),
+    nzchar(trimws(restored_spec$abs_table %||% "")),
+    length(restored_spec$abs_id %||% character()) > 0
+  ))
+}
+
+resolve_abs_single_choice <- function(current_value, restored_value = NULL, choices = character(), allow_fallback = FALSE) {
+  valid_choices <- as.character(choices %||% character())
+  if (length(valid_choices) == 0) {
+    return(character())
+  }
+
+  current_choice <- as.character(current_value %||% character())
+  current_choice <- current_choice[nzchar(current_choice)][1] %||% character()
+  if (length(current_choice) > 0 && current_choice %in% valid_choices) {
+    return(current_choice)
+  }
+
+  restored_choice <- as.character(restored_value %||% character())
+  restored_choice <- restored_choice[nzchar(restored_choice)][1] %||% character()
+  if (length(restored_choice) > 0 && restored_choice %in% valid_choices) {
+    return(restored_choice)
+  }
+
+  if (isTRUE(allow_fallback)) {
+    return(valid_choices[1])
+  }
+
+  character()
+}
+
+resolve_abs_multi_choice <- function(current_value, restored_value = NULL, choices = character(), allow_fallback = FALSE) {
+  valid_choices <- as.character(choices %||% character())
+  if (length(valid_choices) == 0) {
+    raw_choices <- unique(trimws(as.character(current_value %||% restored_value %||% character())))
+    return(raw_choices[nzchar(raw_choices)])
+  }
+
+  current_choices <- intersect(as.character(current_value %||% character()), valid_choices)
+  if (length(current_choices) > 0) {
+    return(current_choices)
+  }
+
+  restored_choices <- intersect(as.character(restored_value %||% character()), valid_choices)
+  if (length(restored_choices) > 0) {
+    return(restored_choices)
+  }
+
+  if (isTRUE(allow_fallback)) {
+    return(valid_choices[1])
+  }
+
+  character()
 }
 
 resolve_abs_control_state <- function(current_values = list(), restored_spec = NULL) {
   restored_spec <- restored_spec %||% list()
   current_values <- current_values %||% list()
+  allow_fallback <- abs_restored_spec_present(restored_spec)
 
-  current_catalogue <- resolve_valid_single_choice(
+  current_catalogue <- resolve_abs_single_choice(
     current_values$catalogue,
     restored_spec$abs_catalogue,
-    abs_cat
+    abs_cat,
+    allow_fallback = FALSE
   )
   catalogue_data <- abs_catalogue_data(current_catalogue)
 
-  desc_choices <- catalogue_data %>%
-    pull(series) %>%
-    unique() %>%
-    stats::na.omit()
-  current_desc <- resolve_valid_single_choice(
+  desc_choices <- abs_choice_values(catalogue_data, column = series)
+  current_desc <- resolve_abs_single_choice(
     current_values$desc,
     restored_spec$abs_desc,
-    desc_choices
+    desc_choices,
+    allow_fallback = allow_fallback
   )
 
-  type_choices <- catalogue_data %>%
-    filter(series == current_desc) %>%
-    pull(series_type) %>%
-    unique() %>%
-    stats::na.omit()
-  current_type <- resolve_valid_single_choice(
+  type_choices <- if (length(current_desc) == 0) {
+    character()
+  } else {
+    abs_choice_values(catalogue_data, series == current_desc, column = series_type)
+  }
+  current_type <- resolve_abs_single_choice(
     current_values$type,
     restored_spec$abs_series_type,
-    type_choices
+    type_choices,
+    allow_fallback = allow_fallback
   )
 
-  table_choices <- catalogue_data %>%
-    filter(series == current_desc, series_type == current_type) %>%
-    pull(table_title) %>%
-    unique() %>%
-    stats::na.omit()
-  current_table <- resolve_valid_single_choice(
+  table_choices <- if (length(current_desc) == 0 || length(current_type) == 0) {
+    character()
+  } else {
+    abs_choice_values(
+      catalogue_data,
+      series == current_desc,
+      series_type == current_type,
+      column = table_title
+    )
+  }
+  current_table <- resolve_abs_single_choice(
     current_values$table,
     restored_spec$abs_table,
-    table_choices
+    table_choices,
+    allow_fallback = allow_fallback
   )
 
-  id_choices <- catalogue_data %>%
-    filter(series == current_desc, series_type == current_type, table_title == current_table) %>%
-    pull(series_id) %>%
-    unique() %>%
-    stats::na.omit()
-  current_ids <- resolve_valid_multi_choice(
+  id_choices <- if (length(current_desc) == 0 || length(current_type) == 0 || length(current_table) == 0) {
+    character()
+  } else {
+    abs_choice_values(
+      catalogue_data,
+      series == current_desc,
+      series_type == current_type,
+      table_title == current_table,
+      column = series_id
+    )
+  }
+  current_ids <- resolve_abs_multi_choice(
     current_values$ids,
     restored_spec$abs_id,
-    id_choices
+    id_choices,
+    allow_fallback = allow_fallback
   )
 
   list(
@@ -543,10 +697,17 @@ series_source_controls_ui <- function(input, session, index, source_value = "ABS
 
     return(
       tagList(
-        textInput(
+        selectizeInput(
           series_input_id(index, "fred_series"),
           "FRED series ID",
-          value = current_series
+          choices = seed_selectize_choices(current_series),
+          selected = if (nzchar(trimws(current_series))) current_series else NULL,
+          options = list(
+            create = TRUE,
+            maxItems = 1,
+            persist = FALSE,
+            placeholder = "Type a FRED series ID and press Enter"
+          )
         ),
         radioGroupButtons(
           series_input_id(index, "fred_vintage_mode"),
@@ -630,6 +791,8 @@ series_source_controls_ui <- function(input, session, index, source_value = "ABS
   }
 
   if (identical(source_value, "abs")) {
+    current_abs_ids <- unique(trimws(as.character(input[[series_input_id(index, "abs_id")]] %||% restored_spec$abs_id %||% character())))
+    current_abs_ids <- current_abs_ids[nzchar(current_abs_ids)]
     abs_state <- resolve_abs_control_state(
       current_values = list(
         catalogue = input[[series_input_id(index, "abs_catalogue")]],
@@ -643,36 +806,42 @@ series_source_controls_ui <- function(input, session, index, source_value = "ABS
 
     return(
       tagList(
-        compact_single_choice_input(
+        selectizeInput(
           series_input_id(index, "abs_catalogue"),
           "ABS catalogue",
           choices = abs_cat,
-          selected = abs_state$catalogue
+          selected = abs_state$catalogue,
+          multiple = FALSE,
+          options = list(placeholder = "Select a catalogue")
         ),
         selectizeInput(
           series_input_id(index, "abs_desc"),
           "ABS series description",
-          choices = seed_selectize_choices(abs_state$desc),
-          selected = abs_state$desc
+          choices = abs_state$desc_choices,
+          selected = abs_state$desc,
+          multiple = FALSE,
+          options = list(placeholder = "Select a series description")
         ),
-        compact_single_choice_input(
+        selectizeInput(
           series_input_id(index, "abs_series_type"),
           "ABS series type",
           choices = abs_state$type_choices,
-          selected = abs_state$series_type
+          selected = abs_state$series_type,
+          multiple = FALSE,
+          options = list(placeholder = "Select a series type")
         ),
-        compact_single_choice_input(
+        selectInput(
           series_input_id(index, "abs_table"),
           "ABS table",
-          choices = abs_state$table_choices,
+          choices = c("Select a table" = "", stats::setNames(abs_state$table_choices, abs_state$table_choices)),
           selected = abs_state$table
         ),
         selectizeInput(
           series_input_id(index, "abs_id"),
           "ABS series ID",
-          choices = seed_selectize_choices(abs_state$ids),
-          selected = abs_state$ids,
-          options = list(create = TRUE),
+          choices = seed_selectize_choices(c(abs_state$id_choices, current_abs_ids)),
+          selected = current_abs_ids %||% abs_state$ids,
+          options = list(create = TRUE, placeholder = "Select a series ID"),
           multiple = TRUE
         )
       )
@@ -743,11 +912,12 @@ register_series_dependencies <- function(input, output, session, index) {
         restored_spec = restored_spec_value
       )
 
-      updateSelectInput(
+      updateSelectizeInput(
         session,
         series_input_id(index, "abs_series_type"),
         choices = abs_state$type_choices,
-        selected = abs_state$series_type
+        selected = abs_state$series_type,
+        server = TRUE
       )
     },
     ignoreInit = FALSE
@@ -776,7 +946,7 @@ register_series_dependencies <- function(input, output, session, index) {
       updateSelectInput(
         session,
         series_input_id(index, "abs_table"),
-        choices = abs_state$table_choices,
+        choices = c("Select a table" = "", stats::setNames(abs_state$table_choices, abs_state$table_choices)),
         selected = abs_state$table
       )
     },
@@ -966,6 +1136,14 @@ series_spec_from_input <- function(input, index, transform_profile = default_tra
   }
 
   if (identical(source_value, "abs")) {
+    direct_abs_ids <- unique(trimws(as.character(input[[series_input_id(index, "abs_id")]] %||% restored_spec$abs_id %||% character())))
+    direct_abs_ids <- direct_abs_ids[nzchar(direct_abs_ids)]
+    if (length(direct_abs_ids) > 0) {
+      spec$abs_id <- direct_abs_ids
+      spec <- hydrate_abs_spec_from_ids(spec)
+      return(spec)
+    }
+
     abs_state <- resolve_abs_control_state(
       current_values = list(
         catalogue = input[[series_input_id(index, "abs_catalogue")]],
@@ -1167,15 +1345,16 @@ normalize_series_spec <- function(spec) {
   }
 
   if (identical(normalized_spec$source, "abs")) {
+    hydrated_spec <- hydrate_abs_spec_from_ids(spec)
     abs_state <- resolve_abs_control_state(
       current_values = list(
-        catalogue = spec$abs_catalogue,
-        desc = spec$abs_desc,
-        type = spec$abs_series_type,
-        table = spec$abs_table,
-        ids = spec$abs_id
+        catalogue = hydrated_spec$abs_catalogue,
+        desc = hydrated_spec$abs_desc,
+        type = hydrated_spec$abs_series_type,
+        table = hydrated_spec$abs_table,
+        ids = hydrated_spec$abs_id
       ),
-      restored_spec = spec
+      restored_spec = hydrated_spec
     )
     normalized_spec$abs_catalogue <- abs_state$catalogue
     normalized_spec$abs_desc <- abs_state$desc
@@ -2544,7 +2723,13 @@ restore_series_spec <- function(session, index, spec = NULL, restore_token = NUL
     }
 
     if (identical(spec$source, "FRED")) {
-      updateTextInput(session, series_input_id(index, "fred_series"), value = spec$fred_series %||% "")
+      updateSelectizeInput(
+        session,
+        series_input_id(index, "fred_series"),
+        choices = seed_selectize_choices(spec$fred_series %||% ""),
+        selected = spec$fred_series %||% "",
+        server = TRUE
+      )
       updateRadioGroupButtons(session, series_input_id(index, "fred_vintage_mode"), selected = spec$fred_vintage_mode %||% "current")
       if (!identical(spec$fred_vintage_mode %||% "current", "current")) {
         updateSelectizeInput(
@@ -2585,7 +2770,13 @@ restore_series_spec <- function(session, index, spec = NULL, restore_token = NUL
         restored_spec = spec
       )
 
-      updateSelectInput(session, series_input_id(index, "abs_catalogue"), selected = abs_state$catalogue)
+      updateSelectizeInput(
+        session,
+        series_input_id(index, "abs_catalogue"),
+        choices = abs_cat,
+        selected = abs_state$catalogue,
+        server = TRUE
+      )
       updateSelectizeInput(
         session,
         series_input_id(index, "abs_desc"),
@@ -2593,23 +2784,24 @@ restore_series_spec <- function(session, index, spec = NULL, restore_token = NUL
         selected = abs_state$desc,
         server = TRUE
       )
-      updateSelectInput(
+      updateSelectizeInput(
         session,
         series_input_id(index, "abs_series_type"),
         choices = abs_state$type_choices,
-        selected = abs_state$series_type
+        selected = abs_state$series_type,
+        server = TRUE
       )
       updateSelectInput(
         session,
         series_input_id(index, "abs_table"),
-        choices = abs_state$table_choices,
+        choices = c("Select a table" = "", stats::setNames(abs_state$table_choices, abs_state$table_choices)),
         selected = abs_state$table
       )
       updateSelectizeInput(
         session,
         series_input_id(index, "abs_id"),
-        choices = abs_state$id_choices,
-        selected = abs_state$ids,
+        choices = seed_selectize_choices(c(abs_state$id_choices, spec$abs_id %||% character())),
+        selected = spec$abs_id %||% abs_state$ids,
         server = TRUE
       )
     }

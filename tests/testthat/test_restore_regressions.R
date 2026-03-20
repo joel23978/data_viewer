@@ -210,6 +210,50 @@ test_that("ABS source controls prefer restored values over stale invalid selecti
   expect_true(grepl(abs_row$series_id[[1]], as.character(abs_ui), fixed = TRUE))
 })
 
+test_that("manual ABS selection stays blank until the user steps through", {
+  initial_state <- resolve_abs_control_state(current_values = list(), restored_spec = NULL)
+  expect_length(initial_state$catalogue, 0)
+  expect_length(initial_state$desc, 0)
+  expect_length(initial_state$series_type, 0)
+  expect_length(initial_state$table, 0)
+  expect_length(initial_state$ids, 0)
+
+  catalogue_state <- resolve_abs_control_state(
+    current_values = list(catalogue = abs_cat[[1]]),
+    restored_spec = NULL
+  )
+  expect_equal(catalogue_state$catalogue, abs_cat[[1]])
+  expect_length(catalogue_state$desc, 0)
+  expect_length(catalogue_state$series_type, 0)
+  expect_length(catalogue_state$table, 0)
+  expect_length(catalogue_state$ids, 0)
+})
+
+test_that("ABS series ID direct entry works without dropdown selections", {
+  abs_row <- abs_ref[[1]] %>%
+    filter(!is.na(series_id), nzchar(series_id), !is.na(series), !is.na(series_type), !is.na(table_title)) %>%
+    slice(1)
+
+  spec <- series_spec_from_input(
+    input = list(
+      series_1_enabled = TRUE,
+      series_1_source = "abs",
+      series_1_label = "Direct ABS ID",
+      series_1_vis_type = "line",
+      series_1_abs_id = abs_row$series_id[[1]]
+    ),
+    index = 1,
+    transform_profile = default_transform_profile(),
+    restored_spec = NULL
+  )
+
+  expect_equal(spec$abs_id, abs_row$series_id[[1]])
+  expect_equal(spec$abs_catalogue, abs_cat[[1]])
+  expect_equal(spec$abs_desc, abs_row$series[[1]])
+  expect_equal(spec$abs_series_type, abs_row$series_type[[1]])
+  expect_equal(spec$abs_table, abs_row$table_title[[1]])
+})
+
 test_that("ABS search add-to-builder restores dependent chain", {
   shiny::testServer(build_main_server, {
     ensure_search_index_loaded()
@@ -313,16 +357,11 @@ test_that("upstream ABS selector change after restore re-resolves downstream cle
     restored_spec = NULL
   )
 
-  current_rows <- alternative_rows %>%
-    filter(
-      series == resolved$desc,
-      series_type == resolved$series_type,
-      table_title == resolved$table
-    )
-
   expect_equal(resolved$catalogue, alternative_catalogue)
-  expect_gt(nrow(current_rows), 0)
-  expect_true(all(resolved$ids %in% current_rows$series_id))
+  expect_length(resolved$desc, 0)
+  expect_length(resolved$series_type, 0)
+  expect_length(resolved$table, 0)
+  expect_equal(resolved$ids, abs_spec$abs_id)
 })
 
 test_that("restored/live transition does not reapply stale restored values", {
