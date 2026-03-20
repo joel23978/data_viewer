@@ -867,6 +867,7 @@ default_builder_restore_context <- function() {
 init_builder_restore_state <- function(session) {
   restored_state <- reactiveVal(NULL)
   builder_restore_context <- reactiveVal(default_builder_restore_context())
+  session$userData$builder_restore_token <- 0L
 
   builder_restore_mode <- function() {
     builder_restore_context()$mode %||% "idle"
@@ -875,6 +876,7 @@ init_builder_restore_state <- function(session) {
   clear_builder_restore_state <- function(clear_series_specs = TRUE) {
     restored_state(NULL)
     builder_restore_context(default_builder_restore_context())
+    session$userData$builder_restore_token <- 0L
     if (isTRUE(clear_series_specs)) {
       session$userData$restored_series_specs <- list()
     }
@@ -893,8 +895,9 @@ init_builder_restore_state <- function(session) {
       scope = restore_scope %||% "full",
       selected_series_index = selected_series_index
     ))
+    session$userData$builder_restore_token <- next_token
     session$userData$restored_series_specs <- list()
-    restore_chart_state(session, normalized_state)
+    restore_chart_state(session, normalized_state, restore_token = next_token)
 
     if (!is.null(selected_series_index)) {
       updateTabsetPanel(session, "series_tabs", selected = paste("Series", selected_series_index))
@@ -1346,6 +1349,7 @@ init_saved_analysis_restore_handlers <- function(session) {
   restore_saved_analysis_state <- function(chart_record) {
     chart_kind <- chart_record$chart_kind[[1]] %||% "builder"
     analysis_spec <- chart_record$analysis_spec[[1]] %||% list()
+    expected_restore_token <- session$userData$builder_restore_token %||% 0L
 
     if (identical(chart_kind, "builder")) {
       updateRadioGroupButtons(session, "side_panel_mode", selected = "transform")
@@ -1356,6 +1360,11 @@ init_saved_analysis_restore_handlers <- function(session) {
     updateTabsetPanel(session, "analysis_tabs", selected = analysis_spec$tab %||% "Correlations")
 
     session$onFlushed(function() {
+      current_restore_token <- session$userData$builder_restore_token %||% 0L
+      if (!identical(current_restore_token, expected_restore_token)) {
+        return(invisible(NULL))
+      }
+
       if (identical(chart_kind, "correlation")) {
         updateSelectInput(session, "analysis_corr_x", selected = analysis_spec$series_x %||% "")
         updateSelectInput(session, "analysis_corr_y", selected = analysis_spec$series_y %||% "")

@@ -2507,7 +2507,13 @@ chart_summary_metrics <- function(data) {
   )
 }
 
-restore_series_spec <- function(session, index, spec = NULL) {
+restore_series_spec <- function(session, index, spec = NULL, restore_token = NULL) {
+  expected_restore_token <- restore_token %||% session$userData$builder_restore_token %||% 0L
+  current_restore_token <- session$userData$builder_restore_token %||% 0L
+  if (!identical(current_restore_token, expected_restore_token)) {
+    return(invisible(NULL))
+  }
+
   restored_specs <- session$userData$restored_series_specs %||% list()
   restored_specs[[as.character(index)]] <- if (is.null(spec)) NULL else normalize_series_spec(spec)
   session$userData$restored_series_specs <- restored_specs
@@ -2523,6 +2529,11 @@ restore_series_spec <- function(session, index, spec = NULL) {
   updateRadioGroupButtons(session, series_input_id(index, "vis_type"), selected = spec$vis_type %||% "line")
 
   session$onFlushed(function() {
+    current_restore_token <- session$userData$builder_restore_token %||% 0L
+    if (!identical(current_restore_token, expected_restore_token)) {
+      return(invisible(NULL))
+    }
+
     if (identical(spec$source, "ABS CPI")) {
       updateSelectizeInput(session, series_input_id(index, "text"), selected = spec$text, server = TRUE)
       updateSelectizeInput(session, series_input_id(index, "region"), selected = spec$region, server = TRUE)
@@ -2605,8 +2616,13 @@ restore_series_spec <- function(session, index, spec = NULL) {
   invisible(NULL)
 }
 
-restore_chart_state <- function(session, chart_state) {
+restore_chart_state <- function(session, chart_state, restore_token = NULL) {
   chart_state <- normalize_chart_state(chart_state)
+  restore_token <- restore_token %||% session$userData$builder_restore_token %||% 0L
+  current_restore_token <- session$userData$builder_restore_token %||% 0L
+  if (!identical(current_restore_token, restore_token)) {
+    return(invisible(NULL))
+  }
 
   updateDateInput(session, "start_date", value = min(chart_state$date_range))
   updateDateInput(session, "end_date", value = max(chart_state$date_range))
@@ -2640,7 +2656,7 @@ restore_chart_state <- function(session, chart_state) {
   restore_transform_profile(session, "transform_all", chart_state$all_series_transform)
 
   for (index in seq_len(MAX_SERIES)) {
-    restore_series_spec(session, index, chart_state$series[[index]])
+    restore_series_spec(session, index, chart_state$series[[index]], restore_token = restore_token)
     restore_transform_profile(
       session,
       paste0("transform_", index),

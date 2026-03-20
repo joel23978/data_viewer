@@ -828,7 +828,7 @@ test_that("main server supports save and load flows with transform copying", {
   })
 })
 
-test_that("presentation-selected preview takes precedence over library selection", {
+test_that("presentation-selected preview takes precedence and load uses selected_preview_chart_record", {
   temp_library <- tempfile(fileext = ".rds")
   temp_presentation_library <- tempfile(fileext = ".rds")
   old_option <- getOption("data_viewer.chart_library_path")
@@ -889,6 +889,26 @@ test_that("presentation-selected preview takes precedence over library selection
     session$flushReact()
 
     expect_equal(builder_state()$style$title, second_state$style$title)
+  })
+})
+
+test_that("main server suppresses stale restore callbacks from earlier apply_builder_state calls", {
+  shiny::testServer(build_main_server, {
+    first_state <- build_test_state()
+    first_state$style$title <- "First restore"
+    first_state$series[[2]]$label <- "First restore series"
+
+    second_state <- build_test_state()
+    second_state$style$title <- "Second restore"
+    second_state$series[[2]]$label <- "Second restore series"
+
+    apply_builder_state(first_state, selected_series_index = 2, navigate_builder = FALSE)
+    apply_builder_state(second_state, selected_series_index = 2, navigate_builder = FALSE)
+    session$flushReact()
+    session$flushReact()
+
+    expect_equal(builder_state()$style$title, second_state$style$title)
+    expect_equal(builder_state()$series[[2]]$label, second_state$series[[2]]$label)
   })
 })
 
