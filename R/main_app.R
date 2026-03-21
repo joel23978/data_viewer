@@ -23,7 +23,6 @@ build_search_tab_ui <- function() {
           class = "search-toolbar__filters-grid",
           div(
             class = "search-toolbar__group search-toolbar__group--segmented search-toolbar__group--wide",
-            style = "padding-bottom: 0;",
             div(
               class = "search-toolbar__group-label",
               "Source"
@@ -38,9 +37,9 @@ build_search_tab_ui <- function() {
                 justified = FALSE,
                 checkIcon = list(yes = icon("check"))
               )
-            )
+            ),
+            uiOutput("search_source_controls")
           ),
-          uiOutput("search_source_controls"),
           div(
             class = "search-toolbar__group search-toolbar__group--segmented",
             style = "padding-bottom: 0;",
@@ -346,10 +345,6 @@ build_main_ui <- function() {
               chart_card(
                 "Data Window",
                 header_actions = actionButton("reset_builder", "Reset", class = "app-card__header-chip"),
-                tags$p(
-                  class = "muted-copy",
-                  "Set the date window and choose whether to show the data table."
-                ),
                 div(
                   class = "segmented-control",
                   radioGroupButtons(
@@ -389,7 +384,7 @@ build_main_ui <- function() {
                 header_actions = actionButton("clear_series_setup", "Clear", class = "app-card__header-chip"),
                 tags$p(
                   class = "muted-copy",
-                  "Add or replace source series from Data Search, then use this panel to adjust labels and chart styles."
+                  "Add or replace source series from Data Search, then adjust labels and chart styles here."
                 ),
                 do.call(
                   tabsetPanel,
@@ -2423,7 +2418,16 @@ build_main_server <- function(input, output, session) {
   }, ignoreInit = TRUE)
 
   output$search_source_controls <- renderUI({
-    provider_registry_search_controls_ui(input$search_source_filter %||% "all", input)
+    controls <- provider_registry_search_controls_ui(input$search_source_filter %||% "all", input)
+
+    if (is.null(controls)) {
+      return(NULL)
+    }
+
+    div(
+      class = "search-source-controls",
+      controls
+    )
   })
 
   search_remote_contexts <- reactive({
