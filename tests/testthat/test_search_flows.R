@@ -120,6 +120,56 @@ test_that("prebuilt local search assets are used at runtime and boolean lookup u
   expect_equal(results$title[[1]], "Retail turnover")
 })
 
+test_that("quoted phrases are matched exactly in local search", {
+  local_index <- tibble::tibble(
+    local_row_id = 1:3,
+    search_id = c("custom::1", "custom::2", "custom::3"),
+    title = c("Data centre investment", "Centre for data science", "Housing pipeline"),
+    source = c("Recent", "Recent", "Recent"),
+    type_code = c("ECON", "ECON", "ECON"),
+    location_code = c("AUS", "AUS", "AUS"),
+    frequency = c("Unknown", "Unknown", "Unknown"),
+    start_date = as.Date(c(NA, NA, NA)),
+    end_date = as.Date(c(NA, NA, NA)),
+    summary = c("Exact phrase appears", "Words appear separately", "Control row"),
+    search_text = c("data centre investment", "centre for data science", "housing pipeline"),
+    load_payload = list(list(source = "recent"), list(source = "recent"), list(source = "recent"))
+  )
+  token_index <- build_search_token_index(local_index)
+
+  loose_results <- filter_search_index(
+    local_index,
+    query = "data centre",
+    source_filter = "all",
+    limit = Inf,
+    token_index = token_index
+  )
+  exact_results <- filter_search_index(
+    local_index,
+    query = "\"data centre\"",
+    source_filter = "all",
+    limit = Inf,
+    token_index = token_index
+  )
+  phrase_or_results <- filter_search_index(
+    local_index,
+    query = "\"data centre\" OR housing",
+    source_filter = "all",
+    limit = Inf,
+    token_index = token_index
+  )
+
+  expect_equal(sort(loose_results$title), c("Centre for data science", "Data centre investment"))
+  expect_equal(exact_results$title, "Data centre investment")
+  expect_equal(sort(phrase_or_results$title), c("Data centre investment", "Housing pipeline"))
+})
+
+test_that("remote search queries preserve quoted phrases", {
+  expect_equal(remote_search_query("\"data centre\""), "\"data centre\"")
+  expect_equal(remote_search_query("\"data centre\" OR housing"), "\"data centre\" OR housing")
+  expect_equal(remote_search_query("data AND centre"), "data centre")
+})
+
 test_that("saved-chart series are indexed as recent search results", {
   temp_library <- tempfile(fileext = ".rds")
   temp_presentation_library <- tempfile(fileext = ".rds")

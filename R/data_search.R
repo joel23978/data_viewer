@@ -88,6 +88,22 @@ search_tokens <- function(query) {
   strsplit(cleaned_query, "\\s+")[[1]]
 }
 
+search_query_lexemes <- function(query) {
+  query_text <- trimws(query %||% "")
+
+  if (!nzchar(query_text)) {
+    return(character())
+  }
+
+  match_positions <- gregexpr('"[^"]+"|\\S+', query_text, perl = TRUE)[[1]]
+
+  if (length(match_positions) == 1 && identical(match_positions[[1]], -1L)) {
+    return(character())
+  }
+
+  regmatches(query_text, gregexpr('"[^"]+"|\\S+', query_text, perl = TRUE))[[1]] %||% character()
+}
+
 parse_boolean_query <- function(query) {
   query_text <- trimws(query %||% "")
 
@@ -95,12 +111,13 @@ parse_boolean_query <- function(query) {
     return(list())
   }
 
-  raw_tokens <- strsplit(query_text, "\\s+")[[1]]
+  raw_tokens <- search_query_lexemes(query_text)
   clauses <- list()
   current_clause <- character()
 
   for (token in raw_tokens) {
-    operator_token <- toupper(token)
+    is_quoted_phrase <- startsWith(token, "\"") && endsWith(token, "\"") && nchar(token) >= 2
+    operator_token <- if (is_quoted_phrase) "" else toupper(token)
 
     if (operator_token == "OR") {
       if (length(current_clause) > 0) {
@@ -114,7 +131,9 @@ parse_boolean_query <- function(query) {
       next
     }
 
-    cleaned_token <- clean_search_text(token)
+    cleaned_token <- clean_search_text(
+      if (is_quoted_phrase) substr(token, 2, nchar(token) - 1) else token
+    )
 
     if (nzchar(cleaned_token)) {
       current_clause <- c(current_clause, cleaned_token)
@@ -132,8 +151,22 @@ boolean_query_terms <- function(query) {
   unique(unlist(parse_boolean_query(query), use.names = FALSE))
 }
 
+boolean_query_candidate_terms <- function(query) {
+  terms <- boolean_query_terms(query)
+
+  if (length(terms) == 0) {
+    return(character())
+  }
+
+  unique(unlist(lapply(terms, search_text_tokens), use.names = FALSE))
+}
+
+search_query_has_quotes <- function(query) {
+  grepl('"[^"]+"', trimws(query %||% ""), perl = TRUE)
+}
+
 normalized_query_text <- function(query) {
-  paste(boolean_query_terms(query), collapse = " ")
+  paste(boolean_query_candidate_terms(query), collapse = " ")
 }
 
 search_text_tokens <- function(text) {
@@ -201,7 +234,21 @@ boolean_query_candidate_ids <- function(query, token_index) {
   clause_matches <- lapply(clauses, function(clause_terms) {
     postings <- lapply(
       clause_terms,
-      function(term) token_index[[term]] %||% integer()
+      function(term) {
+        term_tokens <- search_text_tokens(term)
+
+        if (length(term_tokens) == 0) {
+          return(integer())
+        }
+
+        term_postings <- lapply(term_tokens, function(term_token) token_index[[term_token]] %||% integer())
+
+        if (any(lengths(term_postings) == 0)) {
+          return(integer())
+        }
+
+        Reduce(intersect, term_postings)
+      }
     )
 
     if (length(postings) == 0 || any(lengths(postings) == 0)) {
@@ -216,6 +263,10 @@ boolean_query_candidate_ids <- function(query, token_index) {
 }
 
 remote_search_query <- function(query) {
+  if (search_query_has_quotes(query)) {
+    return(trimws(query %||% ""))
+  }
+
   normalized_query <- normalized_query_text(query)
 
   if (nzchar(normalized_query)) {
@@ -1031,7 +1082,8 @@ filter_search_index <- function(search_index, query = "", source_filter = "all",
       indexed_rows[0, , drop = FALSE]
     } else {
       indexed_rows %>%
-        filter(local_row_id %in% matched_ids)
+        filter(local_row_id %in% matched_ids) %>%
+        filter(vapply(search_text, boolean_query_matches, logical(1), query = query))
     }
   } else {
     indexed_rows %>%
