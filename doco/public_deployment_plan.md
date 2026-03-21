@@ -121,14 +121,28 @@ renv::restore()
 ### 1.5 Python environment
 
 Python is used for Plotly PNG/SVG export and PPTX generation.
-The app detects `python3` via `Sys.which("python3")` and fails gracefully
-if absent — but export features will be disabled.
+The app validates the configured Python interpreter against the modules it
+needs. It prefers `RETICULATE_PYTHON` when set, then falls back to
+`Sys.which("python3")`, and only enables export features when the chosen
+interpreter can import the required packages.
+
+If PPTX dependencies are missing, the PPTX export actions are hidden or
+replaced with inline guidance instead of returning a broken download.
+Plotly PNG/SVG export keeps its existing fallback path, but still validates
+the configured interpreter before attempting the Python-based renderer.
 
 For full functionality, install a virtualenv on the server:
 
 ```bash
 python3 -m venv /srv/data_viewer/venv
 /srv/data_viewer/venv/bin/pip install plotly kaleido python-pptx
+/srv/data_viewer/venv/bin/python3 - <<'PY'
+import plotly
+import kaleido
+from pptx import Presentation
+from PIL import Image
+print("python export dependencies available")
+PY
 ```
 
 Set in the app's environment file (see §3.3):
@@ -256,6 +270,8 @@ Create `/etc/shiny-server/env`:
 FRED_API_KEY=
 
 # Python virtualenv for Plotly export and PPTX
+# This interpreter must satisfy the export readiness module checks;
+# otherwise the PPTX buttons will be hidden and replaced with guidance.
 RETICULATE_PYTHON=/srv/data_viewer/venv/bin/python3
 
 # Chart library paths (absolute, on persistent volume)
@@ -424,6 +440,7 @@ Back it up daily:
 - [ ] R + Shiny Server OSS installed
 - [ ] R packages installed via `renv::restore()`
 - [ ] Python venv created with plotly, kaleido, python-pptx (§1.5)
+- [ ] Configured Python interpreter passes module import checks for Plotly and PPTX (§1.5)
 - [ ] `/srv/data_viewer/persist/` created, owned by shiny, seeded with initial RDS files
 - [ ] `/etc/R/Rprofile.site` sets chart library paths
 - [ ] `/etc/shiny-server/env` sets RETICULATE_PYTHON
@@ -442,3 +459,4 @@ Back it up daily:
 - [ ] Two concurrent sessions use independent FRED keys
 - [ ] Chart save/load round-trips correctly
 - [ ] Plotly PNG export works (if Python env configured)
+- [ ] PPTX export produces a real `.pptx` file and the PPTX actions stay hidden or explanatory when dependencies are unavailable

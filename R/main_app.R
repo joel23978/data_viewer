@@ -179,7 +179,7 @@ build_library_tab_ui <- function() {
             actionButton("load_chart", "Load into builder"),
             downloadButton("export_preview_png", "Download PNG"),
             downloadButton("export_preview_svg", "Download SVG"),
-            downloadButton("export_preview_pptx", "Download PPTX")
+            uiOutput("export_preview_pptx_control")
           )
         ),
         chart_card(
@@ -311,6 +311,391 @@ build_chartwell_wordmark <- function() {
   )
 }
 
+pptx_export_unavailable_ui <- function(message = "PPTX export requires a working Python environment with `pptx` and `PIL`.") {
+  div(class = "muted-copy export-note", message)
+}
+
+pptx_export_control_ui <- function(button_id, label = "Download PPTX") {
+  availability <- tryCatch(
+    probe_export_python(c("pptx", "PIL")),
+    error = function(error) {
+      list(
+        available = FALSE,
+        message = conditionMessage(error)
+      )
+    }
+  )
+
+  if (!isTRUE(availability$available)) {
+    return(pptx_export_unavailable_ui(availability$message %||% "PPTX export requires a working Python environment with `pptx` and `PIL`."))
+  }
+
+  downloadButton(button_id, label)
+}
+
+chart_export_pyenv_candidates <- function() {
+  pyenv_root <- trimws(Sys.getenv("PYENV_ROOT", unset = path.expand("~/.pyenv")))
+  if (!nzchar(pyenv_root) || !dir.exists(pyenv_root)) {
+    return(character())
+  }
+
+  candidate_paths <- c(
+    file.path(pyenv_root, "shims", "python3"),
+    Sys.glob(file.path(pyenv_root, "versions", "*", "bin", "python3"))
+  )
+  candidate_paths <- unique(normalizePath(candidate_paths[file.exists(candidate_paths)], winslash = "/", mustWork = FALSE))
+  candidate_paths[nzchar(candidate_paths)]
+}
+
+chart_export_python_candidates <- function() {
+  configured_path <- unname(trimws(Sys.getenv("RETICULATE_PYTHON", unset = "")))
+  discovered_path <- unname(trimws(Sys.which("python3")))
+  candidate_paths <- c(
+    configured_path,
+    chart_export_pyenv_candidates(),
+    discovered_path
+  )
+  candidate_paths <- unique(normalizePath(candidate_paths[nzchar(candidate_paths) & file.exists(candidate_paths)], winslash = "/", mustWork = FALSE))
+  candidate_paths[nzchar(candidate_paths)]
+}
+
+chart_export_python_message <- function(required_modules, tried_paths, missing_modules) {
+  missing_modules <- unique(missing_modules[nzchar(missing_modules)])
+  tried_paths <- unique(tried_paths[nzchar(tried_paths)])
+  missing_text <- paste(if (length(missing_modules) > 0) missing_modules else required_modules, collapse = ", ")
+
+  if (length(tried_paths) == 0) {
+    sprintf(
+      "Python export requires modules: %s. No usable Python interpreter was found.",
+      missing_text
+    )
+  } else {
+    sprintf(
+      "Python export requires modules: %s. Tried: %s.",
+      missing_text,
+      paste(tried_paths, collapse = ", ")
+    )
+  }
+}
+
+probe_export_python <- function(required_modules, candidate_paths = NULL) {
+  required_modules <- unique(trimws(as.character(required_modules)))
+  required_modules <- required_modules[nzchar(required_modules)]
+  candidate_paths <- candidate_paths %||% chart_export_python_candidates()
+  candidate_paths <- unique(trimws(as.character(candidate_paths)))
+  candidate_paths <- candidate_paths[nzchar(candidate_paths) & file.exists(candidate_paths)]
+
+  if (length(candidate_paths) == 0) {
+    return(list(
+      available = FALSE,
+      python_path = "",
+      tried_paths = character(),
+      missing_modules = required_modules,
+      message = chart_export_python_message(required_modules, character(), required_modules)
+    ))
+  }
+
+  probe_script_file <- tempfile(fileext = ".py")
+  on.exit(unlink(probe_script_file), add = TRUE)
+  writeLines(
+    c(
+      "import importlib.util",
+      "import sys",
+      "",
+      "required_modules = sys.argv[1:]",
+      "missing_modules = [module for module in required_modules if importlib.util.find_spec(module) is None]",
+      "if missing_modules:",
+      "    print(\"\\n\".join(missing_modules))",
+      "    raise SystemExit(1)"
+    ),
+    con = probe_script_file
+  )
+
+  tried_paths <- character()
+  missing_modules <- character()
+
+  for (python_path in candidate_paths) {
+    tried_paths <- c(tried_paths, python_path)
+    command_output <- tryCatch(
+      system2(
+        python_path,
+        c(probe_script_file, required_modules),
+        stdout = TRUE,
+        stderr = TRUE
+      ),
+      error = function(error) {
+        structure(conditionMessage(error), class = "system2_error")
+      }
+    )
+
+    if (inherits(command_output, "system2_error")) {
+      next
+    }
+
+    command_status <- as.integer(attr(command_output, "status") %||% 0L)
+    if (isTRUE(command_status == 0L)) {
+      return(list(
+        available = TRUE,
+        python_path = python_path,
+        tried_paths = tried_paths,
+        missing_modules = character(),
+        message = ""
+      ))
+    }
+
+    probe_missing_modules <- unique(trimws(as.character(command_output)))
+    probe_missing_modules <- probe_missing_modules[nzchar(probe_missing_modules)]
+    probe_missing_modules <- intersect(required_modules, probe_missing_modules)
+    missing_modules <- unique(c(missing_modules, probe_missing_modules))
+  }
+
+  if (length(missing_modules) == 0) {
+    missing_modules <- required_modules
+  }
+
+  list(
+    available = FALSE,
+    python_path = "",
+    tried_paths = tried_paths,
+    missing_modules = missing_modules,
+    message = chart_export_python_message(required_modules, tried_paths, missing_modules)
+  )
+}
+
+save_plotly_image_with_python <- function(widget, file, width_px, height_px, format = c("png", "svg")) {
+  format <- match.arg(format)
+  export_python <- probe_export_python(c("plotly", "kaleido"))
+
+  if (!isTRUE(export_python$available)) {
+    stop(export_python$message, call. = FALSE)
+  }
+  python_path <- export_python$python_path
+
+  widget_json <- plotly::plotly_json(widget, jsonedit = FALSE, pretty = FALSE)
+  json_file <- tempfile(fileext = ".json")
+  script_file <- tempfile(fileext = ".py")
+
+  writeLines(as.character(widget_json), con = json_file, useBytes = TRUE)
+  writeLines(
+    c(
+      "import pathlib",
+      "import sys",
+      "import plotly.io as pio",
+      "",
+      "json_path = pathlib.Path(sys.argv[1])",
+      "output_path = pathlib.Path(sys.argv[2])",
+      "width = int(sys.argv[3])",
+      "height = int(sys.argv[4])",
+      "fmt = sys.argv[5]",
+      "",
+      "figure = pio.from_json(json_path.read_text(encoding='utf-8'))",
+      "figure.write_image(output_path, format=fmt, width=width, height=height, scale=2 if fmt == 'png' else 1)"
+    ),
+    con = script_file
+  )
+
+  command_output <- system2(
+    python_path,
+    c(script_file, json_file, file, as.integer(width_px), as.integer(height_px), format),
+    stdout = TRUE,
+    stderr = TRUE
+  )
+  command_status <- as.integer(attr(command_output, "status") %||% 0L)
+
+  if (!isTRUE(command_status == 0L)) {
+    stop(paste(command_output, collapse = "\n"), call. = FALSE)
+  }
+}
+
+chartwell_title_slide_template_path <- function() {
+  candidate_paths <- c(
+    here::here("brand", "chartwell-title-slide.pptx"),
+    here::here("brand", "chartwell-title-slide_widescreen.pptx"),
+    here::here("chartwell-title-slide.pptx"),
+    here::here("chartwell-title-slide_widescreen.pptx")
+  )
+
+  existing_path <- candidate_paths[file.exists(candidate_paths)][1] %||% NA_character_
+  if (is.na(existing_path) || !nzchar(existing_path)) {
+    return("")
+  }
+
+  existing_path
+}
+
+save_chart_pptx_with_python <- function(image_files, pptx_file, slide_title = NULL) {
+  export_python <- probe_export_python(c("pptx", "PIL"))
+
+  if (!isTRUE(export_python$available)) {
+    stop(export_python$message, call. = FALSE)
+  }
+  python_path <- export_python$python_path
+
+  image_files <- normalizePath(image_files[file.exists(image_files)], winslash = "/", mustWork = FALSE)
+
+  if (length(image_files) == 0) {
+    stop("No chart image is available for PPTX export.", call. = FALSE)
+  }
+
+  template_path <- chartwell_title_slide_template_path()
+  export_title <- trimws(slide_title %||% "Chart")
+  export_date <- format(Sys.Date(), "%B %Y")
+  export_author <- "Joel Findlay"
+  script_file <- tempfile(fileext = ".py")
+  args_file <- tempfile(fileext = ".txt")
+  script_lines <- c(
+    "import sys",
+    "import pathlib",
+    "from pptx import Presentation",
+    "from pptx.util import Inches, Pt",
+    "from pptx.enum.shapes import MSO_AUTO_SHAPE_TYPE",
+    "from pptx.enum.text import PP_ALIGN",
+    "from PIL import Image",
+    "",
+    "args_path = pathlib.Path(sys.argv[1])",
+    "args = args_path.read_text(encoding='utf-8').splitlines()",
+    "template_file, pptx_file, slide_title, author_name, export_date, *image_files = args",
+    "",
+    "RGBColor = __import__('pptx.dml.color', fromlist=['RGBColor']).RGBColor",
+    "BG_COLOR = RGBColor(0xF5, 0xF8, 0xF4)",
+    "TITLE_BG_COLOR = RGBColor(0x0D, 0x14, 0x20)",
+    "ACCENT_COLOR = RGBColor(0x4F, 0x7E, 0xC9)",
+    "TEXT_COLOR = RGBColor(0x0D, 0x14, 0x20)",
+    "LIGHT_TEXT_COLOR = RGBColor(0xFF, 0xFF, 0xFF)",
+    "COPYRIGHT_TEXT = '© CHARTWELL 2026'",
+    "",
+    "def set_text(shape, text, font_size=None, bold=None, color=None):",
+    "    if not getattr(shape, 'has_text_frame', False):",
+    "        return",
+    "    shape.text_frame.clear()",
+    "    paragraph = shape.text_frame.paragraphs[0]",
+    "    run = paragraph.add_run()",
+    "    run.text = text",
+    "    if font_size is not None:",
+    "        run.font.size = font_size",
+    "    if bold is not None:",
+    "        run.font.bold = bold",
+    "    if color is not None:",
+    "        run.font.color.rgb = RGBColor(*color)",
+    "",
+    "def add_slide_branding(slide, prs):",
+    "    bg_fill = slide.background.fill",
+    "    bg_fill.solid()",
+    "    bg_fill.fore_color.rgb = BG_COLOR",
+    "    bar = slide.shapes.add_shape(MSO_AUTO_SHAPE_TYPE.RECTANGLE, 0, 0, Inches(0.055), prs.slide_height)",
+    "    bar.fill.solid()",
+    "    bar.fill.fore_color.rgb = ACCENT_COLOR",
+    "    bar.line.fill.background()",
+    "    copyright_box = slide.shapes.add_textbox(prs.slide_width - Inches(2.8), prs.slide_height - Inches(0.42), Inches(2.55), Inches(0.2))",
+    "    paragraph = copyright_box.text_frame.paragraphs[0]",
+    "    paragraph.alignment = PP_ALIGN.RIGHT",
+    "    run = paragraph.add_run()",
+    "    run.text = COPYRIGHT_TEXT",
+    "    run.font.size = Pt(10)",
+    "    run.font.bold = False",
+    "    run.font.color.rgb = TEXT_COLOR",
+    "",
+    "prs = Presentation(template_file) if template_file else Presentation()",
+    "prs.slide_width = Inches(10)",
+    "prs.slide_height = Inches(7.5)",
+    "",
+    "default_layout = prs.slide_layouts[0]",
+    "",
+    "if len(prs.slides) == 0:",
+    "    title_slide = prs.slides.add_slide(default_layout)",
+    "    title_slide.background.fill.solid()",
+    "    title_slide.background.fill.fore_color.rgb = TITLE_BG_COLOR",
+    "else:",
+    "    title_slide = prs.slides[0]",
+    "",
+    "title_slide.background.fill.solid()",
+    "title_slide.background.fill.fore_color.rgb = TITLE_BG_COLOR",
+    "",
+    "title_shape = None",
+    "author_shape = None",
+    "author_value_shape = None",
+    "date_shape = None",
+    "date_value_shape = None",
+    "copyright_shape = None",
+    "for shape in title_slide.shapes:",
+    "    if getattr(shape, 'has_text_frame', False):",
+    "        text = (shape.text or '').strip()",
+    "        if text == 'Your Presentation Title':",
+    "            title_shape = shape",
+    "        elif text.startswith('AUTHOR'):",
+    "            author_shape = shape",
+    "        elif text == 'Your Name':",
+    "            author_value_shape = shape",
+    "        elif text.startswith('DATE'):",
+    "            date_shape = shape",
+    "        elif text == 'March 2026':",
+    "            date_value_shape = shape",
+    "        elif 'CHARTWELL 2026' in text:",
+    "            copyright_shape = shape",
+    "",
+    "if title_shape is not None:",
+    "    set_text(title_shape, slide_title, font_size=Pt(30), bold=True, color=(0xFF, 0xFF, 0xFF))",
+    "if author_shape is not None:",
+    "    set_text(author_shape, 'AUTHOR', font_size=Pt(13), bold=False, color=(0xFF, 0xFF, 0xFF))",
+    "if author_value_shape is not None:",
+    "    set_text(author_value_shape, author_name, font_size=Pt(13), bold=False, color=(0xFF, 0xFF, 0xFF))",
+    "if date_shape is not None:",
+    "    set_text(date_shape, 'DATE', font_size=Pt(13), bold=False, color=(0xFF, 0xFF, 0xFF))",
+    "if date_value_shape is not None:",
+    "    set_text(date_value_shape, export_date, font_size=Pt(13), bold=False, color=(0xFF, 0xFF, 0xFF))",
+    "if copyright_shape is not None:",
+    "    set_text(copyright_shape, COPYRIGHT_TEXT, font_size=Pt(10), bold=False, color=(0xFF, 0xFF, 0xFF))",
+    "",
+    "for image_file in image_files:",
+    "    slide = prs.slides.add_slide(default_layout)",
+    "    add_slide_branding(slide, prs)",
+    "    with Image.open(image_file) as img:",
+    "        img_width, img_height = img.size",
+    "    content_left = Inches(0.28)",
+    "    content_top = Inches(0.18)",
+    "    content_width = prs.slide_width - Inches(0.42)",
+    "    content_height = prs.slide_height - Inches(0.42)",
+    "    scale = min(content_width / img_width, content_height / img_height)",
+    "    pic_width = int(img_width * scale)",
+    "    pic_height = int(img_height * scale)",
+    "    pic_left = int(content_left + (content_width - pic_width) / 2)",
+    "    pic_top = int(content_top + (content_height - pic_height) / 2)",
+    "    slide.shapes.add_picture(image_file, pic_left, pic_top, width=pic_width, height=pic_height)",
+    "",
+    "prs.save(pptx_file)"
+  )
+  writeLines(script_lines, script_file)
+  writeLines(
+    c(
+      template_path,
+      pptx_file,
+      export_title,
+      export_author,
+      export_date,
+      image_files
+    ),
+    args_file
+  )
+
+  command_output <- tryCatch(
+    system2(
+      python_path,
+      c(
+        script_file,
+        args_file
+      ),
+      stdout = TRUE,
+      stderr = TRUE
+    ),
+    error = function(error) paste(error$message)
+  )
+  command_status <- as.integer(attr(command_output, "status") %||% 0L)
+
+  if (!isTRUE(command_status == 0L)) {
+    stop(paste(command_output, collapse = "\n"), call. = FALSE)
+  }
+}
+
 build_main_ui <- function() {
   year_bounds <- default_year_bounds()
 
@@ -415,7 +800,7 @@ build_main_ui <- function() {
                   class = "export-row",
                   downloadButton("exportPNG", "Download PNG"),
                   downloadButton("exportSVG", "Download SVG"),
-                  downloadButton("exportPPTX", "Download PPTX"),
+                  uiOutput("builder_pptx_control"),
                   downloadButton("exportData", "Download CSV")
                 ),
                 tags$p(
@@ -1897,251 +2282,6 @@ build_main_server <- function(input, output, session) {
       coord_cartesian(xlim = c(0, 1), ylim = c(0, 1), expand = FALSE)
   }
 
-  chart_export_python_path <- function() {
-    configured_path <- trimws(Sys.getenv("RETICULATE_PYTHON", unset = ""))
-    discovered_path <- trimws(Sys.which("python3"))
-    python_path <- c(configured_path, discovered_path)
-    python_path <- python_path[nzchar(python_path)][1] %||% ""
-
-    if (!nzchar(python_path) || !file.exists(python_path)) {
-      return("")
-    }
-
-    python_path
-  }
-
-  save_plotly_image_with_python <- function(widget, file, width_px, height_px, format = c("png", "svg")) {
-    format <- match.arg(format)
-    python_path <- chart_export_python_path()
-
-    if (!nzchar(python_path)) {
-      stop("Python is not available for Plotly image export.", call. = FALSE)
-    }
-
-    widget_json <- plotly::plotly_json(widget, jsonedit = FALSE, pretty = FALSE)
-    json_file <- tempfile(fileext = ".json")
-    script_file <- tempfile(fileext = ".py")
-
-    writeLines(as.character(widget_json), con = json_file, useBytes = TRUE)
-    writeLines(
-      c(
-        "import pathlib",
-        "import sys",
-        "import plotly.io as pio",
-        "",
-        "json_path = pathlib.Path(sys.argv[1])",
-        "output_path = pathlib.Path(sys.argv[2])",
-        "width = int(sys.argv[3])",
-        "height = int(sys.argv[4])",
-        "fmt = sys.argv[5]",
-        "",
-        "figure = pio.from_json(json_path.read_text(encoding='utf-8'))",
-        "figure.write_image(output_path, format=fmt, width=width, height=height, scale=2 if fmt == 'png' else 1)"
-      ),
-      con = script_file
-    )
-
-    command_output <- system2(
-      python_path,
-      c(script_file, json_file, file, as.integer(width_px), as.integer(height_px), format),
-      stdout = TRUE,
-      stderr = TRUE
-    )
-    command_status <- as.integer(attr(command_output, "status") %||% 0L)
-
-    if (!isTRUE(command_status == 0L)) {
-      stop(paste(command_output, collapse = "\n"), call. = FALSE)
-    }
-  }
-
-  chartwell_title_slide_template_path <- function() {
-    candidate_paths <- c(
-      here::here("brand", "chartwell-title-slide.pptx"),
-      here::here("brand", "chartwell-title-slide_widescreen.pptx"),
-      here::here("chartwell-title-slide.pptx"),
-      here::here("chartwell-title-slide_widescreen.pptx")
-    )
-
-    existing_path <- candidate_paths[file.exists(candidate_paths)][1] %||% NA_character_
-    if (is.na(existing_path) || !nzchar(existing_path)) {
-      return("")
-    }
-
-    existing_path
-  }
-
-  save_chart_pptx_with_python <- function(image_files, pptx_file, slide_title = NULL) {
-    python_path <- chart_export_python_path()
-
-    if (!nzchar(python_path)) {
-      stop("Python 3 is not available for PPTX export.", call. = FALSE)
-    }
-
-    image_files <- normalizePath(image_files[file.exists(image_files)], winslash = "/", mustWork = FALSE)
-
-    if (length(image_files) == 0) {
-      stop("No chart image is available for PPTX export.", call. = FALSE)
-    }
-
-    template_path <- chartwell_title_slide_template_path()
-    export_title <- trimws(slide_title %||% "Chart")
-    export_date <- format(Sys.Date(), "%B %Y")
-    export_author <- "Joel Findlay"
-    script_file <- tempfile(fileext = ".py")
-    args_file <- tempfile(fileext = ".txt")
-    script_lines <- c(
-      "import sys",
-      "import pathlib",
-      "from pptx import Presentation",
-      "from pptx.util import Inches, Pt",
-      "from pptx.enum.shapes import MSO_AUTO_SHAPE_TYPE",
-      "from pptx.enum.text import PP_ALIGN",
-      "from PIL import Image",
-      "",
-      "args_path = pathlib.Path(sys.argv[1])",
-      "args = args_path.read_text(encoding='utf-8').splitlines()",
-      "template_file, pptx_file, slide_title, author_name, export_date, *image_files = args",
-      "",
-      "RGBColor = __import__('pptx.dml.color', fromlist=['RGBColor']).RGBColor",
-      "BG_COLOR = RGBColor(0xF5, 0xF8, 0xF4)",
-      "TITLE_BG_COLOR = RGBColor(0x0D, 0x14, 0x20)",
-      "ACCENT_COLOR = RGBColor(0x4F, 0x7E, 0xC9)",
-      "TEXT_COLOR = RGBColor(0x0D, 0x14, 0x20)",
-      "LIGHT_TEXT_COLOR = RGBColor(0xFF, 0xFF, 0xFF)",
-      "COPYRIGHT_TEXT = '© CHARTWELL 2026'",
-      "",
-      "def set_text(shape, text, font_size=None, bold=None, color=None):",
-      "    if not getattr(shape, 'has_text_frame', False):",
-      "        return",
-      "    shape.text_frame.clear()",
-      "    paragraph = shape.text_frame.paragraphs[0]",
-      "    run = paragraph.add_run()",
-      "    run.text = text",
-      "    if font_size is not None:",
-      "        run.font.size = font_size",
-      "    if bold is not None:",
-      "        run.font.bold = bold",
-      "    if color is not None:",
-      "        run.font.color.rgb = RGBColor(*color)",
-      "",
-      "def add_slide_branding(slide, prs):",
-      "    bg_fill = slide.background.fill",
-      "    bg_fill.solid()",
-      "    bg_fill.fore_color.rgb = BG_COLOR",
-      "    bar = slide.shapes.add_shape(MSO_AUTO_SHAPE_TYPE.RECTANGLE, 0, 0, Inches(0.055), prs.slide_height)",
-      "    bar.fill.solid()",
-      "    bar.fill.fore_color.rgb = ACCENT_COLOR",
-      "    bar.line.fill.background()",
-      "    copyright_box = slide.shapes.add_textbox(prs.slide_width - Inches(2.8), prs.slide_height - Inches(0.42), Inches(2.55), Inches(0.2))",
-      "    paragraph = copyright_box.text_frame.paragraphs[0]",
-      "    paragraph.alignment = PP_ALIGN.RIGHT",
-      "    run = paragraph.add_run()",
-      "    run.text = COPYRIGHT_TEXT",
-      "    run.font.size = Pt(10)",
-      "    run.font.bold = False",
-      "    run.font.color.rgb = TEXT_COLOR",
-      "",
-      "prs = Presentation(template_file) if template_file else Presentation()",
-      "prs.slide_width = Inches(10)",
-      "prs.slide_height = Inches(7.5)",
-      "",
-      "default_layout = prs.slide_layouts[0]",
-      "",
-      "if len(prs.slides) == 0:",
-      "    title_slide = prs.slides.add_slide(default_layout)",
-      "    title_slide.background.fill.solid()",
-      "    title_slide.background.fill.fore_color.rgb = TITLE_BG_COLOR",
-      "else:",
-      "    title_slide = prs.slides[0]",
-      "",
-      "title_slide.background.fill.solid()",
-      "title_slide.background.fill.fore_color.rgb = TITLE_BG_COLOR",
-      "",
-      "title_shape = None",
-      "author_shape = None",
-      "author_value_shape = None",
-      "date_shape = None",
-      "date_value_shape = None",
-      "copyright_shape = None",
-      "for shape in title_slide.shapes:",
-      "    if getattr(shape, 'has_text_frame', False):",
-      "        text = (shape.text or '').strip()",
-      "        if text == 'Your Presentation Title':",
-      "            title_shape = shape",
-      "        elif text.startswith('AUTHOR'):",
-      "            author_shape = shape",
-      "        elif text == 'Your Name':",
-      "            author_value_shape = shape",
-      "        elif text.startswith('DATE'):",
-      "            date_shape = shape",
-      "        elif text == 'March 2026':",
-      "            date_value_shape = shape",
-      "        elif 'CHARTWELL 2026' in text:",
-      "            copyright_shape = shape",
-      "",
-      "if title_shape is not None:",
-      "    set_text(title_shape, slide_title, font_size=Pt(30), bold=True, color=(0xFF, 0xFF, 0xFF))",
-      "if author_shape is not None:",
-      "    set_text(author_shape, 'AUTHOR', font_size=Pt(13), bold=False, color=(0xFF, 0xFF, 0xFF))",
-      "if author_value_shape is not None:",
-      "    set_text(author_value_shape, author_name, font_size=Pt(13), bold=False, color=(0xFF, 0xFF, 0xFF))",
-      "if date_shape is not None:",
-      "    set_text(date_shape, 'DATE', font_size=Pt(13), bold=False, color=(0xFF, 0xFF, 0xFF))",
-      "if date_value_shape is not None:",
-      "    set_text(date_value_shape, export_date, font_size=Pt(13), bold=False, color=(0xFF, 0xFF, 0xFF))",
-      "if copyright_shape is not None:",
-      "    set_text(copyright_shape, COPYRIGHT_TEXT, font_size=Pt(10), bold=False, color=(0xFF, 0xFF, 0xFF))",
-      "",
-      "for image_file in image_files:",
-      "    slide = prs.slides.add_slide(default_layout)",
-      "    add_slide_branding(slide, prs)",
-      "    with Image.open(image_file) as img:",
-      "        img_width, img_height = img.size",
-      "    content_left = Inches(0.28)",
-      "    content_top = Inches(0.18)",
-      "    content_width = prs.slide_width - Inches(0.42)",
-      "    content_height = prs.slide_height - Inches(0.42)",
-      "    scale = min(content_width / img_width, content_height / img_height)",
-      "    pic_width = int(img_width * scale)",
-      "    pic_height = int(img_height * scale)",
-      "    pic_left = int(content_left + (content_width - pic_width) / 2)",
-      "    pic_top = int(content_top + (content_height - pic_height) / 2)",
-      "    slide.shapes.add_picture(image_file, pic_left, pic_top, width=pic_width, height=pic_height)",
-      "",
-      "prs.save(pptx_file)"
-    )
-    writeLines(script_lines, script_file)
-    writeLines(
-      c(
-        template_path,
-        pptx_file,
-        export_title,
-        export_author,
-        export_date,
-        image_files
-      ),
-      args_file
-    )
-
-    command_output <- tryCatch(
-      system2(
-        python_path,
-        c(
-          script_file,
-          args_file
-        ),
-        stdout = TRUE,
-        stderr = TRUE
-      ),
-      error = function(error) paste(error$message)
-    )
-    command_status <- as.integer(attr(command_output, "status") %||% 0L)
-
-    if (!isTRUE(command_status == 0L)) {
-      stop(paste(command_output, collapse = "\n"), call. = FALSE)
-    }
-  }
-
   save_static_chart_html <- function(file, plot_object, style) {
     temp_png <- tempfile(fileext = ".png")
     ggplot2::ggsave(
@@ -2677,6 +2817,10 @@ build_main_server <- function(input, output, session) {
     DT::datatable(chart_table, options = list(pageLength = 10, scrollX = TRUE))
   })
 
+  output$builder_pptx_control <- renderUI({
+    pptx_export_control_ui("exportPPTX")
+  })
+
   output$exportPNG <- downloadHandler(
     filename = function() {
       paste0(str_replace_all(builder_state()$style$title %||% "chart", "[^A-Za-z0-9]+", "_"), ".png")
@@ -2718,6 +2862,11 @@ build_main_server <- function(input, output, session) {
     },
     contentType = "application/vnd.openxmlformats-officedocument.presentationml.presentation",
     content = function(file) {
+      pptx_ready <- probe_export_python(c("pptx", "PIL"))
+      if (!isTRUE(pptx_ready$available)) {
+        stop(pptx_ready$message, call. = FALSE)
+      }
+
       req(nrow(chart_data()) > 0)
       style <- builder_state()$style
       temp_png <- tempfile(fileext = ".png")
@@ -3456,7 +3605,7 @@ build_main_server <- function(input, output, session) {
     div(
       class = "library-actions",
       actionButton("update_presentation", "Update presentation"),
-      downloadButton("export_selected_presentation", "Download PPTX")
+      pptx_export_control_ui("export_selected_presentation")
     )
   })
 
@@ -4533,6 +4682,10 @@ build_main_server <- function(input, output, session) {
     }
   )
 
+  output$export_preview_pptx_control <- renderUI({
+    pptx_export_control_ui("export_preview_pptx")
+  })
+
   output$export_preview_pptx <- downloadHandler(
     filename = function() {
       chart_record <- selected_preview_chart_record()
@@ -4541,6 +4694,11 @@ build_main_server <- function(input, output, session) {
     },
     contentType = "application/vnd.openxmlformats-officedocument.presentationml.presentation",
     content = function(file) {
+      pptx_ready <- probe_export_python(c("pptx", "PIL"))
+      if (!isTRUE(pptx_ready$available)) {
+        stop(pptx_ready$message, call. = FALSE)
+      }
+
       chart_record <- selected_preview_chart_record()
       req(!is.null(chart_record), nrow(chart_record) == 1)
       chart_state <- chart_record$chart_state[[1]] %||% list(style = default_style_settings())
@@ -4607,6 +4765,11 @@ build_main_server <- function(input, output, session) {
     },
     contentType = "application/vnd.openxmlformats-officedocument.presentationml.presentation",
     content = function(file) {
+      pptx_ready <- probe_export_python(c("pptx", "PIL"))
+      if (!isTRUE(pptx_ready$available)) {
+        stop(pptx_ready$message, call. = FALSE)
+      }
+
       selected_records <- selected_chart_records()
       req(!is.null(selected_records), nrow(selected_records) > 0)
       temp_dir <- tempfile("chart-presentation-")
@@ -4647,6 +4810,11 @@ build_main_server <- function(input, output, session) {
     },
     contentType = "application/vnd.openxmlformats-officedocument.presentationml.presentation",
     content = function(file) {
+      pptx_ready <- probe_export_python(c("pptx", "PIL"))
+      if (!isTRUE(pptx_ready$available)) {
+        stop(pptx_ready$message, call. = FALSE)
+      }
+
       presentation_record <- selected_presentation_record()
       presentation_records <- selected_presentation_charts()
       req(!is.null(presentation_record), nrow(presentation_records) > 0)

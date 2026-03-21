@@ -9,10 +9,15 @@ library(tidyr)
 library(ggplot2)
 
 if (requireNamespace("reticulate", quietly = TRUE)) {
-  python_path <- Sys.which("python3")
-  if (nzchar(python_path)) {
-    Sys.setenv(RETICULATE_PYTHON = python_path)
-    try(reticulate::use_python(python_path, required = FALSE), silent = TRUE)
+  configured_python_path <- trimws(Sys.getenv("RETICULATE_PYTHON", unset = ""))
+  if (nzchar(configured_python_path)) {
+    try(reticulate::use_python(configured_python_path, required = FALSE), silent = TRUE)
+  } else {
+    python_path <- trimws(Sys.which("python3"))
+    if (nzchar(python_path)) {
+      Sys.setenv(RETICULATE_PYTHON = python_path)
+      try(reticulate::use_python(python_path, required = FALSE), silent = TRUE)
+    }
   }
 }
 
