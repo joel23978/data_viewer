@@ -9,23 +9,16 @@ source(here::here("R", "main_app.R"))
 source(here::here("tests", "testthat", "helper_app_fixtures.R"))
 
 test_that("forecast analysis falls back to the first available series and uses shared styling", {
-  abs_specs <- build_test_abs_specs()
+  test_state <- build_test_state()
 
   shiny::testServer(build_main_server, {
     suppressWarnings({
+      apply_builder_state(normalize_chart_state(test_state), selected_series_index = 1, navigate_builder = FALSE)
+      session$flushReact()
+      session$flushReact()
       session$setInputs(
         start_date = as.Date("2024-01-01"),
         end_date = as.Date("2025-12-31"),
-        series_1_enabled = TRUE,
-        series_1_source = "abs",
-        series_1_abs_id = abs_specs[[1]]$abs_id,
-        series_1_label = abs_specs[[1]]$label,
-        series_1_vis_type = "line",
-        series_2_enabled = TRUE,
-        series_2_source = "abs",
-        series_2_abs_id = abs_specs[[2]]$abs_id,
-        series_2_label = abs_specs[[2]]$label,
-        series_2_vis_type = "line",
         side_panel_mode = "analysis",
         analysis_tabs = "Forecast",
         analysis_forecast_horizon = 4

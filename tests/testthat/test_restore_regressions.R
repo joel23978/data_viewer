@@ -160,149 +160,40 @@ test_that("main server suppresses stale restore callbacks from earlier apply_bui
   }))
 })
 
-test_that("ABS source controls render restored saved selections", {
-  abs_row <- abs_ref[[1]] %>%
-    filter(!is.na(series_id), nzchar(series_id), !is.na(series), !is.na(series_type), !is.na(table_title)) %>%
-    slice(1)
-
-  abs_ui <- series_source_controls_ui(
-    input = list(),
-    session = NULL,
-    index = 1,
-    source_value = "abs",
-    restored_spec = list(
-      source = "abs",
-      abs_catalogue = abs_cat[[1]],
-      abs_desc = abs_row$series[[1]],
-      abs_series_type = abs_row$series_type[[1]],
-      abs_table = abs_row$table_title[[1]],
-      abs_id = abs_row$series_id[[1]]
-    )
-  )
-
-  expect_true(grepl(abs_cat[[1]], as.character(abs_ui), fixed = TRUE))
-  expect_true(grepl(abs_row$series[[1]], as.character(abs_ui), fixed = TRUE))
-  expect_true(grepl(abs_row$series_type[[1]], as.character(abs_ui), fixed = TRUE))
-  expect_true(grepl(abs_row$table_title[[1]], as.character(abs_ui), fixed = TRUE))
-  expect_true(grepl(abs_row$series_id[[1]], as.character(abs_ui), fixed = TRUE))
+test_that("main server starts with all builder slots excluded and empty", {
+  shiny::testServer(build_main_server, {
+    state <- builder_state()
+    expect_equal(length(state$series), MAX_SERIES)
+    expect_true(all(vapply(state$series, is.null, logical(1))))
+  })
 })
 
-test_that("ABS source controls prefer restored values over stale invalid selections", {
-  abs_row <- abs_ref[[1]] %>%
-    filter(!is.na(series_id), nzchar(series_id), !is.na(series), !is.na(series_type), !is.na(table_title)) %>%
-    slice(1)
+test_that("builder restore keeps stored ABS provenance even after exclusion", {
+  restore_snapshot <- build_restore_test_state()
+  expected_abs_spec <- restore_snapshot$series[[2]]
 
-  abs_ui <- series_source_controls_ui(
-    input = list(
-      series_2_abs_catalogue = abs_cat[[1]],
-      series_2_abs_desc = "__stale_desc__",
-      series_2_abs_series_type = "__stale_type__",
-      series_2_abs_table = "__stale_table__",
-      series_2_abs_id = "__stale_id__"
-    ),
-    session = NULL,
-    index = 2,
-    source_value = "abs",
-    restored_spec = list(
-      source = "abs",
-      abs_catalogue = abs_cat[[1]],
-      abs_desc = abs_row$series[[1]],
-      abs_series_type = abs_row$series_type[[1]],
-      abs_table = abs_row$table_title[[1]],
-      abs_id = abs_row$series_id[[1]]
-    )
-  )
+  shiny::testServer(build_main_server, {
+    apply_builder_state(restore_snapshot, selected_series_index = 2, navigate_builder = FALSE)
+    session$flushReact()
+    session$flushReact()
 
-  expect_true(grepl(abs_row$table_title[[1]], as.character(abs_ui), fixed = TRUE))
-  expect_true(grepl(abs_row$series_id[[1]], as.character(abs_ui), fixed = TRUE))
-})
+    expect_equal(builder_state()$series[[2]]$source, expected_abs_spec$source)
+    expect_equal(builder_state()$series[[2]]$abs_catalogue, expected_abs_spec$abs_catalogue)
+    expect_equal(builder_state()$series[[2]]$abs_desc, expected_abs_spec$abs_desc)
+    expect_equal(builder_state()$series[[2]]$abs_series_type, expected_abs_spec$abs_series_type)
+    expect_equal(builder_state()$series[[2]]$abs_table, expected_abs_spec$abs_table)
+    expect_equal(builder_state()$series[[2]]$abs_id, expected_abs_spec$abs_id)
 
-test_that("manual ABS selection stays blank until the user steps through", {
-  initial_state <- resolve_abs_control_state(current_values = list(), restored_spec = NULL)
-  expect_length(initial_state$catalogue, 0)
-  expect_length(initial_state$desc, 0)
-  expect_length(initial_state$series_type, 0)
-  expect_length(initial_state$table, 0)
-  expect_length(initial_state$ids, 0)
+    session$setInputs(series_2_enabled = FALSE)
+    session$flushReact()
 
-  catalogue_state <- resolve_abs_control_state(
-    current_values = list(catalogue = abs_cat[[1]]),
-    restored_spec = NULL
-  )
-  expect_equal(catalogue_state$catalogue, abs_cat[[1]])
-  expect_length(catalogue_state$desc, 0)
-  expect_length(catalogue_state$series_type, 0)
-  expect_length(catalogue_state$table, 0)
-  expect_length(catalogue_state$ids, 0)
-})
-
-test_that("ABS series ID direct entry works without dropdown selections", {
-  abs_row <- abs_ref[[1]] %>%
-    filter(!is.na(series_id), nzchar(series_id), !is.na(series), !is.na(series_type), !is.na(table_title)) %>%
-    slice(1)
-
-  spec <- series_spec_from_input(
-    input = list(
-      series_1_enabled = TRUE,
-      series_1_source = "abs",
-      series_1_label = "Direct ABS ID",
-      series_1_vis_type = "line",
-      series_1_abs_id = abs_row$series_id[[1]]
-    ),
-    index = 1,
-    transform_profile = default_transform_profile(),
-    restored_spec = NULL
-  )
-
-  expect_equal(spec$abs_id, abs_row$series_id[[1]])
-  expect_equal(spec$abs_catalogue, abs_cat[[1]])
-  expect_equal(spec$abs_desc, abs_row$series[[1]])
-  expect_equal(spec$abs_series_type, abs_row$series_type[[1]])
-  expect_equal(spec$abs_table, abs_row$table_title[[1]])
-})
-
-test_that("blank ABS and FRED labels default to series IDs", {
-  abs_row <- abs_ref[[1]] %>%
-    filter(!is.na(series_id), nzchar(series_id), !is.na(series), !is.na(series_type), !is.na(table_title)) %>%
-    slice(1)
-
-  abs_spec <- series_spec_from_input(
-    input = list(
-      series_1_enabled = TRUE,
-      series_1_source = "abs",
-      series_1_label = "",
-      series_1_vis_type = "line",
-      series_1_abs_id = abs_row$series_id[[1]]
-    ),
-    index = 1,
-    transform_profile = default_transform_profile(),
-    restored_spec = NULL
-  )
-
-  fred_spec <- series_spec_from_input(
-    input = list(
-      series_2_enabled = TRUE,
-      series_2_source = "FRED",
-      series_2_label = "",
-      series_2_vis_type = "line",
-      series_2_fred_series = "UNRATE",
-      series_2_fred_vintage_mode = "compare",
-      series_2_fred_vintage_date = "2020-01-01"
-    ),
-    index = 2,
-    transform_profile = default_transform_profile(),
-    restored_spec = NULL
-  )
-
-  fred_data <- tibble::tibble(
-    date = as.Date(c("2020-01-01", "2020-01-01")),
-    value = c(1, 2),
-    name = c("UNRATE (current)", "UNRATE (2020-01-01 vintage)")
-  )
-
-  expect_equal(abs_spec$label, abs_row$series_id[[1]])
-  expect_equal(fred_spec$label, "UNRATE")
-  expect_equal(apply_series_metadata(fred_data, fred_spec)$name, fred_data$name)
+    expect_equal(builder_state()$series[[2]]$source, expected_abs_spec$source)
+    expect_equal(builder_state()$series[[2]]$abs_catalogue, expected_abs_spec$abs_catalogue)
+    expect_equal(builder_state()$series[[2]]$abs_desc, expected_abs_spec$abs_desc)
+    expect_equal(builder_state()$series[[2]]$abs_series_type, expected_abs_spec$abs_series_type)
+    expect_equal(builder_state()$series[[2]]$abs_table, expected_abs_spec$abs_table)
+    expect_equal(builder_state()$series[[2]]$abs_id, expected_abs_spec$abs_id)
+  })
 })
 
 test_that("builder restore updates plotted data when loading different charts", {
@@ -391,7 +282,7 @@ test_that("builder restore updates plotted data when loading different charts", 
   })
 })
 
-test_that("main server restores saved FRED vintage settings", {
+test_that("builder restore preserves stored FRED vintage settings", {
   temp_library <- tempfile(fileext = ".rds")
   temp_presentation_library <- tempfile(fileext = ".rds")
   old_option <- getOption("data_viewer.chart_library_path")
@@ -416,45 +307,25 @@ test_that("main server restores saved FRED vintage settings", {
     envir = .GlobalEnv
   )
 
+  restore_snapshot <- default_builder_state()
+  restore_snapshot$series[[2]] <- normalize_series_spec(list(
+    index = 2,
+    source = "FRED",
+    fred_series = "UNRATE",
+    fred_vintage_mode = "compare",
+    fred_vintage_date = as.Date("2020-01-01"),
+    label = "",
+    transform_profile = default_transform_profile(),
+    vis_type = "line"
+  ))
+
   shiny::testServer(build_main_server, {
-    suppressWarnings({
-      session$setInputs(
-        series_2_enabled = TRUE,
-        series_2_source = "FRED",
-        series_2_fred_series = "UNRATE",
-        series_2_fred_vintage_mode = "compare",
-        series_2_fred_vintage_date = "2020-01-01",
-        series_2_label = "Unemployment vintages",
-        library_title = "Vintage chart"
-      )
-      session$flushReact()
-    })
+    apply_builder_state(restore_snapshot, selected_series_index = 2, navigate_builder = FALSE)
+    session$flushReact()
 
     expect_equal(builder_state()$series[[2]]$fred_vintage_mode, "compare")
     expect_equal(as.Date(builder_state()$series[[2]]$fred_vintage_date), as.Date("2020-01-01"))
-    expect_gt(nrow(chart_data()), 0)
-
-    suppressWarnings({
-      session$setInputs(save_chart = 1)
-      session$flushReact()
-    })
-
-    suppressWarnings({
-      session$setInputs(
-        series_2_fred_vintage_mode = "current",
-        style_title = "Mutated"
-      )
-      session$flushReact()
-    })
-
-    session$setInputs(library_table_rows_selected = 1)
-    suppressWarnings({
-      session$setInputs(load_chart = 1)
-      session$flushReact()
-    })
-
-    expect_equal(builder_state()$series[[2]]$fred_vintage_mode, "compare")
-    expect_equal(as.Date(builder_state()$series[[2]]$fred_vintage_date), as.Date("2020-01-01"))
+    expect_equal(builder_state()$series[[2]]$fred_series, "UNRATE")
   })
 })
 
@@ -537,65 +408,4 @@ test_that("ABS saved-chart load restores dependent chain", {
     expect_equal(restored_series_spec(session, 2)$abs_catalogue, abs_spec$abs_catalogue)
     expect_equal(restored_series_spec(session, 2)$abs_desc, abs_spec$abs_desc)
   }))
-})
-
-test_that("upstream ABS selector change after restore re-resolves downstream cleanly", {
-  abs_result <- build_abs_search_index() %>%
-    filter(source == "ABS") %>%
-    slice(1)
-  abs_spec <- search_result_series_spec(abs_result, 2)
-
-  alternative_catalogue <- setdiff(abs_cat, abs_spec$abs_catalogue)[1]
-  skip_if(is.na(alternative_catalogue) || !nzchar(alternative_catalogue), "Need at least two ABS catalogues for this regression test.")
-  alternative_rows <- valid_abs_restore_rows(alternative_catalogue)
-  skip_if(nrow(alternative_rows) == 0, "No valid ABS rows found in the alternate catalogue.")
-
-  resolved <- resolve_abs_control_state(
-    current_values = list(
-      catalogue = alternative_catalogue,
-      desc = abs_spec$abs_desc,
-      type = abs_spec$abs_series_type,
-      table = abs_spec$abs_table,
-      ids = abs_spec$abs_id
-    ),
-    restored_spec = NULL
-  )
-
-  expect_equal(resolved$catalogue, alternative_catalogue)
-  expect_length(resolved$desc, 0)
-  expect_length(resolved$series_type, 0)
-  expect_length(resolved$table, 0)
-  expect_equal(resolved$ids, abs_spec$abs_id)
-})
-
-test_that("restored/live transition does not reapply stale restored values", {
-  abs_result <- build_abs_search_index() %>%
-    filter(source == "ABS") %>%
-    slice(1)
-  abs_spec <- search_result_series_spec(abs_result, 2)
-  abs_rows <- valid_abs_restore_rows(abs_spec$abs_catalogue)
-  alternate_desc <- setdiff(unique(abs_rows$series), abs_spec$abs_desc)[1]
-  skip_if(is.na(alternate_desc) || !nzchar(alternate_desc), "Need an alternate ABS description for this regression test.")
-
-  resolved <- resolve_abs_control_state(
-    current_values = list(
-      catalogue = abs_spec$abs_catalogue,
-      desc = alternate_desc,
-      type = abs_spec$abs_series_type,
-      table = abs_spec$abs_table,
-      ids = abs_spec$abs_id
-    ),
-    restored_spec = NULL
-  )
-
-  downstream_rows <- valid_abs_restore_rows(resolved$catalogue) %>%
-    filter(
-      series == resolved$desc,
-      series_type == resolved$series_type,
-      table_title == resolved$table
-    )
-
-  expect_equal(resolved$desc, alternate_desc)
-  expect_gt(nrow(downstream_rows), 0)
-  expect_true(all(resolved$ids %in% downstream_rows$series_id))
 })

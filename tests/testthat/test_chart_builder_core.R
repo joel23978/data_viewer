@@ -63,6 +63,25 @@ test_that("default source notes include source names and series identifiers", {
   expect_equal(default_builder_state()$style$note, "Source: custom query")
 })
 
+test_that("builder metadata block keeps chart style controls for populated slots", {
+  state <- build_test_state()
+  populated_slot <- normalize_series_spec(state$series[[1]])
+
+  rendered <- htmltools::renderTags(
+    series_source_controls_ui(
+      input = list(series_1_enabled = "1"),
+      session = NULL,
+      index = 1,
+      restored_spec = populated_slot
+    )
+  )$html
+
+  expect_match(rendered, "Chart style for this series")
+  expect_match(rendered, "Line")
+  expect_match(rendered, "Bar")
+  expect_match(rendered, "Point")
+})
+
 test_that("presentation export bundle includes chart HTML and widget assets", {
   state <- build_test_state()
   payload <- build_chart_data(state)

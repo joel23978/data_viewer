@@ -458,6 +458,7 @@ format_fred_search_results <- function(search_results) {
           list(
             source = "FRED",
             fred_series = id,
+            fred_title = title,
             label = title,
             vis_type = "line",
             transform_profile = default_transform_profile()
@@ -582,6 +583,7 @@ format_dbnomics_search_results <- function(search_results, provider_code, datase
           list(
             source = "dbnomics",
             dbnomics_series = full_id,
+            dbnomics_name = series_name %||% "",
             label = series_name %||% "",
             vis_type = "line",
             transform_profile = default_transform_profile()
@@ -682,9 +684,14 @@ search_remote_provider_sources <- function(source_filter = "all") {
 
 search_remote_provider_responses <- function(query, source_filter = "all", search_contexts = list(), limit = 100, force = FALSE) {
   remote_sources <- search_remote_provider_sources(source_filter)
+  cleaned_query <- trimws(query %||% "")
 
   if (length(remote_sources) == 0) {
     return(list())
+  }
+
+  if (!nzchar(cleaned_query)) {
+    return(setNames(replicate(length(remote_sources), empty_search_response(), simplify = FALSE), remote_sources))
   }
 
   setNames(
@@ -701,7 +708,7 @@ search_remote_provider_responses <- function(query, source_filter = "all", searc
 
       provider_registry_remote_search_response(
         source_value = source_value,
-        query = query,
+        query = cleaned_query,
         search_context = search_context,
         force = force
       )

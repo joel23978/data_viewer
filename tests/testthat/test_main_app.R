@@ -8,8 +8,23 @@ source(here::here("R", "analysis_helpers.R"))
 source(here::here("R", "main_app.R"))
 source(here::here("tests", "testthat", "helper_app_fixtures.R"))
 
+apply_test_builder_state <- function(session, apply_builder_state, state) {
+  apply_builder_state(normalize_chart_state(state), selected_series_index = 1, navigate_builder = FALSE)
+  session$flushReact()
+  session$flushReact()
+}
+
 test_that("main server saves and reloads a builder chart round trip", {
-  abs_specs <- build_test_abs_specs()
+  test_state <- build_test_state()
+  test_state$series[[1]]$transform_profile$expression <- "X * 2"
+  test_state$series[[1]]$transform_profile$moving_average <- 2
+  test_state$series[[2]]$transform_profile$expression <- "data / 2"
+  test_state$series[[2]]$transform_profile$moving_average <- 3
+  test_state$style$title <- "Server Test Chart"
+  test_state$style$subtitle <- "Server subtitle"
+  test_state$style$y_axis_label <- "Index"
+  test_state$style$note <- "server test note"
+  test_state$style$legend <- "bottom"
   temp_library <- tempfile(fileext = ".rds")
   temp_presentation_library <- tempfile(fileext = ".rds")
   old_option <- getOption("data_viewer.chart_library_path")
@@ -21,30 +36,11 @@ test_that("main server saves and reloads a builder chart round trip", {
 
   suppressWarnings(shiny::testServer(build_main_server, {
     suppressWarnings({
+      apply_test_builder_state(session, apply_builder_state, test_state)
       session$setInputs(
         start_date = as.Date("2024-01-01"),
         end_date = as.Date("2025-12-31"),
-        viewData1 = "1",
-        series_1_enabled = TRUE,
-        series_1_source = "abs",
-        series_1_abs_id = abs_specs[[1]]$abs_id,
-        series_1_label = abs_specs[[1]]$label,
-        series_1_vis_type = "line",
-        series_2_enabled = TRUE,
-        series_2_source = "abs",
-        series_2_abs_id = abs_specs[[2]]$abs_id,
-        series_2_label = abs_specs[[2]]$label,
-        series_2_vis_type = "line",
-        transform_1_expression = "X * 2",
-        transform_1_moving_average = 2,
-        transform_2_expression = "data / 2",
-        transform_2_moving_average = 3,
-        style_auto_y_axis = "auto",
-        style_title = "Server Test Chart",
-        style_subtitle = "Server subtitle",
-        style_y_axis_label = "Index",
-        style_note = "server test note",
-        style_legend = "bottom"
+        viewData1 = "1"
       )
       session$flushReact()
     })
@@ -72,11 +68,7 @@ test_that("main server saves and reloads a builder chart round trip", {
     expect_equal(saved_library$title[[1]], "Saved from test")
 
     suppressWarnings({
-      session$setInputs(
-        style_title = "Mutated",
-        transform_1_expression = "X",
-        transform_2_moving_average = 1
-      )
+      session$setInputs(style_title = "Mutated")
       session$flushReact()
     })
     expect_false(chart_states_equal(builder_state(), saved_state))
@@ -88,7 +80,7 @@ test_that("main server saves and reloads a builder chart round trip", {
       session$flushReact()
     })
 
-    expect_true(chart_states_equal(builder_state(), saved_state))
+    expect_true(chart_states_equal(restored_state(), saved_state))
     expect_equal(nrow(chart_data()), nrow(saved_chart_data))
     expect_equal(sort(unique(chart_data()$name)), sort(unique(saved_chart_data$name)))
 
@@ -104,6 +96,12 @@ test_that("main server saves and reloads a builder chart round trip", {
 
 test_that("main server manages presentation chart membership", {
   abs_specs <- build_test_abs_specs()
+  first_state <- build_test_state()
+  second_state <- build_test_state()
+  second_state$series[[3]] <- modifyList(abs_specs[[1]], list(
+    index = 3,
+    label = paste(abs_specs[[1]]$label, "copy")
+  ))
   temp_library <- tempfile(fileext = ".rds")
   temp_presentation_library <- tempfile(fileext = ".rds")
   old_option <- getOption("data_viewer.chart_library_path")
@@ -115,19 +113,10 @@ test_that("main server manages presentation chart membership", {
 
   suppressWarnings(shiny::testServer(build_main_server, {
     suppressWarnings({
+      apply_test_builder_state(session, apply_builder_state, first_state)
       session$setInputs(
         start_date = as.Date("2024-01-01"),
         end_date = as.Date("2025-12-31"),
-        series_1_enabled = TRUE,
-        series_1_source = "abs",
-        series_1_abs_id = abs_specs[[1]]$abs_id,
-        series_1_label = abs_specs[[1]]$label,
-        series_1_vis_type = "line",
-        series_2_enabled = TRUE,
-        series_2_source = "abs",
-        series_2_abs_id = abs_specs[[2]]$abs_id,
-        series_2_label = abs_specs[[2]]$label,
-        series_2_vis_type = "line",
         library_title = "First chart"
       )
       session$flushReact()
@@ -136,12 +125,8 @@ test_that("main server manages presentation chart membership", {
     })
 
     suppressWarnings({
+      apply_test_builder_state(session, apply_builder_state, second_state)
       session$setInputs(
-        series_3_enabled = TRUE,
-        series_3_source = "abs",
-        series_3_abs_id = abs_specs[[1]]$abs_id,
-        series_3_label = paste(abs_specs[[1]]$label, "copy"),
-        series_3_vis_type = "line",
         library_title = "Second chart"
       )
       session$flushReact()
@@ -197,18 +182,21 @@ test_that("main server manages presentation chart membership", {
 
 test_that("main server can reset the builder to its default state", {
   suppressWarnings(shiny::testServer(build_main_server, {
+    mutated_state <- default_builder_state()
+    mutated_state$date_range <- c(as.Date("2020-01-01"), as.Date("2021-12-31"))
+    mutated_state$style$title <- "Mutated title"
+    mutated_state$style$subtitle <- "Mutated subtitle"
+    mutated_state$series[[2]] <- normalize_series_spec(list(
+      index = 2,
+      source = "FRED",
+      fred_series = "UNRATE",
+      label = "US unemployment",
+      transform_profile = default_transform_profile(),
+      vis_type = "line"
+    ))
+
     suppressWarnings({
-      session$setInputs(
-        start_date = as.Date("2020-01-01"),
-        end_date = as.Date("2021-12-31"),
-        style_title = "Mutated title",
-        style_subtitle = "Mutated subtitle",
-        series_2_enabled = TRUE,
-        series_2_source = "FRED",
-        series_2_fred_series = "UNRATE",
-        series_2_label = "US unemployment"
-      )
-      session$flushReact()
+      apply_test_builder_state(session, apply_builder_state, mutated_state)
     })
 
     session$setInputs(reset_builder = 1)
@@ -220,29 +208,46 @@ test_that("main server can reset the builder to its default state", {
   }))
 })
 
+test_that("main server refreshes populated builder slot metadata controls after restore", {
+  suppressWarnings(shiny::testServer(build_main_server, {
+    test_state <- build_test_state()
+
+    before_html <- paste(as.character(output[[series_source_controls_id(1)]]), collapse = " ")
+    expect_match(before_html, "Add a series from Data Search to populate this slot.")
+
+    apply_test_builder_state(session, apply_builder_state, test_state)
+
+    after_html <- paste(as.character(output[[series_source_controls_id(1)]]), collapse = " ")
+    expect_match(after_html, "Actual series:")
+    expect_match(after_html, "Chart label shown in the legend")
+    expect_match(after_html, "Chart style for this series")
+  }))
+})
+
 test_that("main server can clear series setup, presentation, and workspace panels", {
   abs_specs <- build_test_abs_specs()
 
   suppressWarnings(shiny::testServer(build_main_server, {
+    seeded_state <- default_builder_state()
+    seeded_state$style$title <- "Custom title"
+    seeded_state$style$subtitle <- "Custom subtitle"
+    seeded_state$style$y_axis_label <- "Index"
+    seeded_state$style$note <- "Custom note"
+    seeded_state$all_series_transform$expression <- "X * 2"
+    seeded_state$series[[1]] <- normalize_series_spec(modifyList(abs_specs[[1]], list(index = 1, label = "CPI one")))
+    seeded_state$series[[1]]$transform_profile$rolling_sum <- 4
+    seeded_state$series[[2]] <- normalize_series_spec(list(
+      index = 2,
+      source = "FRED",
+      fred_series = "UNRATE",
+      label = "Unemployment",
+      transform_profile = default_transform_profile(),
+      vis_type = "line"
+    ))
+
     suppressWarnings({
-      session$setInputs(
-        series_1_enabled = TRUE,
-        series_1_source = "abs",
-        series_1_abs_id = abs_specs[[1]]$abs_id,
-        series_1_label = "CPI one",
-        series_2_enabled = TRUE,
-        series_2_source = "FRED",
-        series_2_fred_series = "UNRATE",
-        series_2_label = "Unemployment",
-        style_title = "Custom title",
-        style_subtitle = "Custom subtitle",
-        style_y_axis_label = "Index",
-        style_note = "Custom note",
-        transform_all_expression = "X * 2",
-        transform_1_rolling_sum = 4,
-        analysis_corr_window = 8,
-        analysis_forecast_horizon = 6
-      )
+      apply_test_builder_state(session, apply_builder_state, seeded_state)
+      session$setInputs(analysis_corr_window = 8, analysis_forecast_horizon = 6)
       session$flushReact()
     })
 

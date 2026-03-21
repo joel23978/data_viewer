@@ -54,35 +54,123 @@ test_that("source catalog drives builder sources and search filters", {
   expect_false(source_catalog_supports_series_source("Unknown legacy source"))
 })
 
-test_that("FRED source controls render the restored series ID", {
-  withr::local_envvar(FRED_API_KEY = "test-key")
-  original_fred_vintage_dates <- fred_vintage_dates
-  on.exit(assign("fred_vintage_dates", original_fred_vintage_dates, envir = .GlobalEnv), add = TRUE)
+test_that("provider registry filters ABS and RBA search results with source-specific contexts", {
+  abs_lookup <- purrr::map2_dfr(abs_ref, abs_cat, function(reference_data, catalogue_name) {
+    reference_data %>%
+      distinct(table_title, series_type) %>%
+      mutate(abs_catalogue = catalogue_name)
+  })
 
-  assign(
-    "fred_vintage_dates",
-    function(series, force = FALSE) {
-      as.Date(c("2019-01-01", "2020-01-01"))
-    },
-    envir = .GlobalEnv
-  )
+  abs_target <- abs_lookup %>%
+    group_by(abs_catalogue) %>%
+    filter(n_distinct(table_title) >= 2) %>%
+    ungroup() %>%
+    slice(1)
 
-  fred_ui <- series_source_controls_ui(
-    input = list(),
-    session = NULL,
-    index = 2,
-    source_value = "FRED",
-    restored_spec = list(
-      source = "FRED",
-      fred_series = "UNRATE",
-      fred_vintage_mode = "compare",
-      fred_vintage_date = as.Date("2020-01-01")
+  skip_if(nrow(abs_target) == 0, "Need an ABS catalogue with at least two tables for this filter test.")
+
+  abs_tables <- abs_lookup %>%
+    filter(abs_catalogue == abs_target$abs_catalogue[[1]]) %>%
+    pull(table_title) %>%
+    unique() %>%
+    head(2)
+
+  abs_filtered <- provider_registry_filter_search_results(
+    "ABS",
+    build_abs_search_index(),
+    list(
+      catalogue = abs_target$abs_catalogue[[1]],
+      tables = abs_tables,
+      series_type = abs_target$series_type[[1]]
     )
   )
 
-  expect_true(grepl("UNRATE", as.character(fred_ui), fixed = TRUE))
-  expect_true(grepl("2020-01-01", as.character(fred_ui), fixed = TRUE))
-  expect_true(grepl("Vintage mode", as.character(fred_ui), fixed = TRUE))
+  expect_gt(nrow(abs_filtered), 0)
+  expect_true(all(vapply(abs_filtered$load_payload, function(payload) identical(payload$abs_catalogue, abs_target$abs_catalogue[[1]]), logical(1))))
+  expect_true(all(vapply(abs_filtered$load_payload, function(payload) payload$abs_table %in% abs_tables, logical(1))))
+  expect_true(all(vapply(abs_filtered$load_payload, function(payload) identical(payload$abs_series_type, abs_target$series_type[[1]]), logical(1))))
+
+  rba_row <- build_rba_search_index() %>% slice(1)
+  rba_filtered <- provider_registry_filter_search_results(
+    "RBA",
+    build_rba_search_index(),
+    list(table = rba_row$load_payload[[1]]$rba_table)
+  )
+
+  expect_gt(nrow(rba_filtered), 0)
+  expect_true(all(vapply(rba_filtered$load_payload, function(payload) identical(payload$rba_table, rba_row$load_payload[[1]]$rba_table), logical(1))))
+})
+
+test_that("provider registry resolves exact ABS and RBA search rows from direct series IDs", {
+  abs_row <- build_abs_search_index() %>% slice(1)
+  rba_row <- build_rba_search_index() %>% slice(1)
+
+  abs_lookup <- provider_registry_search_result_lookup("ABS", abs_row$load_payload[[1]]$abs_id)
+  rba_lookup <- provider_registry_search_result_lookup("RBA", rba_row$load_payload[[1]]$rba_series_id)
+
+  expect_equal(abs_lookup$result$load_payload[[1]]$abs_id, abs_row$load_payload[[1]]$abs_id)
+  expect_match(abs_lookup$status, "Actual series:", fixed = TRUE)
+  expect_equal(rba_lookup$result$load_payload[[1]]$rba_series_id, rba_row$load_payload[[1]]$rba_series_id)
+  expect_match(rba_lookup$status, "Actual series:", fixed = TRUE)
+})
+
+test_that("legacy provider restore helpers are safe with missing ids", {
+  expect_no_error(provider_registry_restore_controls(NULL, 1, list(source = "abs", abs_id = NA_character_)))
+  expect_no_error(provider_registry_restore_controls(NULL, 1, list(source = "rba", rba_series_id = NA_character_)))
+  expect_no_error(provider_registry_restore_controls(NULL, 1, list(source = "FRED", fred_series = NA_character_)))
+  expect_no_error(provider_registry_restore_controls(NULL, 1, list(source = "dbnomics", dbnomics_series = NA_character_)))
+})
+
+test_that("provider series helper text reuses restored metadata before lookup", {
+  lookup_called <- FALSE
+  helper_text <- provider_series_helper_text(
+    current_value = "UNRATE",
+    restored_value = "UNRATE",
+    restored_title = "Unemployment Rate",
+    empty_status = "Type a FRED series ID and press Enter.",
+    lookup_fun = function(series_id) {
+      lookup_called <<- TRUE
+      list(result = NULL, status = paste("Lookup", series_id))
+    }
+  )
+
+  expect_false(lookup_called)
+  expect_equal(helper_text$status, "Actual series: Unemployment Rate")
+})
+
+test_that("FRED and DBnomics specs clear restored titles when the series ID changes", {
+  fred_spec <- provider_fred_spec_from_input(
+    input = list(
+      series_1_fred_series = "GDP",
+      series_1_label = "",
+      series_1_vis_type = "line",
+      series_1_fred_vintage_mode = "current"
+    ),
+    index = 1,
+    transform_profile = default_transform_profile(),
+    restored_spec = list(
+      fred_series = "UNRATE",
+      fred_title = "Unemployment Rate"
+    )
+  )
+  dbnomics_spec <- provider_dbnomics_spec_from_input(
+    input = list(
+      series_1_dbnomics_series = "IMF/WEO:2024-10/NGDP_RPCH",
+      series_1_label = "",
+      series_1_vis_type = "line"
+    ),
+    index = 1,
+    transform_profile = default_transform_profile(),
+    restored_spec = list(
+      dbnomics_series = "AMECO/ZUTN/EA19.0.0.0.0.ZUTN",
+      dbnomics_name = "Old series"
+    )
+  )
+
+  expect_equal(fred_spec$fred_series, "GDP")
+  expect_equal(fred_spec$fred_title, "")
+  expect_equal(dbnomics_spec$dbnomics_series, "IMF/WEO:2024-10/NGDP_RPCH")
+  expect_equal(dbnomics_spec$dbnomics_name, "")
 })
 
 test_that("FRED series supports current, historical, and compare vintage modes", {
@@ -127,7 +215,7 @@ test_that("FRED series supports current, historical, and compare vintage modes",
   expect_true(any(grepl("2020-01-01 vintage", compare_data$name, fixed = TRUE)))
 })
 
-test_that("RBA registry controls and fetch dispatch round-trip cleanly", {
+test_that("RBA registry direct series ids round-trip cleanly", {
   rba_row <- rba_browse_data %>%
     distinct(table_no, description, series_id, frequency) %>%
     slice(1)
@@ -135,27 +223,16 @@ test_that("RBA registry controls and fetch dispatch round-trip cleanly", {
   restored_spec <- list(
     source = "rba",
     rba_table = rba_row$table_no,
-    rba_desc = rba_row$description
+    rba_desc = rba_row$description,
+    rba_series_id = rba_row$series_id
   )
-
-  rba_ui <- series_source_controls_ui(
-    input = list(),
-    session = NULL,
-    index = 1,
-    source_value = "rba",
-    restored_spec = restored_spec
-  )
-
-  expect_true(grepl(rba_row$table_no, as.character(rba_ui), fixed = TRUE))
-  expect_true(grepl(rba_row$description, as.character(rba_ui), fixed = TRUE))
 
   input <- list(
     series_1_enabled = TRUE,
     series_1_source = "rba",
     series_1_label = "RBA label",
     series_1_vis_type = "line",
-    series_1_rba_table = rba_row$table_no,
-    series_1_rba_desc = rba_row$description
+    series_1_rba_series_id = rba_row$series_id
   )
 
   spec <- series_spec_from_input(input, 1, default_transform_profile(), restored_spec = restored_spec)
@@ -189,6 +266,34 @@ test_that("RBA registry controls and fetch dispatch round-trip cleanly", {
   fetched <- query_series_history(normalized)
   expect_equal(captured_series, rba_row$series_id)
   expect_equal(fetched$name[[1]], rba_row$description)
+})
+
+test_that("RBA spec rehydrates metadata when the series ID changes", {
+  rba_rows <- rba_browse_data %>%
+    distinct(table_no, description, series_id) %>%
+    filter(!is.na(series_id), nzchar(series_id)) %>%
+    slice_head(n = 2)
+
+  skip_if(nrow(rba_rows) < 2, "Need at least two RBA series for this test.")
+
+  spec <- provider_rba_spec_from_input(
+    input = list(
+      series_1_rba_series_id = rba_rows$series_id[[2]],
+      series_1_label = "",
+      series_1_vis_type = "line"
+    ),
+    index = 1,
+    transform_profile = default_transform_profile(),
+    restored_spec = list(
+      rba_series_id = rba_rows$series_id[[1]],
+      rba_table = rba_rows$table_no[[1]],
+      rba_desc = rba_rows$description[[1]]
+    )
+  )
+
+  expect_equal(spec$rba_series_id, rba_rows$series_id[[2]])
+  expect_equal(spec$rba_table, rba_rows$table_no[[2]])
+  expect_equal(spec$rba_desc, rba_rows$description[[2]])
 })
 
 test_that("RBA registry search payload is restoreable", {
@@ -236,83 +341,78 @@ test_that("FRED and DBnomics registry round-trip builder specs and fetch dispatc
     envir = .GlobalEnv
   )
 
-  fred_input <- list(
-    series_1_enabled = TRUE,
-    series_1_source = "FRED",
-    series_1_label = "",
-    series_1_vis_type = "line",
-    series_1_fred_series = "UNRATE",
-    series_1_fred_vintage_mode = "historical",
-    series_1_fred_vintage_date = "2020-01-01"
-  )
-  dbnomics_input <- list(
-    series_2_enabled = TRUE,
-    series_2_source = "dbnomics",
-    series_2_label = "",
-    series_2_vis_type = "line",
-    series_2_dbnomics_series = "AMECO/ZUTN/EA19.0.0.0.0.ZUTN"
-  )
+  fred_spec <- normalize_series_spec(list(
+    index = 1,
+    source = "FRED",
+    fred_series = "UNRATE",
+    fred_vintage_mode = "historical",
+    fred_vintage_date = "2020-01-01",
+    label = "",
+    transform_profile = default_transform_profile(),
+    vis_type = "line"
+  ))
+  dbnomics_spec <- normalize_series_spec(list(
+    index = 2,
+    source = "dbnomics",
+    dbnomics_series = "AMECO/ZUTN/EA19.0.0.0.0.ZUTN",
+    label = "",
+    transform_profile = default_transform_profile(),
+    vis_type = "line"
+  ))
 
-  fred_spec <- series_spec_from_input(fred_input, 1, default_transform_profile())
-  dbnomics_spec <- series_spec_from_input(dbnomics_input, 2, default_transform_profile())
-
-  expect_equal(normalize_series_spec(fred_spec)$fred_series, "UNRATE")
-  expect_equal(normalize_series_spec(dbnomics_spec)$dbnomics_series, "AMECO/ZUTN/EA19.0.0.0.0.ZUTN")
+  expect_equal(fred_spec$fred_series, "UNRATE")
+  expect_equal(dbnomics_spec$dbnomics_series, "AMECO/ZUTN/EA19.0.0.0.0.ZUTN")
   expect_equal(default_series_label_from_id(fred_spec), "UNRATE")
 
-  query_series_history(normalize_series_spec(fred_spec))
-  query_series_history(normalize_series_spec(dbnomics_spec))
+  query_series_history(fred_spec)
+  query_series_history(dbnomics_spec)
 
   expect_equal(fred_capture$series, "UNRATE")
   expect_equal(as.character(fred_capture$realtime_start), "2020-01-01")
   expect_equal(db_capture, "AMECO/ZUTN/EA19.0.0.0.0.ZUTN")
 })
 
-test_that("ABS registry owns controls, normalization, and local search index payloads", {
+test_that("ABS registry direct series ids normalize and query cleanly", {
   abs_row <- abs_catalogue_data(abs_cat[[1]]) %>%
     filter(!is.na(series_id), nzchar(series_id), !is.na(series), !is.na(series_type), !is.na(table_title)) %>%
     slice(1)
 
-  restored_spec <- list(
-    source = "abs",
-    abs_catalogue = abs_cat[[1]],
-    abs_desc = abs_row$series,
-    abs_series_type = abs_row$series_type,
-    abs_table = abs_row$table_title,
-    abs_id = abs_row$series_id
-  )
-
-  abs_ui <- series_source_controls_ui(
-    input = list(),
-    session = NULL,
+  normalized <- normalize_series_spec(list(
     index = 1,
-    source_value = "abs",
-    restored_spec = restored_spec
-  )
-
-  expect_true(grepl(abs_row$series_id, as.character(abs_ui), fixed = TRUE))
-
-  spec <- series_spec_from_input(
-    list(
-      series_1_enabled = TRUE,
-      series_1_source = "abs",
-      series_1_label = "",
-      series_1_vis_type = "line",
-      series_1_abs_id = abs_row$series_id
-    ),
-    1,
-    default_transform_profile(),
-    restored_spec = restored_spec
-  )
-
-  normalized <- normalize_series_spec(spec)
+    source = "abs",
+    abs_id = abs_row$series_id,
+    label = "",
+    transform_profile = default_transform_profile(),
+    vis_type = "line"
+  ))
   expect_equal(normalized$abs_id, abs_row$series_id)
-  expect_equal(normalized$label, abs_row$series_id)
+  expect_equal(normalized$label, abs_row$series)
 
   search_index <- build_abs_search_index()
   expect_gt(nrow(search_index), 0)
   expect_true(all(search_index$source == "ABS"))
   expect_true(all(vapply(search_index$load_payload, function(payload) identical(payload$source, "abs"), logical(1))))
+
+  original_abs_data <- abs_data
+  on.exit(assign("abs_data", original_abs_data, envir = .GlobalEnv), add = TRUE)
+
+  captured_series <- NULL
+  assign(
+    "abs_data",
+    function(series, ...) {
+      captured_series <<- series
+      tibble::tibble(
+        date = as.Date("2024-01-01"),
+        value = 3,
+        name = abs_row$series
+      )
+    },
+    envir = .GlobalEnv
+  )
+
+  fetched <- query_series_history(normalized)
+  expect_equal(captured_series, abs_row$series_id)
+  expect_equal(fetched$name[[1]], abs_row$series)
 })
 
 test_that("registry-backed providers round-trip spec normalization and fetch dispatch", {

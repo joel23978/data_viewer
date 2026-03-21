@@ -8,6 +8,17 @@ source(here::here("R", "analysis_helpers.R"))
 source(here::here("R", "main_app.R"))
 source(here::here("tests", "testthat", "helper_app_fixtures.R"))
 
+add_selected_search_result_to_builder <- function(session, target_series) {
+  session$setInputs(
+    search_results_table_rows_selected = 1,
+    search_target_series = as.character(target_series)
+  )
+  session$flushReact()
+  session$setInputs(search_add_series = 1)
+  session$flushReact()
+  session$flushReact()
+}
+
 test_that("data search index builds and returns relevant local metadata", {
   search_index <- build_search_index(force = TRUE)
   expect_gt(nrow(search_index), 1000)
@@ -289,7 +300,6 @@ test_that("main server can add a FRED search result to the builder", {
       search_source_filter = "FRED",
       search_type_filter = "all",
       search_location_filter = "INTL",
-      search_fred_mode = "series_id",
       search_frequency_filter = "all"
     )
     session$flushReact()
@@ -308,6 +318,73 @@ test_that("main server can add a FRED search result to the builder", {
     expect_equal(builder_state()$series[[2]]$source, "FRED")
     expect_equal(builder_state()$series[[2]]$fred_series, "UNRATE")
     expect_equal(builder_state()$series[[2]]$label, "Unemployment Rate")
+  })
+})
+
+test_that("main server can add an ABS search result to the builder", {
+  shiny::testServer(build_main_server, {
+    ensure_search_index_loaded()
+    session$setInputs(
+      main_tabs = "search",
+      search_query = "housing",
+      search_source_filter = "ABS",
+      search_type_filter = "all",
+      search_location_filter = "all",
+      search_frequency_filter = "all"
+    )
+    session$flushReact()
+
+    expect_gt(nrow(search_results()), 0)
+    abs_row <- search_results()[1, , drop = FALSE]
+    abs_spec <- search_result_series_spec(abs_row, 2)
+
+    add_selected_search_result_to_builder(session, 2)
+
+    expect_equal(builder_state()$series[[2]]$source, "abs")
+    expect_equal(builder_state()$series[[2]]$abs_id, abs_spec$abs_id)
+    expect_equal(builder_state()$series[[2]]$abs_desc, abs_spec$abs_desc)
+    expect_equal(builder_state()$series[[2]]$label, abs_spec$label)
+  })
+})
+
+test_that("main server can add an RBA search result to the builder", {
+  original_rba_data <- rba_data
+  on.exit(assign("rba_data", original_rba_data, envir = .GlobalEnv), add = TRUE)
+
+  assign(
+    "rba_data",
+    function(series, ...) {
+      tibble::tibble(
+        date = as.Date("2024-01-01"),
+        value = 1,
+        name = "RBA series"
+      )
+    },
+    envir = .GlobalEnv
+  )
+
+  shiny::testServer(build_main_server, {
+    ensure_search_index_loaded()
+    session$setInputs(
+      main_tabs = "search",
+      search_query = "balance sheet",
+      search_source_filter = "RBA",
+      search_type_filter = "all",
+      search_location_filter = "all",
+      search_frequency_filter = "all"
+    )
+    session$flushReact()
+
+    expect_gt(nrow(search_results()), 0)
+    rba_row <- search_results()[1, , drop = FALSE]
+    rba_spec <- search_result_series_spec(rba_row, 3)
+
+    add_selected_search_result_to_builder(session, 3)
+
+    expect_equal(builder_state()$series[[3]]$source, "rba")
+    expect_equal(builder_state()$series[[3]]$rba_series_id, rba_spec$rba_series_id)
+    expect_equal(builder_state()$series[[3]]$rba_desc, rba_spec$rba_desc)
+    expect_equal(builder_state()$series[[3]]$label, rba_spec$label)
   })
 })
 
@@ -337,11 +414,10 @@ test_that("main server preserves the selected search result across first-load re
   shiny::testServer(build_main_server, {
     session$setInputs(
       main_tabs = "search",
-      search_query = "rent",
-      search_source_filter = "all",
+      search_query = "RENTINDEX",
+      search_source_filter = "FRED",
       search_type_filter = "all",
       search_location_filter = "all",
-      search_fred_mode = "full_text",
       search_frequency_filter = "all"
     )
     session$flushReact()
@@ -358,7 +434,7 @@ test_that("main server preserves the selected search result across first-load re
     ensure_search_index_loaded()
     session$flushReact()
 
-    expect_gt(nrow(search_results()), 1)
+    expect_equal(nrow(search_results()), 1)
     expect_equal(selected_search_result()$source[[1]], "FRED")
     expect_equal(search_result_series_spec(selected_search_result(), 2)$fred_series, "RENTINDEX")
 
@@ -393,10 +469,12 @@ test_that("main server can add a DBnomics search result to the builder", {
       search_source_filter = "DBnomics",
       search_type_filter = "ECON",
       search_location_filter = "INTL",
-      search_dbnomics_provider = "IMF",
-      search_dbnomics_dataset = "WEO:2024-10",
-      search_frequency_filter = "all"
+      search_frequency_filter = "all",
+      search_dbnomics_provider = "IMF"
     )
+    session$flushReact()
+
+    session$setInputs(search_dbnomics_dataset = "WEO:2024-10")
     session$flushReact()
 
     expect_gt(nrow(search_results()), 0)
@@ -411,5 +489,71 @@ test_that("main server can add a DBnomics search result to the builder", {
     expect_equal(builder_state()$series[[4]]$source, "dbnomics")
     expect_equal(builder_state()$series[[4]]$dbnomics_series, "IMF/WEO:2024-10/NGDP_RPCH")
     expect_equal(builder_state()$series[[4]]$label, "Real GDP growth")
+  })
+})
+
+test_that("main server replaces a populated builder slot from a new search result", {
+  withr::local_envvar(FRED_API_KEY = "test-key")
+  original_fred_search_remote <- fred_search_remote
+  on.exit(assign("fred_search_remote", original_fred_search_remote, envir = .GlobalEnv), add = TRUE)
+
+  assign(
+    "fred_search_remote",
+    function(query, frequency_filter = "all", search_type = "full_text", limit = 100) {
+      if (grepl("rent", query, ignore.case = TRUE)) {
+        tibble::tibble(
+          id = "RENTINDEX",
+          title = "Rent of primary residence",
+          frequency = "Monthly",
+          observation_start = as.Date("2010-01-01"),
+          observation_end = as.Date("2026-01-01"),
+          units = "Index",
+          seasonal_adjustment = "Not Seasonally Adjusted",
+          notes = "Replacement search response.",
+          popularity = 42
+        )
+      } else {
+        tibble::tibble(
+          id = "UNRATE",
+          title = "Unemployment Rate",
+          frequency = "Monthly",
+          observation_start = as.Date("1948-01-01"),
+          observation_end = as.Date("2026-01-01"),
+          units = "Percent",
+          seasonal_adjustment = "Seasonally Adjusted",
+          notes = "Initial search response.",
+          popularity = 99
+        )
+      }
+    },
+    envir = .GlobalEnv
+  )
+
+  shiny::testServer(build_main_server, {
+    session$setInputs(
+      main_tabs = "search",
+      search_query = "unemployment",
+      search_source_filter = "FRED",
+      search_type_filter = "all",
+      search_location_filter = "INTL",
+      search_frequency_filter = "all"
+    )
+    session$flushReact()
+
+    add_selected_search_result_to_builder(session, 2)
+    expect_equal(builder_state()$series[[2]]$fred_series, "UNRATE")
+    expect_equal(builder_state()$series[[2]]$label, "Unemployment Rate")
+
+    session$setInputs(search_query = "rent")
+    session$elapse(400)
+    session$flushReact()
+    session$setInputs(search_results_table_rows_selected = 1, search_target_series = "2")
+    session$flushReact()
+    session$setInputs(search_add_series = 1)
+    session$flushReact()
+    session$flushReact()
+
+    expect_equal(builder_state()$series[[2]]$fred_series, "RENTINDEX")
+    expect_equal(builder_state()$series[[2]]$label, "Rent of primary residence")
   })
 })

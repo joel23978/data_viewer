@@ -29,9 +29,8 @@ provider_registry <- function() {
       query_series_history = provider_fred_query_series_history,
       restore_controls = provider_fred_restore_controls,
       search_remote = provider_fred_search_remote,
-      search_controls_ui = provider_fred_search_controls_ui,
       search_context_from_input = provider_fred_search_context_from_input,
-      show_search_controls_in_all = TRUE,
+      search_result_lookup = provider_fred_search_result_lookup,
       search_result_series_id = provider_fred_search_result_series_id,
       recent_title = provider_fred_recent_title,
       default_label = provider_fred_default_label,
@@ -50,7 +49,7 @@ provider_registry <- function() {
       search_remote = provider_dbnomics_search_remote,
       search_controls_ui = provider_dbnomics_search_controls_ui,
       search_context_from_input = provider_dbnomics_search_context_from_input,
-      show_search_controls_in_all = FALSE,
+      search_result_lookup = provider_dbnomics_search_result_lookup,
       search_result_series_id = provider_dbnomics_search_result_series_id,
       recent_title = provider_dbnomics_recent_title,
       default_label = provider_dbnomics_default_label,
@@ -68,6 +67,10 @@ provider_registry <- function() {
       query_series_history = provider_rba_query_series_history,
       restore_controls = provider_rba_restore_controls,
       search_index_builder = provider_rba_search_index_builder,
+      search_controls_ui = provider_rba_search_controls_ui,
+      search_context_from_input = provider_rba_search_context_from_input,
+      filter_search_results = provider_rba_filter_search_results,
+      search_result_lookup = provider_rba_search_result_lookup,
       search_result_to_spec = provider_rba_search_result_to_spec,
       search_result_series_id = provider_rba_search_result_series_id,
       recent_title = provider_rba_recent_title,
@@ -86,6 +89,10 @@ provider_registry <- function() {
       query_series_history = provider_abs_query_series_history,
       restore_controls = provider_abs_restore_controls,
       search_index_builder = provider_abs_search_index_builder,
+      search_controls_ui = provider_abs_search_controls_ui,
+      search_context_from_input = provider_abs_search_context_from_input,
+      filter_search_results = provider_abs_filter_search_results,
+      search_result_lookup = provider_abs_search_result_lookup,
       search_result_series_id = provider_abs_search_result_series_id,
       recent_title = provider_abs_recent_title,
       default_label = provider_abs_default_label,
@@ -252,7 +259,7 @@ source_catalog_supports_series_source <- function(source_value) {
   isTRUE(catalog_entry$series_supported[[1]])
 }
 
-provider_registry_search_controls_ui <- function(source_filter = "all") {
+provider_registry_search_controls_ui <- function(source_filter = "all", input = NULL) {
   selected_filter <- source_filter %||% "all"
   controls <- lapply(provider_registry_entries(), function(entry) {
     controls_ui <- entry$search_controls_ui %||% NULL
@@ -261,16 +268,16 @@ provider_registry_search_controls_ui <- function(source_filter = "all") {
       return(NULL)
     }
 
-    if (identical(selected_filter, "all") && !isTRUE(entry$show_search_controls_in_all)) {
-      return(NULL)
-    }
-
     if (!identical(selected_filter, "all") &&
         !identical(provider_registry_source_id(selected_filter), entry$id %||% "")) {
       return(NULL)
     }
 
-    controls_ui()
+    if (identical(selected_filter, "all")) {
+      return(NULL)
+    }
+
+    controls_ui(input)
   })
 
   controls <- Filter(Negate(is.null), controls)
@@ -295,6 +302,28 @@ provider_registry_search_contexts_from_input <- function(input) {
     }),
     vapply(provider_registry_entries(), function(entry) entry$id %||% "", character(1))
   )
+}
+
+provider_registry_filter_search_results <- function(source_value, search_results, search_context = list()) {
+  provider_entry <- provider_registry_entry(source_value)
+  filter_search_results <- provider_entry$filter_search_results %||% NULL
+
+  if (is.null(filter_search_results)) {
+    return(search_results %||% empty_search_index())
+  }
+
+  filter_search_results(search_results %||% empty_search_index(), search_context %||% list())
+}
+
+provider_registry_search_result_lookup <- function(source_value, series_id, search_context = list()) {
+  provider_entry <- provider_registry_entry(source_value)
+  search_result_lookup <- provider_entry$search_result_lookup %||% NULL
+
+  if (is.null(search_result_lookup)) {
+    return(list(result = NULL, status = "Series lookup is unavailable for this source."))
+  }
+
+  search_result_lookup(trimws(series_id %||% ""), search_context %||% list())
 }
 
 provider_registry_register_dependencies <- function(input, output, session, index) {
@@ -413,12 +442,224 @@ provider_generic_search_result_to_spec <- function(search_result, index) {
   spec
 }
 
+provider_search_controls_env <- new.env(parent = emptyenv())
+
+provider_merge_choice_values <- function(...) {
+  choice_values <- unlist(list(...), recursive = FALSE, use.names = TRUE)
+
+  if (length(choice_values) == 0) {
+    return(character())
+  }
+
+  choice_values <- choice_values[!duplicated(unname(choice_values))]
+  stats::setNames(unname(choice_values), names(choice_values))
+}
+
+provider_named_choices_from_frame <- function(data, value_columns, label_columns) {
+  if (is.null(data) || length(data) == 0) {
+    return(character())
+  }
+
+  if (is.character(data)) {
+    if (!is.null(names(data)) && all(nzchar(names(data)))) {
+      return(data)
+    }
+
+    values <- as.character(data)
+    return(stats::setNames(values, values))
+  }
+
+  if (!is.data.frame(data)) {
+    return(character())
+  }
+
+  data <- tibble::as_tibble(data)
+  value_column <- intersect(value_columns, names(data))[1] %||% NA_character_
+  label_column <- intersect(label_columns, names(data))[1] %||% NA_character_
+
+  if (is.na(value_column) || !nzchar(value_column)) {
+    return(character())
+  }
+
+  values <- trimws(as.character(data[[value_column]] %||% character()))
+  labels <- if (!is.na(label_column) && nzchar(label_column)) {
+    trimws(as.character(data[[label_column]] %||% character()))
+  } else {
+    values
+  }
+
+  keep_rows <- nzchar(values)
+  values <- values[keep_rows]
+  labels <- labels[keep_rows]
+
+  if (length(values) == 0) {
+    return(character())
+  }
+
+  labels[!nzchar(labels)] <- values[!nzchar(labels)]
+  choices <- stats::setNames(values, labels)
+  choices[!duplicated(unname(choices))]
+}
+
+provider_filter_search_rows <- function(search_results, predicate) {
+  search_results <- search_results %||% empty_search_index()
+
+  if (nrow(search_results) == 0) {
+    return(search_results)
+  }
+
+  keep_rows <- vapply(
+    search_results$load_payload,
+    function(payload) isTRUE(predicate(payload %||% list())),
+    logical(1)
+  )
+
+  search_results[keep_rows, , drop = FALSE]
+}
+
+provider_exact_search_result <- function(search_results, predicate) {
+  filtered_results <- provider_filter_search_rows(search_results, predicate)
+
+  if (nrow(filtered_results) == 0) {
+    return(NULL)
+  }
+
+  filtered_results[1, , drop = FALSE]
+}
+
+provider_clean_scalar_text <- function(value = "") {
+  if (is.null(value) || length(value) == 0) {
+    return("")
+  }
+
+  first_value <- value[[1]]
+  if (is.null(first_value) || (length(first_value) == 1 && is.na(first_value))) {
+    return("")
+  }
+
+  cleaned_value <- trimws(as.character(first_value))
+  if (length(cleaned_value) == 0 || is.na(cleaned_value[1])) {
+    return("")
+  }
+
+  cleaned_value[1]
+}
+
+provider_clean_text_values <- function(value = character()) {
+  if (is.null(value) || length(value) == 0) {
+    return(character())
+  }
+
+  cleaned_values <- trimws(as.character(value))
+  cleaned_values <- cleaned_values[!is.na(cleaned_values) & nzchar(cleaned_values)]
+  unique(cleaned_values)
+}
+
+provider_series_helper_text <- function(current_value = "", restored_value = "", restored_title = character(), empty_status = "", lookup_fun = NULL) {
+  current_value <- provider_clean_scalar_text(current_value)
+  restored_value <- provider_clean_scalar_text(restored_value)
+  restored_title <- provider_clean_text_values(restored_title)
+
+  if (!nzchar(current_value)) {
+    return(list(result = NULL, status = empty_status))
+  }
+
+  if (nzchar(restored_value) && identical(current_value, restored_value) && length(restored_title) > 0) {
+    return(list(result = NULL, status = paste("Actual series:", paste(restored_title, collapse = ", "))))
+  }
+
+  if (is.null(lookup_fun)) {
+    return(list(result = NULL, status = empty_status))
+  }
+
+  lookup_fun(current_value)
+}
+
+dbnomics_provider_choice_values <- function(force = FALSE) {
+  cache_key <- "provider_choices"
+
+  if (!force && exists(cache_key, envir = provider_search_controls_env, inherits = FALSE)) {
+    return(get(cache_key, envir = provider_search_controls_env, inherits = FALSE))
+  }
+
+  choices <- tryCatch(
+    {
+      if (!requireNamespace("rdbnomics", quietly = TRUE)) {
+        return(character())
+      }
+
+      provider_named_choices_from_frame(
+        suppressWarnings(rdbnomics::rdb_providers(code = TRUE)),
+        value_columns = c("code", "provider_code", "id"),
+        label_columns = c("name", "provider_name", "label", "title", "code")
+      )
+    },
+    error = function(error) {
+      character()
+    }
+  )
+
+  assign(cache_key, choices, envir = provider_search_controls_env)
+  choices
+}
+
+dbnomics_dataset_choice_values <- function(provider_code = "", force = FALSE) {
+  cleaned_provider <- trimws(provider_code %||% "")
+
+  if (!nzchar(cleaned_provider)) {
+    return(character())
+  }
+
+  cache_key <- paste("dataset_choices", cleaned_provider, sep = "::")
+
+  if (!force && exists(cache_key, envir = provider_search_controls_env, inherits = FALSE)) {
+    return(get(cache_key, envir = provider_search_controls_env, inherits = FALSE))
+  }
+
+  choices <- tryCatch(
+    {
+      if (!requireNamespace("rdbnomics", quietly = TRUE)) {
+        return(character())
+      }
+
+      provider_named_choices_from_frame(
+        suppressWarnings(rdbnomics::rdb_datasets(provider_code = cleaned_provider, simplify = TRUE)),
+        value_columns = c("code", "dataset_code", "id"),
+        label_columns = c("name", "dataset_name", "label", "title", "code")
+      )
+    },
+    error = function(error) {
+      character()
+    }
+  )
+
+  assign(cache_key, choices, envir = provider_search_controls_env)
+  choices
+}
+
 provider_fred_controls_ui <- function(input, session, index, restored_spec = NULL) {
-  current_series <- input[[series_input_id(index, "fred_series")]] %||% restored_spec$fred_series %||% ""
+  current_series <- provider_clean_scalar_text(input[[series_input_id(index, "fred_series")]] %||% restored_spec$fred_series %||% "")
+  restored_series <- provider_clean_scalar_text(restored_spec$fred_series %||% "")
+  lookup <- provider_series_helper_text(
+    current_value = current_series,
+    restored_value = restored_series,
+    restored_title = restored_spec$fred_title %||% character(),
+    empty_status = "Type a FRED series ID and press Enter.",
+    lookup_fun = provider_fred_search_result_lookup
+  )
   vintage_mode <- input[[series_input_id(index, "fred_vintage_mode")]] %||% restored_spec$fred_vintage_mode %||% "current"
   selected_vintage <- input[[series_input_id(index, "fred_vintage_date")]] %||%
     if (!is.null(restored_spec$fred_vintage_date) && !is.na(restored_spec$fred_vintage_date)) format(as.Date(restored_spec$fred_vintage_date), "%Y-%m-%d") else ""
-  vintage_choices <- fred_vintage_choice_values(current_series, selected_vintage)
+  load_vintage_choices <- !identical(vintage_mode, "current") &&
+    nzchar(current_series) &&
+    (!nzchar(restored_series) || !identical(current_series, restored_series))
+  vintage_choices <- if (identical(vintage_mode, "current")) {
+    character()
+  } else if (isTRUE(load_vintage_choices)) {
+    fred_vintage_choice_values(current_series, selected_vintage)
+  } else {
+    seed_selectize_choices(selected_vintage)
+  }
   default_vintage <- if (nzchar(trimws(selected_vintage %||% ""))) {
     trimws(selected_vintage)
   } else if (length(vintage_choices) > 0) {
@@ -440,6 +681,7 @@ provider_fred_controls_ui <- function(input, session, index, restored_spec = NUL
         placeholder = "Type a FRED series ID and press Enter"
       )
     ),
+    tags$p(class = "muted-copy", trimws(lookup$status %||% "")),
     radioGroupButtons(
       series_input_id(index, "fred_vintage_mode"),
       "Vintage mode",
@@ -464,13 +706,17 @@ provider_fred_controls_ui <- function(input, session, index, restored_spec = NUL
 }
 
 provider_fred_spec_from_input <- function(input, index, transform_profile = default_transform_profile(), restored_spec = NULL) {
+  current_series <- provider_clean_scalar_text(input[[series_input_id(index, "fred_series")]] %||% restored_spec$fred_series %||% "")
+  restored_series <- provider_clean_scalar_text(restored_spec$fred_series %||% "")
+
   spec <- list(
     index = index,
     source = "FRED",
     label = trimws(input[[series_input_id(index, "label")]] %||% ""),
     transform_profile = transform_profile,
     vis_type = input[[series_input_id(index, "vis_type")]] %||% "line",
-    fred_series = trimws(input[[series_input_id(index, "fred_series")]] %||% restored_spec$fred_series %||% ""),
+    fred_series = current_series,
+    fred_title = if (nzchar(current_series) && identical(current_series, restored_series)) provider_clean_scalar_text(restored_spec$fred_title %||% "") else "",
     fred_vintage_mode = input[[series_input_id(index, "fred_vintage_mode")]] %||% restored_spec$fred_vintage_mode %||% "current",
     fred_vintage_date = parse_vintage_date(input[[series_input_id(index, "fred_vintage_date")]] %||% restored_spec$fred_vintage_date %||% NA)
   )
@@ -497,6 +743,7 @@ provider_fred_normalize_spec <- function(spec, normalized_spec = NULL) {
 
   normalized_spec$source <- "FRED"
   normalized_spec$fred_series <- trimws(spec$fred_series %||% "")
+  normalized_spec$fred_title <- trimws(spec$fred_title %||% "")
   normalized_spec$fred_vintage_mode <- spec$fred_vintage_mode %||% "current"
   normalized_spec$fred_vintage_date <- parse_vintage_date(spec$fred_vintage_date %||% NA)
 
@@ -549,11 +796,16 @@ provider_fred_query_series_history <- function(spec) {
 }
 
 provider_fred_restore_controls <- function(session, index, spec) {
+  series_id <- provider_clean_scalar_text(spec$fred_series %||% "")
+  if (!nzchar(series_id)) {
+    return(invisible(NULL))
+  }
+
   updateSelectizeInput(
     session,
     series_input_id(index, "fred_series"),
-    choices = seed_selectize_choices(spec$fred_series %||% ""),
-    selected = spec$fred_series %||% "",
+    choices = seed_selectize_choices(series_id),
+    selected = series_id,
     server = TRUE
   )
   updateRadioGroupButtons(session, series_input_id(index, "fred_vintage_mode"), selected = spec$fred_vintage_mode %||% "current")
@@ -562,39 +814,16 @@ provider_fred_restore_controls <- function(session, index, spec) {
     updateSelectizeInput(
       session,
       series_input_id(index, "fred_vintage_date"),
-      choices = fred_vintage_choice_values(spec$fred_series %||% "", spec$fred_vintage_date),
+      choices = seed_selectize_choices(if (!is.null(spec$fred_vintage_date) && !is.na(spec$fred_vintage_date)) format(as.Date(spec$fred_vintage_date), "%Y-%m-%d") else ""),
       selected = if (!is.null(spec$fred_vintage_date) && !is.na(spec$fred_vintage_date)) format(as.Date(spec$fred_vintage_date), "%Y-%m-%d") else NULL,
       server = TRUE
     )
   }
 }
 
-provider_fred_search_controls_ui <- function() {
-  div(
-    class = "search-toolbar__group search-toolbar__group--segmented search-toolbar__group--compact",
-    style = "padding-bottom: 0;",
-    div(
-      class = "search-toolbar__group-label",
-      "FRED mode"
-    ),
-    div(
-      class = "search-segmented-control",
-      radioGroupButtons(
-        "search_fred_mode",
-        NULL,
-        choices = c("Text" = "full_text", "ID" = "series_id"),
-        selected = "full_text",
-        justified = FALSE,
-        checkIcon = list(yes = icon("check"))
-      )
-    )
-  )
-}
-
 provider_fred_search_context_from_input <- function(input) {
   list(
-    frequency_filter = input$search_frequency_filter %||% "all",
-    search_type = input$search_fred_mode %||% "full_text"
+    frequency_filter = input$search_frequency_filter %||% "all"
   )
 }
 
@@ -602,9 +831,44 @@ provider_fred_search_remote <- function(query, search_context = list(), force = 
   search_fred_series(
     query = query,
     frequency_filter = search_context$frequency_filter %||% "all",
-    search_type = search_context$search_type %||% "full_text",
+    search_type = "full_text",
     limit = search_context$limit %||% 100,
     force = force
+  )
+}
+
+provider_fred_search_result_lookup <- function(series_id, search_context = list()) {
+  cleaned_id <- trimws(series_id %||% "")
+
+  if (!nzchar(cleaned_id)) {
+    return(list(result = NULL, status = "Type a FRED series ID and press Enter."))
+  }
+
+  lookup_response <- search_fred_series(
+    query = cleaned_id,
+    frequency_filter = "all",
+    search_type = "series_id",
+    limit = search_context$limit %||% 25,
+    force = TRUE
+  )
+
+  exact_result <- provider_exact_search_result(
+    lookup_response$results,
+    function(payload) identical(trimws(payload$fred_series %||% ""), cleaned_id)
+  )
+
+  if (is.null(exact_result)) {
+    status_text <- trimws(lookup_response$status %||% "")
+    if (!nzchar(status_text)) {
+      status_text <- sprintf("No exact FRED match was found for %s.", cleaned_id)
+    }
+
+    return(list(result = NULL, status = status_text))
+  }
+
+  list(
+    result = exact_result,
+    status = sprintf("Actual series: %s", trimws(exact_result$title[[1]] %||% cleaned_id))
   )
 }
 
@@ -613,7 +877,10 @@ provider_fred_search_result_series_id <- function(search_result) {
 }
 
 provider_fred_recent_title <- function(spec) {
-  base_title <- trimws(spec$fred_series %||% "FRED series")
+  base_title <- provider_clean_scalar_text(spec$fred_title %||% "")
+  if (!nzchar(base_title)) {
+    base_title <- provider_clean_scalar_text(spec$fred_series %||% "FRED series")
+  }
   vintage_mode <- spec$fred_vintage_mode %||% "current"
   vintage_date <- spec$fred_vintage_date
 
@@ -629,7 +896,13 @@ provider_fred_recent_title <- function(spec) {
 }
 
 provider_fred_default_label <- function(spec) {
-  trimws(spec$fred_series %||% "")
+  title_text <- provider_clean_scalar_text(spec$fred_title %||% "")
+
+  if (nzchar(title_text)) {
+    return(title_text)
+  }
+
+  provider_clean_scalar_text(spec$fred_series %||% "")
 }
 
 provider_fred_source_note_value <- function(spec) {
@@ -654,25 +927,53 @@ provider_fred_cache_key <- function(spec) {
 }
 
 provider_dbnomics_controls_ui <- function(input, session, index, restored_spec = NULL) {
-  textInput(
-    series_input_id(index, "dbnomics_series"),
-    "DBnomics series ID",
-    value = input[[series_input_id(index, "dbnomics_series")]] %||% restored_spec$dbnomics_series %||% "AMECO/ZUTN/EA19.0.0.0.0.ZUTN"
+  current_series <- provider_clean_scalar_text(input[[series_input_id(index, "dbnomics_series")]] %||% restored_spec$dbnomics_series %||% "")
+  restored_series <- provider_clean_scalar_text(restored_spec$dbnomics_series %||% "")
+  lookup <- provider_series_helper_text(
+    current_value = current_series,
+    restored_value = restored_series,
+    restored_title = restored_spec$dbnomics_name %||% character(),
+    empty_status = "Type a DBnomics series ID and press Enter.",
+    lookup_fun = provider_dbnomics_search_result_lookup
+  )
+
+  tagList(
+    selectizeInput(
+      series_input_id(index, "dbnomics_series"),
+      "DBnomics series ID",
+      choices = seed_selectize_choices(current_series),
+      selected = if (nzchar(trimws(current_series))) current_series else NULL,
+      options = list(
+        create = TRUE,
+        persist = FALSE,
+        maxItems = 1,
+        placeholder = "Type a DBnomics series ID and press Enter"
+      )
+    ),
+    tags$p(class = "muted-copy", trimws(lookup$status %||% ""))
   )
 }
 
 provider_dbnomics_spec_from_input <- function(input, index, transform_profile = default_transform_profile(), restored_spec = NULL) {
+  current_series <- provider_clean_scalar_text(input[[series_input_id(index, "dbnomics_series")]] %||% restored_spec$dbnomics_series %||% "")
+  restored_series <- provider_clean_scalar_text(restored_spec$dbnomics_series %||% "")
+
   spec <- list(
     index = index,
     source = "dbnomics",
     label = trimws(input[[series_input_id(index, "label")]] %||% ""),
     transform_profile = transform_profile,
     vis_type = input[[series_input_id(index, "vis_type")]] %||% "line",
-    dbnomics_series = trimws(input[[series_input_id(index, "dbnomics_series")]] %||% restored_spec$dbnomics_series %||% "")
+    dbnomics_series = current_series,
+    dbnomics_name = if (nzchar(current_series) && identical(current_series, restored_series)) provider_clean_scalar_text(restored_spec$dbnomics_name %||% "") else ""
   )
 
   if (!nzchar(spec$dbnomics_series)) {
     return(NULL)
+  }
+
+  if (!nzchar(spec$label)) {
+    spec$label <- provider_dbnomics_default_label(spec)
   }
 
   spec
@@ -689,6 +990,7 @@ provider_dbnomics_normalize_spec <- function(spec, normalized_spec = NULL) {
 
   normalized_spec$source <- "dbnomics"
   normalized_spec$dbnomics_series <- trimws(spec$dbnomics_series %||% "")
+  normalized_spec$dbnomics_name <- trimws(spec$dbnomics_name %||% "")
   normalized_spec
 }
 
@@ -697,10 +999,34 @@ provider_dbnomics_query_series_history <- function(spec) {
 }
 
 provider_dbnomics_restore_controls <- function(session, index, spec) {
-  updateTextInput(session, series_input_id(index, "dbnomics_series"), value = spec$dbnomics_series %||% "")
+  series_id <- provider_clean_scalar_text(spec$dbnomics_series %||% "")
+  if (!nzchar(series_id)) {
+    return(invisible(NULL))
+  }
+
+  updateSelectizeInput(
+    session,
+    series_input_id(index, "dbnomics_series"),
+    choices = seed_selectize_choices(series_id),
+    selected = series_id,
+    server = TRUE
+  )
 }
 
-provider_dbnomics_search_controls_ui <- function() {
+provider_dbnomics_search_controls_ui <- function(input = NULL) {
+  selected_provider <- trimws(input[["search_dbnomics_provider"]] %||% "")
+  selected_dataset <- if (nzchar(selected_provider)) trimws(input[["search_dbnomics_dataset"]] %||% "") else ""
+  provider_choices <- provider_merge_choice_values(
+    c("All providers" = ""),
+    dbnomics_provider_choice_values(),
+    seed_selectize_choices(selected_provider)
+  )
+  dataset_choices <- provider_merge_choice_values(
+    c(if (nzchar(selected_provider)) "All datasets" else "Choose provider first" = ""),
+    dbnomics_dataset_choice_values(selected_provider),
+    seed_selectize_choices(selected_dataset)
+  )
+
   tagList(
     div(
       class = "search-toolbar__group search-toolbar__group--select",
@@ -708,7 +1034,18 @@ provider_dbnomics_search_controls_ui <- function() {
         class = "search-toolbar__group-label",
         "DBnomics provider"
       ),
-      textInput("search_dbnomics_provider", label = NULL, value = "", placeholder = "e.g. IMF")
+      selectizeInput(
+        "search_dbnomics_provider",
+        label = NULL,
+        choices = provider_choices,
+        selected = if (nzchar(selected_provider)) selected_provider else "",
+        options = list(
+          create = TRUE,
+          persist = FALSE,
+          maxItems = 1,
+          placeholder = "All providers"
+        )
+      )
     ),
     div(
       class = "search-toolbar__group search-toolbar__group--select",
@@ -716,7 +1053,18 @@ provider_dbnomics_search_controls_ui <- function() {
         class = "search-toolbar__group-label",
         "DBnomics dataset"
       ),
-      textInput("search_dbnomics_dataset", label = NULL, value = "", placeholder = "e.g. WEO:2024-10")
+      selectizeInput(
+        "search_dbnomics_dataset",
+        label = NULL,
+        choices = dataset_choices,
+        selected = if (nzchar(selected_dataset)) selected_dataset else "",
+        options = list(
+          create = TRUE,
+          persist = FALSE,
+          maxItems = 1,
+          placeholder = if (nzchar(selected_provider)) "All datasets" else "Choose provider first"
+        )
+      )
     )
   )
 }
@@ -738,16 +1086,77 @@ provider_dbnomics_search_remote <- function(query, search_context = list(), forc
   )
 }
 
+provider_dbnomics_search_result_lookup <- function(series_id, search_context = list()) {
+  cleaned_id <- trimws(series_id %||% "")
+  provider_code <- trimws(search_context$provider_code %||% "")
+  dataset_code <- trimws(search_context$dataset_code %||% "")
+
+  if (!nzchar(cleaned_id)) {
+    return(list(result = NULL, status = "Type a DBnomics series ID and press Enter."))
+  }
+
+  lookup_response <- search_dbnomics_series(
+    query = cleaned_id,
+    provider_code = provider_code,
+    dataset_code = dataset_code,
+    limit = search_context$limit %||% 25,
+    force = TRUE
+  )
+
+  parsed_id <- parse_dbnomics_series_id(cleaned_id)
+  exact_id <- if (!is.null(parsed_id)) {
+    trimws(parsed_id$exact_id %||% "")
+  } else if (nzchar(provider_code) && nzchar(dataset_code)) {
+    paste(provider_code, dataset_code, cleaned_id, sep = "/")
+  } else {
+    ""
+  }
+
+  exact_result <- provider_exact_search_result(
+    lookup_response$results,
+    function(payload) {
+      payload_id <- trimws(payload$dbnomics_series %||% "")
+      payload_id == exact_id || payload_id == cleaned_id
+    }
+  )
+
+  if (is.null(exact_result)) {
+    status_text <- trimws(lookup_response$status %||% "")
+    if (!nzchar(status_text)) {
+      status_text <- sprintf("No exact DBnomics match was found for %s.", cleaned_id)
+    }
+
+    return(list(result = NULL, status = status_text))
+  }
+
+  list(
+    result = exact_result,
+    status = sprintf("Actual series: %s", trimws(exact_result$title[[1]] %||% cleaned_id))
+  )
+}
+
 provider_dbnomics_search_result_series_id <- function(search_result) {
   trimws(search_result$load_payload[[1]]$dbnomics_series %||% "")
 }
 
 provider_dbnomics_recent_title <- function(spec) {
-  trimws(spec$dbnomics_series %||% "DBnomics series")
+  title_text <- provider_clean_scalar_text(spec$dbnomics_name %||% "")
+
+  if (nzchar(title_text)) {
+    return(title_text)
+  }
+
+  provider_clean_scalar_text(spec$dbnomics_series %||% "DBnomics series")
 }
 
 provider_dbnomics_default_label <- function(spec) {
-  ""
+  title_text <- provider_clean_scalar_text(spec$dbnomics_name %||% "")
+
+  if (nzchar(title_text)) {
+    return(title_text)
+  }
+
+  provider_clean_scalar_text(spec$dbnomics_series %||% "")
 }
 
 provider_dbnomics_source_note_value <- function(spec) {
@@ -765,60 +1174,67 @@ provider_dbnomics_cache_key <- function(spec) {
   paste("dbnomics", cache_key_value(spec$dbnomics_series), sep = "::")
 }
 
+hydrate_rba_spec_from_series_ids <- function(spec = list()) {
+  spec <- spec %||% list()
+  selected_ids <- unique(trimws(as.character(spec$rba_series_id %||% character())))
+  selected_ids <- selected_ids[nzchar(selected_ids)]
+
+  if (length(selected_ids) == 0) {
+    return(spec)
+  }
+
+  matching_rows <- get_rba_desc_id() %>%
+    filter(series_id %in% selected_ids)
+
+  if (nrow(matching_rows) == 0) {
+    spec$rba_series_id <- selected_ids
+    return(spec)
+  }
+
+  spec$rba_series_id <- selected_ids
+  spec$rba_table <- spec$rba_table %||% matching_rows$table_no[[1]]
+  spec$rba_desc <- spec$rba_desc %||% unique(matching_rows$description)
+  spec
+}
+
 provider_rba_controls_ui <- function(input, session, index, restored_spec = NULL) {
-  current_table <- input[[series_input_id(index, "rba_table")]] %||% restored_spec$rba_table %||% rba_tables[[1]]
-  table_choices <- rba_series[[current_table]] %||% rba_series[[1]]
-  selected_series <- input[[series_input_id(index, "rba_desc")]] %||% restored_spec$rba_desc %||% character()
+  current_series_id <- provider_clean_scalar_text(input[[series_input_id(index, "rba_series_id")]] %||% restored_spec$rba_series_id %||% "")
+  restored_series_id <- provider_clean_scalar_text(restored_spec$rba_series_id %||% "")
+  restored_desc <- provider_clean_text_values(restored_spec$rba_desc %||% character())
+  lookup <- provider_series_helper_text(
+    current_value = current_series_id,
+    restored_value = restored_series_id,
+    restored_title = restored_desc,
+    empty_status = "Type an RBA series ID and press Enter.",
+    lookup_fun = provider_rba_search_result_lookup
+  )
 
   tagList(
-    compact_single_choice_input(
-      series_input_id(index, "rba_table"),
-      "RBA table",
-      choices = rba_table_choices,
-      selected = current_table
-    ),
     selectizeInput(
-      series_input_id(index, "rba_desc"),
-      "RBA series",
-      choices = table_choices,
-      selected = selected_series,
-      multiple = TRUE
-    )
+      series_input_id(index, "rba_series_id"),
+      "RBA series ID",
+      choices = seed_selectize_choices(current_series_id),
+      selected = if (nzchar(trimws(current_series_id))) current_series_id else NULL,
+      options = list(
+        create = TRUE,
+        persist = FALSE,
+        maxItems = 1,
+        placeholder = "Type an RBA series ID and press Enter"
+      )
+    ),
+    tags$p(class = "muted-copy", trimws(lookup$status %||% ""))
   )
 }
 
 provider_rba_register_dependencies <- function(input, output, session, index) {
-  observeEvent(input[[series_input_id(index, "rba_table")]], {
-    if (!identical(input[[series_input_id(index, "source")]] %||% "", "rba")) {
-      return(invisible(NULL))
-    }
-
-    table_value <- input[[series_input_id(index, "rba_table")]]
-    series_choices <- rba_series[[table_value]] %||% character()
-    restored_spec_value <- restored_series_spec(session, index)
-    selected_series <- input[[series_input_id(index, "rba_desc")]] %||% restored_spec_value$rba_desc %||% character()
-    selected_series <- unique(as.character(selected_series))
-    selected_series <- selected_series[selected_series %in% series_choices]
-
-    updateSelectizeInput(
-      session,
-      series_input_id(index, "rba_desc"),
-      choices = series_choices,
-      selected = selected_series,
-      server = TRUE
-    )
-  }, ignoreInit = FALSE)
-
   invisible(NULL)
 }
 
 provider_rba_spec_from_input <- function(input, index, transform_profile = default_transform_profile(), restored_spec = NULL) {
-  selected_table <- input[[series_input_id(index, "rba_table")]] %||% restored_spec$rba_table %||% rba_tables[[1]]
-  selected_desc <- input[[series_input_id(index, "rba_desc")]] %||% restored_spec$rba_desc
-  selected_series_id <- get_rba_desc_id() %>%
-    filter(table_no == selected_table, description %in% selected_desc) %>%
-    pull(series_id) %>%
-    unique()
+  current_series_id <- provider_clean_scalar_text(input[[series_input_id(index, "rba_series_id")]] %||% restored_spec$rba_series_id %||% "")
+  restored_series_id <- provider_clean_scalar_text(restored_spec$rba_series_id %||% "")
+  use_restored_metadata <- nzchar(current_series_id) && identical(current_series_id, restored_series_id)
+  restored_desc <- provider_clean_text_values(restored_spec$rba_desc %||% character())
 
   spec <- list(
     index = index,
@@ -826,13 +1242,19 @@ provider_rba_spec_from_input <- function(input, index, transform_profile = defau
     label = trimws(input[[series_input_id(index, "label")]] %||% ""),
     transform_profile = transform_profile,
     vis_type = input[[series_input_id(index, "vis_type")]] %||% "line",
-    rba_table = selected_table,
-    rba_desc = selected_desc,
-    rba_series_id = if (length(selected_series_id) > 0) selected_series_id else restored_spec$rba_series_id %||% character()
+    rba_series_id = current_series_id,
+    rba_table = if (use_restored_metadata) restored_spec$rba_table %||% NULL else NULL,
+    rba_desc = if (use_restored_metadata) restored_desc else character()
   )
 
-  if (length(spec$rba_desc) == 0) {
+  if (!nzchar(spec$rba_series_id)) {
     return(NULL)
+  }
+
+  spec <- hydrate_rba_spec_from_series_ids(spec)
+
+  if (!nzchar(spec$label %||% "")) {
+    spec$label <- provider_rba_default_label(spec)
   }
 
   spec
@@ -848,9 +1270,14 @@ provider_rba_normalize_spec <- function(spec, normalized_spec = NULL) {
   )
 
   normalized_spec$source <- "rba"
-  normalized_spec$rba_table <- spec$rba_table %||% rba_tables[[1]]
-  normalized_spec$rba_desc <- spec$rba_desc %||% character()
-  normalized_spec$rba_series_id <- spec$rba_series_id %||% character()
+  hydrated_spec <- hydrate_rba_spec_from_series_ids(spec)
+  normalized_spec$rba_table <- hydrated_spec$rba_table %||% rba_tables[[1]]
+  normalized_spec$rba_desc <- hydrated_spec$rba_desc %||% character()
+  normalized_spec$rba_series_id <- hydrated_spec$rba_series_id %||% character()
+
+  if (!nzchar(normalized_spec$label %||% "")) {
+    normalized_spec$label <- provider_rba_default_label(normalized_spec)
+  }
 
   normalized_spec
 }
@@ -869,14 +1296,86 @@ provider_rba_query_series_history <- function(spec) {
 }
 
 provider_rba_restore_controls <- function(session, index, spec) {
-  rba_choices <- rba_series[[spec$rba_table]] %||% character()
-  updateSelectInput(session, series_input_id(index, "rba_table"), selected = spec$rba_table)
+  series_id <- provider_clean_scalar_text(spec$rba_series_id %||% "")
+  if (!nzchar(series_id)) {
+    return(invisible(NULL))
+  }
+
   updateSelectizeInput(
     session,
-    series_input_id(index, "rba_desc"),
-    choices = rba_choices,
-    selected = spec$rba_desc,
+    series_input_id(index, "rba_series_id"),
+    choices = seed_selectize_choices(series_id),
+    selected = series_id,
     server = TRUE
+  )
+}
+
+provider_rba_search_controls_ui <- function(input = NULL) {
+  selected_table <- trimws(input[["search_rba_table"]] %||% "")
+  table_choices <- provider_merge_choice_values(
+    c("All tables" = ""),
+    rba_table_choices,
+    seed_selectize_choices(selected_table)
+  )
+
+  div(
+    class = "search-toolbar__group search-toolbar__group--select",
+    div(
+      class = "search-toolbar__group-label",
+      "RBA table"
+    ),
+    selectizeInput(
+      "search_rba_table",
+      label = NULL,
+      choices = table_choices,
+      selected = if (nzchar(selected_table)) selected_table else "",
+      options = list(
+        create = FALSE,
+        maxItems = 1,
+        placeholder = "All tables"
+      )
+    )
+  )
+}
+
+provider_rba_search_context_from_input <- function(input) {
+  list(
+    table = trimws(input$search_rba_table %||% "")
+  )
+}
+
+provider_rba_filter_search_results <- function(search_results, search_context = list()) {
+  selected_table <- trimws(search_context$table %||% "")
+
+  if (!nzchar(selected_table)) {
+    return(search_results)
+  }
+
+  provider_filter_search_rows(
+    search_results,
+    function(payload) identical(trimws(payload$rba_table %||% ""), selected_table)
+  )
+}
+
+provider_rba_search_result_lookup <- function(series_id, search_context = list()) {
+  cleaned_id <- trimws(series_id %||% "")
+
+  if (!nzchar(cleaned_id)) {
+    return(list(result = NULL, status = "Type an RBA series ID and press Enter."))
+  }
+
+  exact_result <- provider_exact_search_result(
+    build_rba_search_index(),
+    function(payload) cleaned_id %in% trimws(as.character(payload$rba_series_id %||% character()))
+  )
+
+  if (is.null(exact_result)) {
+    return(list(result = NULL, status = sprintf("No exact RBA match was found for %s.", cleaned_id)))
+  }
+
+  list(
+    result = exact_result,
+    status = sprintf("Actual series: %s", trimws(exact_result$load_payload[[1]]$rba_desc %||% exact_result$title[[1]] %||% cleaned_id))
   )
 }
 
@@ -890,16 +1389,27 @@ provider_rba_search_result_series_id <- function(search_result) {
 }
 
 provider_rba_recent_title <- function(spec) {
-  paste(spec$rba_desc %||% character(), collapse = ", ")
+  title_values <- provider_clean_text_values(spec$rba_desc %||% character())
+
+  if (length(title_values) == 0) {
+    title_values <- provider_clean_text_values(spec$rba_series_id %||% character())
+  }
+
+  paste(title_values, collapse = ", ")
 }
 
 provider_rba_default_label <- function(spec) {
-  ""
+  label_values <- provider_clean_text_values(spec$rba_desc %||% character())
+
+  if (length(label_values) == 0) {
+    return(provider_clean_scalar_text(spec$rba_series_id %||% ""))
+  }
+
+  paste(label_values, collapse = ", ")
 }
 
 provider_rba_source_note_value <- function(spec) {
-  id_values <- as.character(spec$rba_desc %||% character())
-  id_values <- unique(trimws(id_values[nzchar(trimws(id_values))]))
+  id_values <- provider_clean_text_values(spec$rba_series_id %||% spec$rba_desc %||% character())
 
   if (length(id_values) == 0) {
     "rba"
@@ -958,189 +1468,162 @@ provider_rba_search_index_builder <- function() {
 }
 
 provider_abs_controls_ui <- function(input, session, index, restored_spec = NULL) {
-  current_abs_ids <- unique(trimws(as.character(input[[series_input_id(index, "abs_id")]] %||% restored_spec$abs_id %||% character())))
-  current_abs_ids <- current_abs_ids[nzchar(current_abs_ids)]
-  abs_state <- resolve_abs_control_state(
-    current_values = list(
-      catalogue = input[[series_input_id(index, "abs_catalogue")]],
-      desc = input[[series_input_id(index, "abs_desc")]],
-      type = input[[series_input_id(index, "abs_series_type")]],
-      table = input[[series_input_id(index, "abs_table")]],
-      ids = input[[series_input_id(index, "abs_id")]]
-    ),
-    restored_spec = restored_spec
+  current_abs_id <- provider_clean_scalar_text(input[[series_input_id(index, "abs_id")]] %||% restored_spec$abs_id %||% "")
+  restored_abs_id <- provider_clean_scalar_text(restored_spec$abs_id %||% "")
+  restored_desc <- provider_clean_text_values(restored_spec$abs_desc %||% character())
+  lookup <- provider_series_helper_text(
+    current_value = current_abs_id,
+    restored_value = restored_abs_id,
+    restored_title = restored_desc,
+    empty_status = "Type an ABS series ID and press Enter.",
+    lookup_fun = provider_abs_search_result_lookup
   )
 
   tagList(
     selectizeInput(
-      series_input_id(index, "abs_catalogue"),
-      "ABS catalogue",
-      choices = abs_cat,
-      selected = abs_state$catalogue,
-      multiple = FALSE,
-      options = list(placeholder = "Select a catalogue")
-    ),
-    selectizeInput(
-      series_input_id(index, "abs_desc"),
-      "ABS series description",
-      choices = abs_state$desc_choices,
-      selected = abs_state$desc,
-      multiple = FALSE,
-      options = list(placeholder = "Select a series description")
-    ),
-    selectizeInput(
-      series_input_id(index, "abs_series_type"),
-      "ABS series type",
-      choices = abs_state$type_choices,
-      selected = abs_state$series_type,
-      multiple = FALSE,
-      options = list(placeholder = "Select a series type")
-    ),
-    selectInput(
-      series_input_id(index, "abs_table"),
-      "ABS table",
-      choices = c("Select a table" = "", stats::setNames(abs_state$table_choices, abs_state$table_choices)),
-      selected = abs_state$table
-    ),
-    selectizeInput(
       series_input_id(index, "abs_id"),
       "ABS series ID",
-      choices = seed_selectize_choices(c(abs_state$id_choices, current_abs_ids)),
-      selected = current_abs_ids %||% abs_state$ids,
-      options = list(create = TRUE, placeholder = "Select a series ID"),
-      multiple = TRUE
+      choices = seed_selectize_choices(current_abs_id),
+      selected = if (nzchar(current_abs_id)) current_abs_id else NULL,
+      options = list(
+        create = TRUE,
+        persist = FALSE,
+        maxItems = 1,
+        placeholder = "Type an ABS series ID and press Enter"
+      )
+    ),
+    tags$p(class = "muted-copy", trimws(lookup$status %||% ""))
+  )
+}
+
+provider_abs_search_controls_ui <- function(input = NULL) {
+  selected_catalogue <- trimws(input[["search_abs_catalogue"]] %||% "")
+  selected_tables <- unique(trimws(as.character(input[["search_abs_table"]] %||% character())))
+  selected_tables <- selected_tables[nzchar(selected_tables)]
+  selected_type <- trimws(input[["search_abs_series_type"]] %||% "all")
+  table_values <- if (nzchar(selected_catalogue)) {
+    abs_choice_values(abs_catalogue_data(selected_catalogue), column = table_title)
+  } else {
+    character()
+  }
+  selected_tables <- selected_tables[selected_tables %in% table_values]
+  table_choices <- provider_merge_choice_values(
+    c("All tables" = ""),
+    stats::setNames(table_values, table_values),
+    seed_selectize_choices(selected_tables)
+  )
+
+  tagList(
+    div(
+      class = "search-toolbar__group search-toolbar__group--select",
+      div(
+        class = "search-toolbar__group-label",
+        "ABS catalogue"
+      ),
+      selectizeInput(
+        "search_abs_catalogue",
+        label = NULL,
+        choices = c("All catalogues" = "", stats::setNames(abs_cat, abs_cat)),
+        selected = if (nzchar(selected_catalogue)) selected_catalogue else "",
+        options = list(
+          create = FALSE,
+          maxItems = 1,
+          placeholder = "All catalogues"
+        )
+      )
+    ),
+    div(
+      class = "search-toolbar__group search-toolbar__group--select",
+      div(
+        class = "search-toolbar__group-label",
+        "ABS table"
+      ),
+      selectizeInput(
+        "search_abs_table",
+        label = NULL,
+        choices = table_choices,
+        selected = selected_tables,
+        multiple = TRUE,
+        options = list(
+          create = FALSE,
+          placeholder = if (nzchar(selected_catalogue)) "All tables" else "Choose a catalogue to narrow tables"
+        )
+      )
+    ),
+    div(
+      class = "search-toolbar__group search-toolbar__group--select",
+      div(
+        class = "search-toolbar__group-label",
+        "ABS type"
+      ),
+      compact_single_choice_input(
+        "search_abs_series_type",
+        label = NULL,
+        choices = c(
+          "All" = "all",
+          "Original" = "Original",
+          "Seasonally adjusted" = "Seasonally Adjusted",
+          "Trend" = "Trend"
+        ),
+        selected = if (selected_type %in% c("all", "Original", "Seasonally Adjusted", "Trend")) selected_type else "all"
+      )
     )
   )
 }
 
-provider_abs_register_dependencies <- function(input, output, session, index) {
-  observeEvent(input[[series_input_id(index, "abs_catalogue")]], {
-    if (!identical(input[[series_input_id(index, "source")]] %||% "", "abs")) {
-      return(invisible(NULL))
+provider_abs_search_context_from_input <- function(input) {
+  selected_tables <- unique(trimws(as.character(input$search_abs_table %||% character())))
+
+  list(
+    catalogue = trimws(input$search_abs_catalogue %||% ""),
+    tables = selected_tables[nzchar(selected_tables)],
+    series_type = trimws(input$search_abs_series_type %||% "all")
+  )
+}
+
+provider_abs_filter_search_results <- function(search_results, search_context = list()) {
+  selected_catalogue <- trimws(search_context$catalogue %||% "")
+  selected_tables <- unique(trimws(as.character(search_context$tables %||% character())))
+  selected_tables <- selected_tables[nzchar(selected_tables)]
+  selected_type <- trimws(search_context$series_type %||% "all")
+
+  provider_filter_search_rows(
+    search_results,
+    function(payload) {
+      payload_catalogue <- trimws(payload$abs_catalogue %||% "")
+      payload_table <- trimws(payload$abs_table %||% "")
+      payload_type <- trimws(payload$abs_series_type %||% "")
+
+      (!nzchar(selected_catalogue) || identical(payload_catalogue, selected_catalogue)) &&
+        (length(selected_tables) == 0 || payload_table %in% selected_tables) &&
+        (!nzchar(selected_type) || identical(selected_type, "all") || identical(payload_type, selected_type))
     }
+  )
+}
 
-    restored_spec_value <- restored_series_spec(session, index)
-    abs_state <- resolve_abs_control_state(
-      current_values = list(
-        catalogue = input[[series_input_id(index, "abs_catalogue")]],
-        desc = input[[series_input_id(index, "abs_desc")]]
-      ),
-      restored_spec = restored_spec_value
-    )
+provider_abs_search_result_lookup <- function(series_id, search_context = list()) {
+  cleaned_id <- trimws(series_id %||% "")
 
-    updateSelectizeInput(
-      session,
-      series_input_id(index, "abs_desc"),
-      choices = abs_state$desc_choices,
-      selected = abs_state$desc,
-      server = TRUE
-    )
-  }, ignoreInit = FALSE)
+  if (!nzchar(cleaned_id)) {
+    return(list(result = NULL, status = "Type an ABS series ID and press Enter."))
+  }
 
-  observeEvent(
-    {
-      list(
-        input[[series_input_id(index, "abs_catalogue")]],
-        input[[series_input_id(index, "abs_desc")]]
-      )
-    },
-    {
-      if (!identical(input[[series_input_id(index, "source")]] %||% "", "abs")) {
-        return(invisible(NULL))
-      }
-
-      restored_spec_value <- restored_series_spec(session, index)
-      abs_state <- resolve_abs_control_state(
-        current_values = list(
-          catalogue = input[[series_input_id(index, "abs_catalogue")]],
-          desc = input[[series_input_id(index, "abs_desc")]],
-          type = input[[series_input_id(index, "abs_series_type")]]
-        ),
-        restored_spec = restored_spec_value
-      )
-
-      updateSelectizeInput(
-        session,
-        series_input_id(index, "abs_series_type"),
-        choices = abs_state$type_choices,
-        selected = abs_state$series_type,
-        server = TRUE
-      )
-    },
-    ignoreInit = FALSE
+  exact_result <- provider_exact_search_result(
+    build_abs_search_index(),
+    function(payload) cleaned_id %in% trimws(as.character(payload$abs_id %||% character()))
   )
 
-  observeEvent(
-    {
-      list(
-        input[[series_input_id(index, "abs_catalogue")]],
-        input[[series_input_id(index, "abs_desc")]],
-        input[[series_input_id(index, "abs_series_type")]]
-      )
-    },
-    {
-      if (!identical(input[[series_input_id(index, "source")]] %||% "", "abs")) {
-        return(invisible(NULL))
-      }
+  if (is.null(exact_result)) {
+    return(list(result = NULL, status = sprintf("No exact ABS match was found for %s.", cleaned_id)))
+  }
 
-      restored_spec_value <- restored_series_spec(session, index)
-      abs_state <- resolve_abs_control_state(
-        current_values = list(
-          catalogue = input[[series_input_id(index, "abs_catalogue")]],
-          desc = input[[series_input_id(index, "abs_desc")]],
-          type = input[[series_input_id(index, "abs_series_type")]],
-          table = input[[series_input_id(index, "abs_table")]]
-        ),
-        restored_spec = restored_spec_value
-      )
-
-      updateSelectInput(
-        session,
-        series_input_id(index, "abs_table"),
-        choices = c("Select a table" = "", stats::setNames(abs_state$table_choices, abs_state$table_choices)),
-        selected = abs_state$table
-      )
-    },
-    ignoreInit = FALSE
+  list(
+    result = exact_result,
+    status = sprintf("Actual series: %s", trimws(exact_result$load_payload[[1]]$abs_desc %||% exact_result$title[[1]] %||% cleaned_id))
   )
+}
 
-  observeEvent(
-    {
-      list(
-        input[[series_input_id(index, "abs_catalogue")]],
-        input[[series_input_id(index, "abs_desc")]],
-        input[[series_input_id(index, "abs_series_type")]],
-        input[[series_input_id(index, "abs_table")]]
-      )
-    },
-    {
-      if (!identical(input[[series_input_id(index, "source")]] %||% "", "abs")) {
-        return(invisible(NULL))
-      }
-
-      restored_spec_value <- restored_series_spec(session, index)
-      abs_state <- resolve_abs_control_state(
-        current_values = list(
-          catalogue = input[[series_input_id(index, "abs_catalogue")]],
-          desc = input[[series_input_id(index, "abs_desc")]],
-          type = input[[series_input_id(index, "abs_series_type")]],
-          table = input[[series_input_id(index, "abs_table")]],
-          ids = input[[series_input_id(index, "abs_id")]]
-        ),
-        restored_spec = restored_spec_value
-      )
-
-      updateSelectizeInput(
-        session,
-        series_input_id(index, "abs_id"),
-        choices = abs_state$id_choices,
-        selected = abs_state$ids,
-        server = TRUE
-      )
-    },
-    ignoreInit = FALSE
-  )
-
+provider_abs_register_dependencies <- function(input, output, session, index) {
   invisible(NULL)
 }
 
@@ -1153,8 +1636,7 @@ provider_abs_spec_from_input <- function(input, index, transform_profile = defau
     vis_type = input[[series_input_id(index, "vis_type")]] %||% "line"
   )
 
-  direct_abs_ids <- unique(trimws(as.character(input[[series_input_id(index, "abs_id")]] %||% restored_spec$abs_id %||% character())))
-  direct_abs_ids <- direct_abs_ids[nzchar(direct_abs_ids)]
+  direct_abs_ids <- provider_clean_text_values(input[[series_input_id(index, "abs_id")]] %||% restored_spec$abs_id %||% character())
 
   if (length(direct_abs_ids) > 0) {
     spec$abs_id <- direct_abs_ids
@@ -1227,49 +1709,16 @@ provider_abs_query_series_history <- function(spec) {
 }
 
 provider_abs_restore_controls <- function(session, index, spec) {
-  abs_state <- resolve_abs_control_state(
-    current_values = list(
-      catalogue = spec$abs_catalogue,
-      desc = spec$abs_desc,
-      type = spec$abs_series_type,
-      table = spec$abs_table,
-      ids = spec$abs_id
-    ),
-    restored_spec = spec
-  )
+  series_id <- provider_clean_scalar_text(spec$abs_id %||% "")
+  if (!nzchar(series_id)) {
+    return(invisible(NULL))
+  }
 
   updateSelectizeInput(
     session,
-    series_input_id(index, "abs_catalogue"),
-    choices = abs_cat,
-    selected = abs_state$catalogue,
-    server = TRUE
-  )
-  updateSelectizeInput(
-    session,
-    series_input_id(index, "abs_desc"),
-    choices = abs_state$desc_choices,
-    selected = abs_state$desc,
-    server = TRUE
-  )
-  updateSelectizeInput(
-    session,
-    series_input_id(index, "abs_series_type"),
-    choices = abs_state$type_choices,
-    selected = abs_state$series_type,
-    server = TRUE
-  )
-  updateSelectInput(
-    session,
-    series_input_id(index, "abs_table"),
-    choices = c("Select a table" = "", stats::setNames(abs_state$table_choices, abs_state$table_choices)),
-    selected = abs_state$table
-  )
-  updateSelectizeInput(
-    session,
     series_input_id(index, "abs_id"),
-    choices = seed_selectize_choices(c(abs_state$id_choices, spec$abs_id %||% character())),
-    selected = spec$abs_id %||% abs_state$ids,
+    choices = seed_selectize_choices(series_id),
+    selected = series_id,
     server = TRUE
   )
 }
@@ -1279,12 +1728,17 @@ provider_abs_search_result_series_id <- function(search_result) {
 }
 
 provider_abs_recent_title <- function(spec) {
-  trimws(spec$abs_desc %||% spec$abs_id %||% "ABS series")
+  provider_clean_scalar_text(spec$abs_desc %||% spec$abs_id %||% "ABS series")
 }
 
 provider_abs_default_label <- function(spec) {
-  selected_ids <- unique(trimws(as.character(spec$abs_id %||% character())))
-  selected_ids <- selected_ids[nzchar(selected_ids)]
+  desc_values <- provider_clean_text_values(spec$abs_desc %||% character())
+
+  if (length(desc_values) == 1) {
+    return(desc_values[[1]])
+  }
+
+  selected_ids <- provider_clean_text_values(spec$abs_id %||% character())
 
   if (length(selected_ids) == 1) {
     return(selected_ids[[1]])
@@ -1294,8 +1748,7 @@ provider_abs_default_label <- function(spec) {
 }
 
 provider_abs_source_note_value <- function(spec) {
-  id_values <- as.character(spec$abs_id %||% character())
-  id_values <- unique(trimws(id_values[nzchar(trimws(id_values))]))
+  id_values <- provider_clean_text_values(spec$abs_id %||% character())
 
   if (length(id_values) == 0) {
     "abs"

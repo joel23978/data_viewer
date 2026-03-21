@@ -7,16 +7,16 @@ build_search_tab_ui <- function() {
       header_actions = actionButton("open_fred_api_key_modal", "Enter FRED key", class = "app-card__header-chip"),
       div(
         class = "search-toolbar",
-        div(
-          class = "search-toolbar__hero",
           div(
-            class = "search-toolbar__hero-copy",
-            tags$p(class = "search-toolbar__eyebrow", "Search local metadata and live FRED"),
-            tags$h2(class = "search-toolbar__title", "Find a series")
-          ),
-          div(
-            class = "search-toolbar__primary",
-            textInput("search_query", "Search terms", value = "", placeholder = "e.g. industrial AND production")
+            class = "search-toolbar__hero",
+            div(
+              class = "search-toolbar__hero-copy",
+              tags$p(class = "search-toolbar__eyebrow", "Search local metadata and live provider APIs"),
+              tags$h2(class = "search-toolbar__title", "Find a series")
+            ),
+            div(
+              class = "search-toolbar__primary",
+              textInput("search_query", "Search terms", value = "", placeholder = "e.g. industrial AND production")
           )
         ),
         div(
@@ -389,7 +389,7 @@ build_main_ui <- function() {
                 header_actions = actionButton("clear_series_setup", "Clear", class = "app-card__header-chip"),
                 tags$p(
                   class = "muted-copy",
-                  "Choose the source, series, and chart style. Use the right panel for transforms."
+                  "Add or replace source series from Data Search, then use this panel to adjust labels and chart styles."
                 ),
                 do.call(
                   tabsetPanel,
@@ -850,12 +850,13 @@ init_builder_restore_state <- function(session) {
     builder_restore_context()$mode %||% "idle"
   }
 
-  clear_builder_restore_state <- function(clear_series_specs = TRUE) {
+  clear_builder_restore_state <- function(clear_series_specs = FALSE) {
     restored_state(NULL)
     builder_restore_context(default_builder_restore_context())
     session$userData$builder_restore_token <- 0L
     if (isTRUE(clear_series_specs)) {
       session$userData$restored_series_specs <- list()
+      bump_restored_series_specs_version(session)
     }
 
     invisible(NULL)
@@ -897,7 +898,16 @@ init_builder_restore_state <- function(session) {
     ))
     session$userData$builder_restore_token <- next_token
     session$userData$restored_series_specs <- list()
+    bump_restored_series_specs_version(session)
     restore_chart_state(session, normalized_state, restore_token = next_token)
+
+    session$onFlushed(function() {
+      current_context <- shiny::isolate(builder_restore_context())
+      if (identical(current_context$mode %||% "idle", "applying") &&
+          identical(current_context$token %||% 0L, next_token)) {
+        settle_builder_restore_state(expected_token = next_token)
+      }
+    }, once = TRUE)
 
     if (!is.null(selected_series_index)) {
       updateTabsetPanel(session, "series_tabs", selected = paste("Series", selected_series_index))
@@ -948,7 +958,11 @@ init_builder_sync_handlers <- function(
       return(invisible(NULL))
     }
 
-    generated_source_note <- default_source_note(normalize_chart_state(builder_state_from_input(input, session))$series)
+    generated_source_note <- default_source_note(
+      normalize_chart_state(
+        builder_state_from_input(input, session, fallback_state = restored_state())
+      )$series
+    )
     current_source_note <- trimws(input$style_note %||% "")
     prior_synced_note <- trimws(synced_source_note() %||% "")
 
@@ -1071,6 +1085,7 @@ init_builder_sync_handlers <- function(
             input[[series_input_id(index, "fred_vintage_mode")]],
             input[[series_input_id(index, "fred_vintage_date")]],
             input[[series_input_id(index, "dbnomics_series")]],
+            input[[series_input_id(index, "rba_series_id")]],
             input[[series_input_id(index, "rba_table")]],
             input[[series_input_id(index, "rba_desc")]],
             input[[series_input_id(index, "abs_catalogue")]],
@@ -1093,7 +1108,9 @@ init_builder_sync_handlers <- function(
       loaded_state <- restored_state()
       req(!is.null(loaded_state))
 
-      current_state <- normalize_chart_state(builder_state_from_input(input, session))
+      current_state <- normalize_chart_state(
+        builder_state_from_input(input, session, fallback_state = loaded_state)
+      )
       if (identical(builder_restore_mode(), "applying")) {
         if (identical(current_state, loaded_state)) {
           settle_builder_restore_state()
@@ -1198,7 +1215,10 @@ init_search_builder_handlers <- function(
         input$search_type_filter,
         input$search_location_filter,
         input$search_frequency_filter,
-        input$search_fred_mode,
+        input$search_abs_catalogue,
+        input$search_abs_table,
+        input$search_abs_series_type,
+        input$search_rba_table,
         input$search_dbnomics_provider,
         input$search_dbnomics_dataset
       )
@@ -1572,6 +1592,7 @@ init_library_preview_handlers <- function(
 build_main_server <- function(input, output, session) {
   ensure_chart_library()
   session$userData$restored_series_specs <- list()
+  session$userData$restored_series_specs_version <- reactiveVal(0L)
   loaded_main_tabs <- reactiveVal(c("search"))
   tab_load_state <- reactiveValues(search = "idle", library = "idle")
   tab_load_error <- reactiveValues(search = "", library = "")
@@ -1770,6 +1791,13 @@ build_main_server <- function(input, output, session) {
   synced_library_title <- reactiveVal("")
   synced_source_note <- reactiveVal(default_builder_state()$style$note)
 
+  session$onFlushed(function() {
+    if (is.null(shiny::isolate(restored_state()))) {
+      default_state <- normalize_chart_state(default_builder_state())
+      apply_builder_state(default_state, selected_series_index = 1, navigate_builder = FALSE)
+    }
+  }, once = TRUE)
+
   apply_date_window_shortcut <- function(shortcut_value) {
     shortcut_value <- as.character(shortcut_value %||% "")
     if (!nzchar(shortcut_value)) {
@@ -1802,10 +1830,12 @@ build_main_server <- function(input, output, session) {
   }, ignoreInit = TRUE)
 
   builder_state <- reactive({
-    input_state <- normalize_chart_state(builder_state_from_input(input, session))
     loaded_state <- restored_state()
+    input_state <- normalize_chart_state(
+      builder_state_from_input(input, session, fallback_state = loaded_state)
+    )
 
-    if (!is.null(loaded_state)) {
+    if (!is.null(loaded_state) && identical(builder_restore_mode(), "applying")) {
       return(normalize_chart_state(loaded_state))
     }
 
@@ -2388,8 +2418,12 @@ build_main_server <- function(input, output, session) {
     DT::dataTableOutput("search_results_table")
   })
 
+  observeEvent(input$search_dbnomics_provider, {
+    updateSelectizeInput(session, "search_dbnomics_dataset", selected = "")
+  }, ignoreInit = TRUE)
+
   output$search_source_controls <- renderUI({
-    provider_registry_search_controls_ui(input$search_source_filter %||% "all")
+    provider_registry_search_controls_ui(input$search_source_filter %||% "all", input)
   })
 
   search_remote_contexts <- reactive({
@@ -2430,7 +2464,7 @@ build_main_server <- function(input, output, session) {
     loading_message <- trimws(search_loading_message() %||% "")
     source_filter <- input$search_source_filter %||% "all"
     query_text <- trimws(search_query_debounced())
-    include_remote_status <- nzchar(query_text) || search_filter_includes(source_filter, remote_search_source_values())
+    include_remote_status <- nzchar(query_text)
 
     search_messages <- c(
       loading_message,
@@ -2458,7 +2492,10 @@ build_main_server <- function(input, output, session) {
         input$search_type_filter,
         input$search_location_filter,
         input$search_frequency_filter,
-        input$search_fred_mode,
+        input$search_abs_catalogue,
+        input$search_abs_table,
+        input$search_abs_series_type,
+        input$search_rba_table,
         input$search_dbnomics_provider,
         input$search_dbnomics_dataset
       )
@@ -2487,6 +2524,7 @@ build_main_server <- function(input, output, session) {
     location_filter <- input$search_location_filter %||% "all"
     frequency_filter <- input$search_frequency_filter %||% "all"
     query_text <- search_query_debounced()
+    provider_id <- provider_registry_source_id(source_filter)
     local_source_selected <- search_filter_includes(source_filter, local_search_source_values())
     search_started_at <- Sys.time()
 
@@ -2525,6 +2563,14 @@ build_main_server <- function(input, output, session) {
 
     combined_results <- bind_rows(local_results, remote_results) %>%
       distinct(search_id, .keep_all = TRUE)
+
+    if (nzchar(provider_id)) {
+      combined_results <- provider_registry_filter_search_results(
+        source_value = source_filter,
+        search_results = combined_results,
+        search_context = search_remote_contexts()[[provider_id]] %||% list()
+      )
+    }
 
     search_elapsed_ms <- round(as.numeric(difftime(Sys.time(), search_started_at, units = "secs")) * 1000)
 

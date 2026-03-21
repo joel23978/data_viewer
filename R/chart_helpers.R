@@ -18,8 +18,21 @@ series_source_controls_id <- function(index) {
   series_input_id(index, "source_controls")
 }
 
-series_enabled <- function(input, index) {
+series_enabled <- function(input, index, fallback = FALSE) {
   enabled_value <- input[[series_input_id(index, "enabled")]]
+  if (is.null(enabled_value) || length(enabled_value) == 0) {
+    return(isTRUE(fallback))
+  }
+
+  isTRUE(enabled_value) || identical(as.character(enabled_value), "1")
+}
+
+series_spec_is_enabled <- function(spec) {
+  if (is.null(spec)) {
+    return(FALSE)
+  }
+
+  enabled_value <- spec$enabled %||% TRUE
   isTRUE(enabled_value) || identical(as.character(enabled_value), "1")
 }
 
@@ -64,6 +77,7 @@ series_source_note_value <- function(spec) {
 
 default_source_note <- function(series_specs = NULL) {
   active_specs <- Filter(Negate(is.null), series_specs %||% list())
+  active_specs <- Filter(series_spec_is_enabled, active_specs)
 
   if (length(active_specs) == 0) {
     return("Source: custom query")
@@ -156,7 +170,7 @@ resolve_valid_multi_choice <- function(current_value, restored_value = NULL, cho
 
 seed_selectize_choices <- function(selected_values = character()) {
   selected_values <- unique(trimws(as.character(selected_values %||% character())))
-  selected_values <- selected_values[nzchar(selected_values)]
+  selected_values <- selected_values[!is.na(selected_values) & nzchar(selected_values)]
 
   if (length(selected_values) == 0) {
     character()
@@ -603,7 +617,6 @@ write_cached_series <- function(cache_key, data) {
 
 builder_series_ui <- function(index) {
   enabled_id <- series_input_id(index, "enabled")
-  source_id <- series_input_id(index, "source")
 
   tabPanel(
     title = paste("Series", index),
@@ -613,33 +626,12 @@ builder_series_ui <- function(index) {
         enabled_id,
         "Include this series in the chart",
         choices = c("Included" = "1", "Excluded" = "0"),
-        selected = "1",
+        selected = "0",
         justified = TRUE,
         checkIcon = list(yes = icon("check"))
       )
     ),
-    conditionalPanel(
-      condition = sprintf("input.%s == '1'", enabled_id),
-      selectInput(
-        source_id,
-        "Data source",
-        choices = builder_source_choices(),
-        selected = default_builder_source_value()
-      ),
-      uiOutput(series_source_controls_id(index)),
-      textInput(series_input_id(index, "label"), "Chart label shown in the legend", value = ""),
-      div(
-        class = "segmented-control",
-        radioGroupButtons(
-          series_input_id(index, "vis_type"),
-          "Chart style for this series",
-          choices = c("Line" = "line", "Bars" = "bar", "Dots" = "scatter"),
-          selected = "line",
-          justified = TRUE,
-          checkIcon = list(yes = icon("check"))
-        )
-      )
-    )
+    uiOutput(series_source_controls_id(index))
   )
 }
 
@@ -648,79 +640,171 @@ restored_series_spec <- function(session, index) {
   restored_specs[[as.character(index)]] %||% NULL
 }
 
-series_source_controls_ui <- function(input, session, index, source_value = "abs", restored_spec = NULL) {
-  provider_entry <- provider_registry_entry(source_value)
-  if (!is.null(provider_entry) && is.function(provider_entry$controls_ui)) {
-    return(provider_entry$controls_ui(input, session, index, restored_spec))
+restored_series_specs_version <- function(session) {
+  version_reactive <- session$userData$restored_series_specs_version
+
+  if (is.null(version_reactive) || !is.function(version_reactive)) {
+    return(0L)
   }
 
-  if (identical(source_value, "Analysis result") || identical(source_value, "analysis_result")) {
+  version_reactive()
+}
+
+bump_restored_series_specs_version <- function(session) {
+  version_reactive <- session$userData$restored_series_specs_version
+
+  if (is.null(version_reactive) || !is.function(version_reactive)) {
+    return(invisible(NULL))
+  }
+
+  current_version <- shiny::isolate(version_reactive())
+  version_reactive(current_version + 1L)
+
+  invisible(NULL)
+}
+
+series_spec_source_label <- function(spec) {
+  source_entry <- source_catalog_entry(spec$source %||% "")
+
+  if (is.null(source_entry) || nrow(source_entry) == 0) {
+    return(trimws(spec$source %||% "Unknown"))
+  }
+
+  trimws(source_entry$label[[1]] %||% spec$source %||% "Unknown")
+}
+
+series_spec_display_id <- function(spec) {
+  source_id <- provider_registry_source_id(spec$source %||% "")
+
+  if (identical(source_id, "fred")) {
+    return(trimws(spec$fred_series %||% ""))
+  }
+
+  if (identical(source_id, "dbnomics")) {
+    return(trimws(spec$dbnomics_series %||% ""))
+  }
+
+  if (identical(source_id, "rba")) {
+    values <- unique(trimws(as.character(spec$rba_series_id %||% character())))
+    values <- values[nzchar(values)]
+    return(paste(values, collapse = ", "))
+  }
+
+  if (identical(source_id, "abs")) {
+    values <- unique(trimws(as.character(spec$abs_id %||% character())))
+    values <- values[nzchar(values)]
+    return(paste(values, collapse = ", "))
+  }
+
+  if (identical(source_id, "analysis_result")) {
+    return(trimws(spec$analysis_result_key %||% ""))
+  }
+
+  trimws(spec$label %||% "")
+}
+
+series_spec_display_title <- function(spec) {
+  source_id <- provider_registry_source_id(spec$source %||% "")
+
+  if (identical(source_id, "fred")) {
+    title_text <- trimws(spec$fred_title %||% "")
+    if (nzchar(title_text)) {
+      return(title_text)
+    }
+
+    label_text <- trimws(spec$label %||% "")
+    if (nzchar(label_text)) {
+      return(label_text)
+    }
+
+    return(trimws(spec$fred_series %||% ""))
+  }
+
+  if (identical(source_id, "dbnomics")) {
+    title_text <- trimws(spec$dbnomics_name %||% "")
+    if (nzchar(title_text)) {
+      return(title_text)
+    }
+
+    label_text <- trimws(spec$label %||% "")
+    if (nzchar(label_text)) {
+      return(label_text)
+    }
+
+    return(trimws(spec$dbnomics_series %||% ""))
+  }
+
+  if (identical(source_id, "rba")) {
+    values <- unique(trimws(as.character(spec$rba_desc %||% character())))
+    values <- values[nzchar(values)]
+    return(paste(values, collapse = ", "))
+  }
+
+  if (identical(source_id, "abs")) {
+    values <- unique(trimws(as.character(spec$abs_desc %||% character())))
+    values <- values[nzchar(values)]
+    return(paste(values, collapse = ", "))
+  }
+
+  if (identical(source_id, "analysis_result")) {
+    return(trimws(spec$analysis_result_name %||% ""))
+  }
+
+  trimws(spec$label %||% "")
+}
+
+series_source_controls_ui <- function(input, session, index, source_value = "abs", restored_spec = NULL) {
+  if (is.null(restored_spec)) {
     return(
       div(
         class = "muted-copy",
-        restored_spec$analysis_result_name %||% "This slot contains an analysis result added from the workspace."
+        "Add a series from Data Search to populate this slot."
       )
     )
   }
 
-  tagList()
+  spec <- normalize_series_spec(restored_spec)
+  spec$index <- index
+  slot_enabled <- input[[series_input_id(index, "enabled")]]
+  slot_enabled <- if (is.null(slot_enabled) || length(slot_enabled) == 0) {
+    series_spec_is_enabled(spec)
+  } else {
+    series_enabled(input, index)
+  }
+  current_label <- trimws(input[[series_input_id(index, "label")]] %||% spec$label %||% "")
+  current_vis_type <- input[[series_input_id(index, "vis_type")]] %||% spec$vis_type %||% "line"
+  current_id <- series_spec_display_id(spec)
+  current_title <- series_spec_display_title(spec)
+
+  div(
+    class = "library-meta",
+    div(
+      class = "summary-chip-row",
+      summary_chip("Source", series_spec_source_label(spec)),
+      summary_chip("Series ID", if (nzchar(current_id)) current_id else "Not set")
+    ),
+    if (!isTRUE(slot_enabled)) tags$p(class = "muted-copy", "Currently excluded from chart."),
+    if (nzchar(current_title)) tags$p(class = "muted-copy", paste("Actual series:", current_title)),
+    textInput(series_input_id(index, "label"), "Chart label shown in the legend", value = current_label),
+    div(
+      class = "segmented-control",
+      radioGroupButtons(
+        series_input_id(index, "vis_type"),
+        "Chart style for this series",
+        choices = c("Line" = "line", "Bar" = "bar", "Point" = "scatter"),
+        selected = current_vis_type,
+        justified = TRUE,
+        checkIcon = list(yes = icon("check"))
+      )
+    )
+  )
 }
 
 register_series_dependencies <- function(input, output, session, index) {
-  provider_registry_register_dependencies(input, output, session, index)
-
   output[[series_source_controls_id(index)]] <- renderUI({
-    req(series_enabled(input, index))
-    source_value <- input[[series_input_id(index, "source")]] %||% "abs"
-    restored_spec_value <- restored_series_spec(session, index)
-
-    if (!is.null(restored_spec_value) && !identical(restored_spec_value$source %||% source_value, source_value)) {
-      restored_spec_value <- NULL
-    }
-
-    series_source_controls_ui(input, session, index, source_value, restored_spec_value)
+    restored_series_specs_version(session)
+    series_source_controls_ui(input, session, index, restored_spec = restored_series_spec(session, index))
   })
-
-  observeEvent(input[[series_input_id(index, "source")]], {
-    source_value <- input[[series_input_id(index, "source")]] %||% ""
-    restored_spec_value <- restored_series_spec(session, index)
-    source_input_name <- series_input_id(index, "source")
-
-    if (is.null(restored_spec_value)) {
-      return(invisible(NULL))
-    }
-
-    if (!identical(
-      provider_registry_source_id(restored_spec_value$source %||% ""),
-      provider_registry_source_id(source_value)
-    )) {
-      return(invisible(NULL))
-    }
-
-    apply_restored_controls <- function() {
-      current_source_value <- shiny::isolate(input[[source_input_name]] %||% "")
-      current_restored_spec <- restored_series_spec(session, index)
-
-      if (is.null(current_restored_spec)) {
-        return(invisible(NULL))
-      }
-
-      if (!identical(
-        provider_registry_source_id(current_restored_spec$source %||% ""),
-        provider_registry_source_id(current_source_value)
-      )) {
-        return(invisible(NULL))
-      }
-
-      provider_registry_restore_controls(session, index, current_restored_spec)
-      invisible(NULL)
-    }
-
-    session$onFlushed(function() {
-      apply_restored_controls()
-      later::later(apply_restored_controls, delay = 0.05)
-    }, once = TRUE)
-  }, ignoreInit = TRUE)
 }
 
 transform_input_id <- function(prefix, field) {
@@ -796,15 +880,17 @@ transform_profile_ui <- function(prefix, title, include_copy_button = FALSE) {
   do.call(tabPanel, c(list(title = title), controls))
 }
 
-transform_profile_from_input <- function(input, prefix) {
+transform_profile_from_input <- function(input, prefix, fallback_profile = default_transform_profile()) {
+  fallback_profile <- normalize_transform_profile(fallback_profile)
+
   list(
-    expression = trimws(input[[transform_input_id(prefix, "expression")]] %||% "X"),
-    moving_average = as.numeric(input[[transform_input_id(prefix, "moving_average")]] %||% 1),
-    rolling_sum = as.numeric(input[[transform_input_id(prefix, "rolling_sum")]] %||% 1),
-    lagged_value = as.numeric(input[[transform_input_id(prefix, "lagged_value")]] %||% 0),
-    lagged_pct = as.numeric(input[[transform_input_id(prefix, "lagged_pct")]] %||% 0),
-    lagged_ann = as.numeric(input[[transform_input_id(prefix, "lagged_ann")]] %||% 0),
-    subtract_series = as.character(input[[transform_input_id(prefix, "subtract_series")]] %||% "none")
+    expression = trimws(input[[transform_input_id(prefix, "expression")]] %||% fallback_profile$expression %||% "X"),
+    moving_average = as.numeric(input[[transform_input_id(prefix, "moving_average")]] %||% fallback_profile$moving_average %||% 1),
+    rolling_sum = as.numeric(input[[transform_input_id(prefix, "rolling_sum")]] %||% fallback_profile$rolling_sum %||% 1),
+    lagged_value = as.numeric(input[[transform_input_id(prefix, "lagged_value")]] %||% fallback_profile$lagged_value %||% 0),
+    lagged_pct = as.numeric(input[[transform_input_id(prefix, "lagged_pct")]] %||% fallback_profile$lagged_pct %||% 0),
+    lagged_ann = as.numeric(input[[transform_input_id(prefix, "lagged_ann")]] %||% fallback_profile$lagged_ann %||% 0),
+    subtract_series = as.character(input[[transform_input_id(prefix, "subtract_series")]] %||% fallback_profile$subtract_series %||% "none")
   )
 }
 
@@ -821,41 +907,25 @@ restore_transform_profile <- function(session, prefix, profile) {
 }
 
 series_spec_from_input <- function(input, index, transform_profile = default_transform_profile(), restored_spec = NULL) {
-  if (!series_enabled(input, index)) {
+  if (is.null(restored_spec)) {
     return(NULL)
   }
 
-  source_value <- input[[series_input_id(index, "source")]] %||% "abs"
-
-  provider_entry <- provider_registry_entry(source_value)
-  if (!is.null(provider_entry) && is.function(provider_entry$spec_from_input)) {
-    provider_spec <- provider_entry$spec_from_input(input, index, transform_profile, restored_spec)
-    if (!is.null(provider_spec)) {
-      return(provider_spec)
-    }
-  }
-
-  spec <- list(
-    index = index,
-    source = source_value,
-    label = trimws(input[[series_input_id(index, "label")]] %||% ""),
-    transform_profile = transform_profile,
-    vis_type = input[[series_input_id(index, "vis_type")]] %||% "line"
-  )
+  spec <- normalize_series_spec(restored_spec)
+  spec$index <- index
+  spec$enabled <- series_enabled(input, index, fallback = series_spec_is_enabled(spec))
+  spec$label <- trimws(input[[series_input_id(index, "label")]] %||% spec$label %||% "")
+  spec$transform_profile <- transform_profile
+  spec$vis_type <- input[[series_input_id(index, "vis_type")]] %||% spec$vis_type %||% "line"
 
   if (!nzchar(spec$label %||% "")) {
     spec$label <- default_series_label_from_id(spec)
   }
 
-  if (identical(source_value, "Analysis result") || identical(source_value, "analysis_result")) {
-    if (is.null(restored_spec) || !identical(restored_spec$source %||% "", "analysis_result")) {
-      return(NULL)
-    }
-
-    spec$source <- "analysis_result"
-    spec$analysis_result_key <- trimws(restored_spec$analysis_result_key %||% "")
-    spec$analysis_result_name <- trimws(restored_spec$analysis_result_name %||% "")
-    spec$analysis_data <- restored_spec$analysis_data %||% tibble::tibble()
+  if (identical(spec$source, "analysis_result")) {
+    spec$analysis_result_key <- trimws(restored_spec$analysis_result_key %||% spec$analysis_result_key %||% "")
+    spec$analysis_result_name <- trimws(restored_spec$analysis_result_name %||% spec$analysis_result_name %||% "")
+    spec$analysis_data <- restored_spec$analysis_data %||% spec$analysis_data %||% tibble::tibble()
 
     if (!nzchar(spec$analysis_result_key) || nrow(spec$analysis_data) == 0) {
       return(NULL)
@@ -865,7 +935,9 @@ series_spec_from_input <- function(input, index, transform_profile = default_tra
   spec
 }
 
-style_settings_from_input <- function(input) {
+style_settings_from_input <- function(input, fallback_style = NULL) {
+  fallback_style <- normalize_style_settings(fallback_style %||% default_style_settings())
+
   numeric_or_default <- function(value, default = NA_real_) {
     if (is.null(value) || length(value) == 0 || all(is.na(value))) {
       return(default)
@@ -888,56 +960,71 @@ style_settings_from_input <- function(input) {
   }
 
   list(
-    title = trimws(input$style_title %||% "Custom data view"),
-    subtitle = trimws(input$style_subtitle %||% ""),
-    y_axis_label = trimws(input$style_y_axis_label %||% "%"),
-    note = trimws(input$style_note %||% "Source: custom query"),
-    renderer = input$style_renderer %||% "plotly",
-    font_family = input$style_font_family %||% APP_CHART_FONTS[[1]],
-    legend = input$style_legend %||% "bottom",
-    palette = input$style_palette %||% APP_PALETTES[[1]],
-    date_format = input$style_date_format %||% APP_DATE_FORMATS[[2]],
-    x_labels = numeric_or_default(input$style_x_labels, 6),
-    auto_y_axis = !identical(input$style_auto_y_axis %||% "auto", "manual"),
-    y_min = numeric_or_default(input$style_y_min),
-    y_max = numeric_or_default(input$style_y_max),
-    y_breaks = numeric_or_default(input$style_y_breaks),
-    invert_y_axis = identical(input$style_invert_y_axis %||% "standard", "inverted"),
-    horizontal_1 = numeric_or_default(input$style_horizontal_1),
-    horizontal_2 = numeric_or_default(input$style_horizontal_2),
+    title = trimws(input$style_title %||% fallback_style$title %||% "Custom data view"),
+    subtitle = trimws(input$style_subtitle %||% fallback_style$subtitle %||% ""),
+    y_axis_label = trimws(input$style_y_axis_label %||% fallback_style$y_axis_label %||% "%"),
+    note = trimws(input$style_note %||% fallback_style$note %||% "Source: custom query"),
+    renderer = input$style_renderer %||% fallback_style$renderer %||% "plotly",
+    font_family = input$style_font_family %||% fallback_style$font_family %||% APP_CHART_FONTS[[1]],
+    legend = input$style_legend %||% fallback_style$legend %||% "bottom",
+    palette = input$style_palette %||% fallback_style$palette %||% APP_PALETTES[[1]],
+    date_format = input$style_date_format %||% fallback_style$date_format %||% APP_DATE_FORMATS[[2]],
+    x_labels = numeric_or_default(input$style_x_labels, fallback_style$x_labels %||% 6),
+    auto_y_axis = !identical(input$style_auto_y_axis %||% if (isTRUE(fallback_style$auto_y_axis)) "auto" else "manual", "manual"),
+    y_min = numeric_or_default(input$style_y_min, fallback_style$y_min %||% NA_real_),
+    y_max = numeric_or_default(input$style_y_max, fallback_style$y_max %||% NA_real_),
+    y_breaks = numeric_or_default(input$style_y_breaks, fallback_style$y_breaks %||% NA_real_),
+    invert_y_axis = identical(input$style_invert_y_axis %||% if (isTRUE(fallback_style$invert_y_axis)) "inverted" else "standard", "inverted"),
+    horizontal_1 = numeric_or_default(input$style_horizontal_1, fallback_style$horizontal_1 %||% NA_real_),
+    horizontal_2 = numeric_or_default(input$style_horizontal_2, fallback_style$horizontal_2 %||% NA_real_),
     horizontal_shading = c(
-      numeric_or_default(input$style_horizontal_shading_min),
-      numeric_or_default(input$style_horizontal_shading_max)
+      numeric_or_default(input$style_horizontal_shading_min, fallback_style$horizontal_shading[[1]] %||% NA_real_),
+      numeric_or_default(input$style_horizontal_shading_max, fallback_style$horizontal_shading[[2]] %||% NA_real_)
     ),
-    vertical_1 = date_or_default(input$style_vertical_1),
-    vertical_2 = date_or_default(input$style_vertical_2),
-    recession_shading = input$style_recession_shading %||% "none",
-    export_width = numeric_or_default(input$export_width, 8),
-    export_height = numeric_or_default(input$export_height, 7)
+    vertical_1 = date_or_default(input$style_vertical_1, fallback_style$vertical_1 %||% as.Date(NA)),
+    vertical_2 = date_or_default(input$style_vertical_2, fallback_style$vertical_2 %||% as.Date(NA)),
+    recession_shading = input$style_recession_shading %||% fallback_style$recession_shading %||% "none",
+    export_width = numeric_or_default(input$export_width, fallback_style$export_width %||% 8),
+    export_height = numeric_or_default(input$export_height, fallback_style$export_height %||% 7)
   )
 }
 
-builder_state_from_input <- function(input, session = NULL) {
+builder_state_from_input <- function(input, session = NULL, fallback_state = NULL) {
+  fallback_state <- normalize_chart_state(fallback_state %||% default_builder_state())
   year_bounds <- default_year_bounds()
-  start_date <- as.Date(input$start_date %||% year_bounds$start_date)
-  end_date <- as.Date(input$end_date %||% year_bounds$end_date)
+  fallback_dates <- normalize_date_range(fallback_state$date_range %||% c(year_bounds$start_date, year_bounds$end_date))
+  start_date <- as.Date(input$start_date %||% fallback_dates[[1]] %||% year_bounds$start_date)
+  end_date <- as.Date(input$end_date %||% fallback_dates[[2]] %||% year_bounds$end_date)
 
   list(
     date_range = normalize_date_range(c(start_date, end_date)),
-    show_table = identical(as.character(input$viewData1), "1"),
+    show_table = if (is.null(input$viewData1) || length(input$viewData1) == 0) {
+      isTRUE(fallback_state$show_table)
+    } else {
+      identical(as.character(input$viewData1), "1")
+    },
     series = lapply(
       seq_len(MAX_SERIES),
       function(index) {
+        restored_spec <- if (is.null(session)) NULL else restored_series_spec(session, index)
         series_spec_from_input(
           input,
           index,
-          transform_profile_from_input(input, paste0("transform_", index)),
-          restored_spec = if (is.null(session)) NULL else restored_series_spec(session, index)
+          transform_profile_from_input(
+            input,
+            paste0("transform_", index),
+            fallback_profile = restored_spec$transform_profile %||% fallback_state$series[[index]]$transform_profile %||% default_transform_profile()
+          ),
+          restored_spec = restored_spec
         )
       }
     ),
-    all_series_transform = transform_profile_from_input(input, "transform_all"),
-    style = style_settings_from_input(input)
+    all_series_transform = transform_profile_from_input(
+      input,
+      "transform_all",
+      fallback_profile = fallback_state$all_series_transform %||% default_transform_profile()
+    ),
+    style = style_settings_from_input(input, fallback_style = fallback_state$style)
   )
 }
 
@@ -1000,6 +1087,7 @@ normalize_series_spec <- function(spec) {
   normalized_spec <- list(
     index = as.integer(spec$index),
     source = spec$source %||% "abs",
+    enabled = if (is.null(spec$enabled)) TRUE else series_spec_is_enabled(spec),
     label = trimws(spec$label %||% ""),
     transform_profile = normalize_transform_profile(spec$transform_profile),
     vis_type = spec$vis_type %||% "line"
@@ -1134,7 +1222,7 @@ filter_series_date_range <- function(data, date_range) {
 }
 
 latest_chart_observation_date <- function(chart_state) {
-  specs <- Filter(Negate(is.null), normalize_chart_state(chart_state)$series)
+  specs <- Filter(series_spec_is_enabled, Filter(Negate(is.null), normalize_chart_state(chart_state)$series))
 
   if (length(specs) == 0) {
     return(as.Date(NA))
@@ -1309,7 +1397,7 @@ apply_series_difference <- function(data, reference_data, reference_index) {
 }
 
 build_chart_data <- function(chart_state) {
-  specs <- Filter(Negate(is.null), chart_state$series)
+  specs <- Filter(series_spec_is_enabled, Filter(Negate(is.null), chart_state$series))
   messages <- character()
 
   if (length(specs) == 0) {
@@ -2287,25 +2375,26 @@ restore_series_spec <- function(session, index, spec = NULL, restore_token = NUL
   restored_specs <- session$userData$restored_series_specs %||% list()
   restored_specs[[as.character(index)]] <- if (is.null(spec)) NULL else normalize_series_spec(spec)
   session$userData$restored_series_specs <- restored_specs
+  bump_restored_series_specs_version(session)
 
-  updateRadioGroupButtons(session, series_input_id(index, "enabled"), selected = if (is.null(spec)) "0" else "1")
+  updateRadioGroupButtons(
+    session,
+    series_input_id(index, "enabled"),
+    selected = if (is.null(spec)) {
+      "0"
+    } else if (series_spec_is_enabled(spec)) {
+      "1"
+    } else {
+      "0"
+    }
+  )
 
   if (is.null(spec)) {
     return(invisible(NULL))
   }
 
-  updateSelectInput(session, series_input_id(index, "source"), selected = spec$source)
   updateTextInput(session, series_input_id(index, "label"), value = spec$label %||% "")
   updateRadioGroupButtons(session, series_input_id(index, "vis_type"), selected = spec$vis_type %||% "line")
-
-  session$onFlushed(function() {
-    current_restore_token <- session$userData$builder_restore_token %||% 0L
-    if (!identical(current_restore_token, expected_restore_token)) {
-      return(invisible(NULL))
-    }
-
-    provider_registry_restore_controls(session, index, spec)
-  }, once = TRUE)
 
   invisible(NULL)
 }
