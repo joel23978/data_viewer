@@ -1122,6 +1122,9 @@ init_search_builder_handlers <- function(
     apply_builder_state,
     run_with_status
 ) {
+  selected_search_result_id <- reactiveVal("")
+  selected_search_result_snapshot <- reactiveVal(NULL)
+
   build_search_preview_style <- function(preview_state, preview_payload) {
     preview_style <- preview_state$style
     preview_style$title <- ""
@@ -1187,11 +1190,62 @@ init_search_builder_handlers <- function(
     )
   }, server = TRUE)
 
-  selected_search_result <- reactive({
+  observeEvent(
+    {
+      list(
+        input$search_query,
+        input$search_source_filter,
+        input$search_type_filter,
+        input$search_location_filter,
+        input$search_frequency_filter,
+        input$search_fred_mode,
+        input$search_dbnomics_provider,
+        input$search_dbnomics_dataset
+      )
+    },
+    {
+      selected_search_result_id("")
+      selected_search_result_snapshot(NULL)
+    },
+    ignoreInit = TRUE
+  )
+
+  observeEvent(input$search_results_table_rows_selected, {
     selected_row <- input$search_results_table_rows_selected
     search_rows <- search_results()
 
-    if (length(selected_row) == 0 || nrow(search_rows) == 0) {
+    if (length(selected_row) == 0 || nrow(search_rows) == 0 || selected_row[[1]] > nrow(search_rows)) {
+      selected_search_result_id("")
+      selected_search_result_snapshot(NULL)
+      return(invisible(NULL))
+    }
+
+    selected_result <- search_rows[selected_row[[1]], , drop = FALSE]
+    selected_search_result_id(trimws(as.character(selected_result$search_id[[1]] %||% "")))
+    selected_search_result_snapshot(selected_result)
+  }, ignoreInit = TRUE)
+
+  selected_search_result <- reactive({
+    search_rows <- search_results()
+    selected_id <- trimws(as.character(selected_search_result_id() %||% ""))
+
+    if (nzchar(selected_id) && nrow(search_rows) > 0 && "search_id" %in% names(search_rows)) {
+      matched_rows <- search_rows %>%
+        filter(search_id == selected_id)
+
+      if (nrow(matched_rows) > 0) {
+        return(matched_rows[1, , drop = FALSE])
+      }
+    }
+
+    selected_snapshot <- selected_search_result_snapshot()
+    if (!is.null(selected_snapshot) && nrow(selected_snapshot) > 0) {
+      return(selected_snapshot)
+    }
+
+    selected_row <- input$search_results_table_rows_selected
+
+    if (length(selected_row) == 0 || nrow(search_rows) == 0 || selected_row[[1]] > nrow(search_rows)) {
       return(NULL)
     }
 

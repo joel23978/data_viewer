@@ -21,8 +21,8 @@ local_mock_abs_data <- function(env = parent.frame()) {
         series_name <- matched_row$series[[1]] %||% series_id
 
         tibble::tibble(
-          date = seq(as.Date("2020-01-01"), by = "quarter", length.out = 16),
-          value = seq_len(16) + (index - 1) * 10,
+          date = seq(as.Date("2020-01-01"), by = "quarter", length.out = 24),
+          value = seq_len(24) + (index - 1) * 10,
           name = series_name
         )
       })

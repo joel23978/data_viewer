@@ -470,7 +470,7 @@ provider_fred_spec_from_input <- function(input, index, transform_profile = defa
     label = trimws(input[[series_input_id(index, "label")]] %||% ""),
     transform_profile = transform_profile,
     vis_type = input[[series_input_id(index, "vis_type")]] %||% "line",
-    fred_series = trimws(input[[series_input_id(index, "fred_series")]] %||% ""),
+    fred_series = trimws(input[[series_input_id(index, "fred_series")]] %||% restored_spec$fred_series %||% ""),
     fred_vintage_mode = input[[series_input_id(index, "fred_vintage_mode")]] %||% restored_spec$fred_vintage_mode %||% "current",
     fred_vintage_date = parse_vintage_date(input[[series_input_id(index, "fred_vintage_date")]] %||% restored_spec$fred_vintage_date %||% NA)
   )
@@ -795,12 +795,16 @@ provider_rba_register_dependencies <- function(input, output, session, index) {
 
     table_value <- input[[series_input_id(index, "rba_table")]]
     series_choices <- rba_series[[table_value]] %||% character()
+    restored_spec_value <- restored_series_spec(session, index)
+    selected_series <- input[[series_input_id(index, "rba_desc")]] %||% restored_spec_value$rba_desc %||% character()
+    selected_series <- unique(as.character(selected_series))
+    selected_series <- selected_series[selected_series %in% series_choices]
 
     updateSelectizeInput(
       session,
       series_input_id(index, "rba_desc"),
       choices = series_choices,
-      selected = character(),
+      selected = selected_series,
       server = TRUE
     )
   }, ignoreInit = FALSE)

@@ -311,6 +311,67 @@ test_that("main server can add a FRED search result to the builder", {
   })
 })
 
+test_that("main server preserves the selected search result across first-load refreshes", {
+  withr::local_envvar(FRED_API_KEY = "test-key")
+  original_fred_search_remote <- fred_search_remote
+  on.exit(assign("fred_search_remote", original_fred_search_remote, envir = .GlobalEnv), add = TRUE)
+
+  assign(
+    "fred_search_remote",
+    function(query, frequency_filter = "all", search_type = "full_text", limit = 100) {
+      tibble::tibble(
+        id = "RENTINDEX",
+        title = "Rent of primary residence",
+        frequency = "Monthly",
+        observation_start = as.Date("2010-01-01"),
+        observation_end = as.Date("2026-01-01"),
+        units = "Index",
+        seasonal_adjustment = "Not Seasonally Adjusted",
+        notes = "Synthetic search response used for selection stability tests.",
+        popularity = 42
+      )
+    },
+    envir = .GlobalEnv
+  )
+
+  shiny::testServer(build_main_server, {
+    session$setInputs(
+      main_tabs = "search",
+      search_query = "rent",
+      search_source_filter = "all",
+      search_type_filter = "all",
+      search_location_filter = "all",
+      search_fred_mode = "full_text",
+      search_frequency_filter = "all"
+    )
+    session$flushReact()
+
+    expect_equal(nrow(search_results()), 1)
+    expect_equal(search_results()$source[[1]], "FRED")
+
+    session$setInputs(search_results_table_rows_selected = 1, search_target_series = "2")
+    session$flushReact()
+
+    expect_equal(selected_search_result()$source[[1]], "FRED")
+    expect_equal(search_result_series_spec(selected_search_result(), 2)$fred_series, "RENTINDEX")
+
+    ensure_search_index_loaded()
+    session$flushReact()
+
+    expect_gt(nrow(search_results()), 1)
+    expect_equal(selected_search_result()$source[[1]], "FRED")
+    expect_equal(search_result_series_spec(selected_search_result(), 2)$fred_series, "RENTINDEX")
+
+    session$setInputs(search_add_series = 1)
+    session$flushReact()
+    session$flushReact()
+
+    expect_equal(builder_state()$series[[2]]$source, "FRED")
+    expect_equal(builder_state()$series[[2]]$fred_series, "RENTINDEX")
+    expect_equal(builder_state()$series[[2]]$label, "Rent of primary residence")
+  })
+})
+
 test_that("main server can add a DBnomics search result to the builder", {
   original_dbnomics_search_remote <- dbnomics_search_remote
   on.exit(assign("dbnomics_search_remote", original_dbnomics_search_remote, envir = .GlobalEnv), add = TRUE)

@@ -9,11 +9,9 @@ Fill this in before running the review.
   - Build charts from up to four series, apply transforms, and format/export the result.
   - Run analysis workflows such as correlations, regression, forecasting, seasonal adjustment, HP filter, and Kalman filter.
   - Save charts to a local library and assemble/export presentations.
-- Current external data sources: ABS CPI/local CPI data, ABS via readabs metadata/data, RBA via readrba, FRED via fredr, DBnomics via rdbnomics, recession shading data from FRED-derived local data.
+- Current external data sources: ABS via readabs metadata/data, RBA via readrba, FRED via fredr, DBnomics via rdbnomics, recession shading data from FRED-derived local data.
 - Planned future data sources: Not explicitly defined in code comments, but the current architecture implies future additions of further external macro/financial series providers and local metadata-backed sources.
 - Known performance pain points:
-  - Historically slow Data Search startup and ABS search.
-  - Heavy startup caused by global sourcing and metadata loading.
   - Large reactive surface area in the main server and restore logic.
 - Known ingestion pain points:
   - Source-specific selection chains, especially ABS.
@@ -53,7 +51,6 @@ This is a first pass only. Do not propose a full rewrite plan unless the code st
 Focus on:
 - runtime performance and responsiveness
 - UX friction
-- speed and robustness of external data ingestion
 - how easily new external data sources can be added
 - architectural or maintenance issues that will block the above
 

@@ -120,7 +120,7 @@ test_that("presentation-selected preview takes precedence and load uses selected
     )
   )
 
-  shiny::testServer(build_main_server, {
+  suppressWarnings(shiny::testServer(build_main_server, {
     ensure_chart_library_loaded()
     ensure_presentation_library_loaded()
 
@@ -137,11 +137,11 @@ test_that("presentation-selected preview takes precedence and load uses selected
     session$flushReact()
 
     expect_equal(builder_state()$style$title, second_state$style$title)
-  })
+  }))
 })
 
 test_that("main server suppresses stale restore callbacks from earlier apply_builder_state calls", {
-  shiny::testServer(build_main_server, {
+  suppressWarnings(shiny::testServer(build_main_server, {
     first_state <- build_restore_test_state()
     first_state$style$title <- "First restore"
     first_state$series[[2]]$label <- "First restore series"
@@ -157,7 +157,7 @@ test_that("main server suppresses stale restore callbacks from earlier apply_bui
 
     expect_equal(builder_state()$style$title, second_state$style$title)
     expect_equal(builder_state()$series[[2]]$label, second_state$series[[2]]$label)
-  })
+  }))
 })
 
 test_that("ABS source controls render restored saved selections", {
@@ -391,6 +391,73 @@ test_that("builder restore updates plotted data when loading different charts", 
   })
 })
 
+test_that("main server restores saved FRED vintage settings", {
+  temp_library <- tempfile(fileext = ".rds")
+  temp_presentation_library <- tempfile(fileext = ".rds")
+  old_option <- getOption("data_viewer.chart_library_path")
+  old_presentation_option <- getOption("data_viewer.chart_presentation_library_path")
+  original_fred_data <- fred_data
+  on.exit(options(data_viewer.chart_library_path = old_option), add = TRUE)
+  on.exit(options(data_viewer.chart_presentation_library_path = old_presentation_option), add = TRUE)
+  on.exit(assign("fred_data", original_fred_data, envir = .GlobalEnv), add = TRUE)
+  options(data_viewer.chart_library_path = temp_library)
+  options(data_viewer.chart_presentation_library_path = temp_presentation_library)
+
+  assign(
+    "fred_data",
+    function(series, start_date = NULL, end_date = NULL, realtime_start = NULL, realtime_end = NULL, vintage_dates = NULL, name_override = NULL) {
+      series_name <- if (!is.null(name_override) && nzchar(name_override)) name_override else series
+      tibble::tibble(
+        date = seq(as.Date("2020-01-01"), by = "month", length.out = 24),
+        value = seq_len(24),
+        name = series_name
+      )
+    },
+    envir = .GlobalEnv
+  )
+
+  shiny::testServer(build_main_server, {
+    suppressWarnings({
+      session$setInputs(
+        series_2_enabled = TRUE,
+        series_2_source = "FRED",
+        series_2_fred_series = "UNRATE",
+        series_2_fred_vintage_mode = "compare",
+        series_2_fred_vintage_date = "2020-01-01",
+        series_2_label = "Unemployment vintages",
+        library_title = "Vintage chart"
+      )
+      session$flushReact()
+    })
+
+    expect_equal(builder_state()$series[[2]]$fred_vintage_mode, "compare")
+    expect_equal(as.Date(builder_state()$series[[2]]$fred_vintage_date), as.Date("2020-01-01"))
+    expect_gt(nrow(chart_data()), 0)
+
+    suppressWarnings({
+      session$setInputs(save_chart = 1)
+      session$flushReact()
+    })
+
+    suppressWarnings({
+      session$setInputs(
+        series_2_fred_vintage_mode = "current",
+        style_title = "Mutated"
+      )
+      session$flushReact()
+    })
+
+    session$setInputs(library_table_rows_selected = 1)
+    suppressWarnings({
+      session$setInputs(load_chart = 1)
+      session$flushReact()
+    })
+
+    expect_equal(builder_state()$series[[2]]$fred_vintage_mode, "compare")
+    expect_equal(as.Date(builder_state()$series[[2]]$fred_vintage_date), as.Date("2020-01-01"))
+  })
+})
+
 test_that("ABS search add-to-builder restores dependent chain", {
   shiny::testServer(build_main_server, {
     ensure_search_index_loaded()
@@ -453,7 +520,7 @@ test_that("ABS saved-chart load restores dependent chain", {
   )
   write_chart_library(upsert_chart_record(read_chart_library(), saved_record))
 
-  shiny::testServer(build_main_server, {
+  suppressWarnings(shiny::testServer(build_main_server, {
     ensure_chart_library_loaded()
     session$setInputs(library_table_rows_selected = 1)
     session$flushReact()
@@ -469,7 +536,7 @@ test_that("ABS saved-chart load restores dependent chain", {
     expect_equal(builder_state()$series[[2]]$abs_id, abs_spec$abs_id)
     expect_equal(restored_series_spec(session, 2)$abs_catalogue, abs_spec$abs_catalogue)
     expect_equal(restored_series_spec(session, 2)$abs_desc, abs_spec$abs_desc)
-  })
+  }))
 })
 
 test_that("upstream ABS selector change after restore re-resolves downstream cleanly", {

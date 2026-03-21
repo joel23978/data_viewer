@@ -680,6 +680,47 @@ register_series_dependencies <- function(input, output, session, index) {
 
     series_source_controls_ui(input, session, index, source_value, restored_spec_value)
   })
+
+  observeEvent(input[[series_input_id(index, "source")]], {
+    source_value <- input[[series_input_id(index, "source")]] %||% ""
+    restored_spec_value <- restored_series_spec(session, index)
+    source_input_name <- series_input_id(index, "source")
+
+    if (is.null(restored_spec_value)) {
+      return(invisible(NULL))
+    }
+
+    if (!identical(
+      provider_registry_source_id(restored_spec_value$source %||% ""),
+      provider_registry_source_id(source_value)
+    )) {
+      return(invisible(NULL))
+    }
+
+    apply_restored_controls <- function() {
+      current_source_value <- shiny::isolate(input[[source_input_name]] %||% "")
+      current_restored_spec <- restored_series_spec(session, index)
+
+      if (is.null(current_restored_spec)) {
+        return(invisible(NULL))
+      }
+
+      if (!identical(
+        provider_registry_source_id(current_restored_spec$source %||% ""),
+        provider_registry_source_id(current_source_value)
+      )) {
+        return(invisible(NULL))
+      }
+
+      provider_registry_restore_controls(session, index, current_restored_spec)
+      invisible(NULL)
+    }
+
+    session$onFlushed(function() {
+      apply_restored_controls()
+      later::later(apply_restored_controls, delay = 0.05)
+    }, once = TRUE)
+  }, ignoreInit = TRUE)
 }
 
 transform_input_id <- function(prefix, field) {

@@ -54,6 +54,79 @@ test_that("source catalog drives builder sources and search filters", {
   expect_false(source_catalog_supports_series_source("Unknown legacy source"))
 })
 
+test_that("FRED source controls render the restored series ID", {
+  withr::local_envvar(FRED_API_KEY = "test-key")
+  original_fred_vintage_dates <- fred_vintage_dates
+  on.exit(assign("fred_vintage_dates", original_fred_vintage_dates, envir = .GlobalEnv), add = TRUE)
+
+  assign(
+    "fred_vintage_dates",
+    function(series, force = FALSE) {
+      as.Date(c("2019-01-01", "2020-01-01"))
+    },
+    envir = .GlobalEnv
+  )
+
+  fred_ui <- series_source_controls_ui(
+    input = list(),
+    session = NULL,
+    index = 2,
+    source_value = "FRED",
+    restored_spec = list(
+      source = "FRED",
+      fred_series = "UNRATE",
+      fred_vintage_mode = "compare",
+      fred_vintage_date = as.Date("2020-01-01")
+    )
+  )
+
+  expect_true(grepl("UNRATE", as.character(fred_ui), fixed = TRUE))
+  expect_true(grepl("2020-01-01", as.character(fred_ui), fixed = TRUE))
+  expect_true(grepl("Vintage mode", as.character(fred_ui), fixed = TRUE))
+})
+
+test_that("FRED series supports current, historical, and compare vintage modes", {
+  original_fred_data <- fred_data
+  on.exit(assign("fred_data", original_fred_data, envir = .GlobalEnv), add = TRUE)
+
+  assign(
+    "fred_data",
+    function(series, start_date = NULL, end_date = NULL, realtime_start = NULL, realtime_end = NULL, vintage_dates = NULL, name_override = NULL) {
+      series_name <- if (!is.null(name_override) && nzchar(name_override)) name_override else series
+      tibble::tibble(
+        date = seq(as.Date("2020-01-01"), by = "month", length.out = 3),
+        value = seq_len(3),
+        name = series_name
+      )
+    },
+    envir = .GlobalEnv
+  )
+
+  current_spec <- list(
+    index = 1,
+    source = "FRED",
+    fred_series = "UNRATE",
+    fred_vintage_mode = "current",
+    transform_profile = default_transform_profile(),
+    vis_type = "line"
+  )
+  historical_spec <- current_spec
+  historical_spec$fred_vintage_mode <- "historical"
+  historical_spec$fred_vintage_date <- as.Date("2020-01-01")
+  compare_spec <- historical_spec
+  compare_spec$fred_vintage_mode <- "compare"
+
+  current_data <- query_series_history(current_spec)
+  historical_data <- query_series_history(historical_spec)
+  compare_data <- query_series_history(compare_spec)
+
+  expect_equal(unique(current_data$name), "UNRATE")
+  expect_true(any(grepl("2020-01-01 vintage", historical_data$name, fixed = TRUE)))
+  expect_equal(length(unique(compare_data$name)), 2)
+  expect_true(any(grepl("current", compare_data$name, fixed = TRUE)))
+  expect_true(any(grepl("2020-01-01 vintage", compare_data$name, fixed = TRUE)))
+})
+
 test_that("RBA registry controls and fetch dispatch round-trip cleanly", {
   rba_row <- rba_browse_data %>%
     distinct(table_no, description, series_id, frequency) %>%
