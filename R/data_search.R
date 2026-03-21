@@ -371,11 +371,18 @@ parse_dbnomics_series_id <- function(query) {
 }
 
 dbnomics_search_cache_key <- function(query, provider_code = "", dataset_code = "", limit = 100) {
+  numeric_limit <- suppressWarnings(as.numeric(limit %||% NA_real_))
+  limit_key <- if (length(numeric_limit) == 0 || all(is.na(numeric_limit)) || !is.finite(numeric_limit[[1]])) {
+    "all"
+  } else {
+    as.character(as.integer(numeric_limit[[1]]))
+  }
+
   paste(
     clean_search_text(query),
     trimws(provider_code %||% ""),
     trimws(dataset_code %||% ""),
-    as.integer(limit %||% 100),
+    limit_key,
     sep = "::"
   )
 }
@@ -518,9 +525,10 @@ dbnomics_search_remote <- function(query, provider_code = NULL, dataset_code = N
 
   resolved_provider <- trimws((if (is.null(search_scope)) NULL else search_scope$provider_code) %||% provider_code %||% "")
   resolved_dataset <- trimws((if (is.null(search_scope)) NULL else search_scope$dataset_code) %||% dataset_code %||% "")
-  resolved_query <- remote_search_query(
+  resolved_query <- trimws(remote_search_query(
     trimws((if (is.null(search_scope)) NULL else search_scope$series_query) %||% query %||% "")
-  )
+  ))
+  resolved_query <- if (nzchar(resolved_query)) resolved_query else NULL
 
   search_results <- rdbnomics::rdb_series(
     provider_code = resolved_provider,
@@ -534,8 +542,14 @@ dbnomics_search_remote <- function(query, provider_code = NULL, dataset_code = N
     return(tibble::tibble())
   }
 
-  tibble::as_tibble(search_results) %>%
-    dplyr::slice_head(n = limit)
+  search_results <- tibble::as_tibble(search_results)
+
+  if (is.null(limit) || length(limit) == 0 || !is.finite(suppressWarnings(as.numeric(limit))[1])) {
+    return(search_results)
+  }
+
+  search_results %>%
+    dplyr::slice_head(n = as.integer(limit))
 }
 
 format_dbnomics_search_results <- function(search_results, provider_code, dataset_code, query) {
@@ -546,6 +560,15 @@ format_dbnomics_search_results <- function(search_results, provider_code, datase
   parsed_id <- parse_dbnomics_series_id(query %||% "")
   exact_id <- if (is.null(parsed_id)) "" else parsed_id$exact_id
   query_text <- trimws(query %||% "")
+  has_query_text <- nzchar(query_text)
+  name_match_score <- if (has_query_text) {
+    stringr::str_detect(
+      stringr::str_to_lower(search_results$series_name %||% ""),
+      stringr::fixed(stringr::str_to_lower(query_text))
+    ) * 15
+  } else {
+    rep(0, nrow(search_results))
+  }
 
   search_results %>%
     mutate(
@@ -554,9 +577,9 @@ format_dbnomics_search_results <- function(search_results, provider_code, datase
       full_id = paste(provider_code, dataset_code, series_code, sep = "/"),
       score = 0 +
         if_else(full_id == exact_id, 100, 0) +
-        if_else(series_code == query_text, 60, 0) +
-        if_else(series_name == query_text, 40, 0) +
-        if_else(stringr::str_detect(stringr::str_to_lower(series_name), stringr::fixed(stringr::str_to_lower(query_text))), 15, 0)
+        if_else(has_query_text & series_code == query_text, 60, 0) +
+        if_else(has_query_text & series_name == query_text, 40, 0) +
+        name_match_score
     ) %>%
     transmute(
       search_id = paste("dbnomics", full_id, sep = "::"),
@@ -603,10 +626,16 @@ search_dbnomics_series <- function(query, provider_code = NULL, dataset_code = N
   dataset_text <- trimws(dataset_code %||% "")
 
   if (!nzchar(cleaned_query)) {
-    return(empty_search_response())
+    if (!nzchar(provider_text) || !nzchar(dataset_text)) {
+      return(
+        empty_search_response(
+          status = "For DBnomics, enter a full series ID or provide both provider and dataset codes."
+        )
+      )
+    }
   }
 
-  if (is.null(parsed_id) && (!nzchar(provider_text) || !nzchar(dataset_text))) {
+  if (nzchar(cleaned_query) && is.null(parsed_id) && (!nzchar(provider_text) || !nzchar(dataset_text))) {
     return(
       empty_search_response(
         status = "For DBnomics, enter a full series ID or provide both provider and dataset codes."
@@ -633,7 +662,11 @@ search_dbnomics_series <- function(query, provider_code = NULL, dataset_code = N
 
       empty_search_response(
         results = format_dbnomics_search_results(remote_results, resolved_provider, resolved_dataset, cleaned_query),
-        status = sprintf("Showing live DBnomics results for %s / %s.", resolved_provider, resolved_dataset)
+        status = if (nzchar(cleaned_query)) {
+          sprintf("Showing live DBnomics results for %s / %s.", resolved_provider, resolved_dataset)
+        } else {
+          sprintf("Showing all live DBnomics series for %s / %s.", resolved_provider, resolved_dataset)
+        }
       )
     },
     error = function(error) {
@@ -691,7 +724,35 @@ search_remote_provider_responses <- function(query, source_filter = "all", searc
   }
 
   if (!nzchar(cleaned_query)) {
-    return(setNames(replicate(length(remote_sources), empty_search_response(), simplify = FALSE), remote_sources))
+    return(setNames(
+      lapply(remote_sources, function(source_value) {
+        provider_id <- provider_registry_source_id(source_value)
+        search_context <- modifyList(
+          list(limit = limit),
+          search_contexts[[provider_id]] %||% list()
+        )
+
+        if (identical(search_context$enabled, FALSE)) {
+          return(empty_search_response())
+        }
+
+        allow_blank_query <- identical(provider_id, "dbnomics") &&
+          length(remote_sources) == 1 &&
+          isTRUE(search_context$browse_dataset)
+
+        if (!isTRUE(allow_blank_query)) {
+          return(empty_search_response())
+        }
+
+        provider_registry_remote_search_response(
+          source_value = source_value,
+          query = "",
+          search_context = modifyList(search_context, list(allow_blank_query = TRUE)),
+          force = force
+        )
+      }),
+      remote_sources
+    ))
   }
 
   setNames(

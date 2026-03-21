@@ -270,6 +270,53 @@ test_that("DBnomics API search results are formatted and cached for the search t
   expect_equal(second_response$results$search_id[[1]], first_response$results$search_id[[1]])
 })
 
+test_that("DBnomics dataset browse returns all series for a selected provider and dataset", {
+  original_dbnomics_search_remote <- dbnomics_search_remote
+  on.exit(assign("dbnomics_search_remote", original_dbnomics_search_remote, envir = .GlobalEnv), add = TRUE)
+
+  fetch_args <- list()
+  rm(list = ls(envir = data_search_env), envir = data_search_env)
+
+  assign(
+    "dbnomics_search_remote",
+    function(query, provider_code = NULL, dataset_code = NULL, limit = 100) {
+      fetch_args <<- list(
+        query = query,
+        provider_code = provider_code,
+        dataset_code = dataset_code,
+        limit = limit
+      )
+
+      tibble::tibble(
+        series_code = c("NGDP_RPCH", "PCPIPCH"),
+        series_name = c("Real GDP growth", "Inflation")
+      )
+    },
+    envir = .GlobalEnv
+  )
+
+  response <- search_remote_provider_responses(
+    query = "",
+    source_filter = "DBnomics",
+    search_contexts = list(
+      dbnomics = list(
+        provider_code = "IMF",
+        dataset_code = "WEO:2024-10",
+        browse_dataset = TRUE
+      )
+    ),
+    limit = 100
+  )[["DBnomics"]]
+
+  expect_equal(fetch_args$query, "")
+  expect_equal(fetch_args$provider_code, "IMF")
+  expect_equal(fetch_args$dataset_code, "WEO:2024-10")
+  expect_true(is.infinite(fetch_args$limit))
+  expect_equal(nrow(response$results), 2)
+  expect_equal(response$results$title[[1]], "Inflation")
+  expect_match(response$status, "Showing all live DBnomics series", fixed = TRUE)
+})
+
 test_that("main server can add a FRED search result to the builder", {
   withr::local_envvar(FRED_API_KEY = "test-key")
   original_fred_search_remote <- fred_search_remote
@@ -489,6 +536,48 @@ test_that("main server can add a DBnomics search result to the builder", {
     expect_equal(builder_state()$series[[4]]$source, "dbnomics")
     expect_equal(builder_state()$series[[4]]$dbnomics_series, "IMF/WEO:2024-10/NGDP_RPCH")
     expect_equal(builder_state()$series[[4]]$label, "Real GDP growth")
+  })
+})
+
+test_that("main server lists all DBnomics dataset series when provider and dataset are selected", {
+  original_dbnomics_search_remote <- dbnomics_search_remote
+  on.exit(assign("dbnomics_search_remote", original_dbnomics_search_remote, envir = .GlobalEnv), add = TRUE)
+
+  assign(
+    "dbnomics_search_remote",
+    function(query, provider_code = NULL, dataset_code = NULL, limit = 100) {
+      expect_equal(query, "")
+      expect_equal(provider_code, "IMF")
+      expect_equal(dataset_code, "WEO:2024-10")
+      expect_true(is.infinite(limit))
+
+      tibble::tibble(
+        series_code = c("NGDP_RPCH", "PCPIPCH"),
+        series_name = c("Real GDP growth", "Inflation")
+      )
+    },
+    envir = .GlobalEnv
+  )
+
+  shiny::testServer(build_main_server, {
+    session$setInputs(
+      main_tabs = "search",
+      search_query = "",
+      search_source_filter = "DBnomics",
+      search_type_filter = "all",
+      search_location_filter = "INTL",
+      search_frequency_filter = "all",
+      search_dbnomics_provider = "IMF"
+    )
+    session$flushReact()
+
+    session$setInputs(search_dbnomics_dataset = "WEO:2024-10")
+    session$flushReact()
+    session$flushReact()
+
+    expect_equal(nrow(search_results()), 2)
+    expect_true(all(search_results()$source == "DBnomics"))
+    expect_equal(sort(search_results()$title), c("Inflation", "Real GDP growth"))
   })
 })
 

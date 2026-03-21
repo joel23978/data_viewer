@@ -2466,7 +2466,11 @@ build_main_server <- function(input, output, session) {
     loading_message <- trimws(search_loading_message() %||% "")
     source_filter <- input$search_source_filter %||% "all"
     query_text <- trimws(search_query_debounced())
-    include_remote_status <- nzchar(query_text)
+    dbnomics_context <- search_remote_contexts()[["dbnomics"]] %||% list()
+    include_remote_status <- nzchar(query_text) || (
+      identical(provider_registry_source_id(source_filter), "dbnomics") &&
+        isTRUE(dbnomics_context$browse_dataset)
+    )
 
     search_messages <- c(
       loading_message,

@@ -1071,18 +1071,27 @@ provider_dbnomics_search_controls_ui <- function(input = NULL) {
 }
 
 provider_dbnomics_search_context_from_input <- function(input) {
+  provider_code <- trimws(input$search_dbnomics_provider %||% "")
+  dataset_code <- trimws(input$search_dbnomics_dataset %||% "")
+
   list(
-    provider_code = trimws(input$search_dbnomics_provider %||% ""),
-    dataset_code = trimws(input$search_dbnomics_dataset %||% "")
+    provider_code = provider_code,
+    dataset_code = dataset_code,
+    browse_dataset = nzchar(provider_code) && nzchar(dataset_code)
   )
 }
 
 provider_dbnomics_search_remote <- function(query, search_context = list(), force = FALSE) {
+  limit_value <- search_context$limit %||% 100
+  if (!nzchar(trimws(query %||% "")) && isTRUE(search_context$allow_blank_query)) {
+    limit_value <- Inf
+  }
+
   search_dbnomics_series(
     query = query,
     provider_code = search_context$provider_code %||% "",
     dataset_code = search_context$dataset_code %||% "",
-    limit = search_context$limit %||% 100,
+    limit = limit_value,
     force = force
   )
 }
