@@ -1027,7 +1027,8 @@ provider_dbnomics_search_controls_ui <- function(input = NULL) {
     seed_selectize_choices(selected_dataset)
   )
 
-  tagList(
+  div(
+    class = "search-source-controls__row search-source-controls__row--two",
     div(
       class = "search-toolbar__group search-toolbar__group--select",
       div(
@@ -1319,20 +1320,23 @@ provider_rba_search_controls_ui <- function(input = NULL) {
   )
 
   div(
-    class = "search-toolbar__group search-toolbar__group--select",
+    class = "search-source-controls__row search-source-controls__row--one",
     div(
-      class = "search-toolbar__group-label",
-      "RBA table"
-    ),
-    selectizeInput(
-      "search_rba_table",
-      label = NULL,
-      choices = table_choices,
-      selected = if (nzchar(selected_table)) selected_table else "",
-      options = list(
-        create = FALSE,
-        maxItems = 1,
-        placeholder = "All tables"
+      class = "search-toolbar__group search-toolbar__group--select",
+      div(
+        class = "search-toolbar__group-label",
+        "RBA table"
+      ),
+      selectizeInput(
+        "search_rba_table",
+        label = NULL,
+        choices = table_choices,
+        selected = if (nzchar(selected_table)) selected_table else "",
+        options = list(
+          create = FALSE,
+          maxItems = 1,
+          placeholder = "All tables"
+        )
       )
     )
   )
@@ -1513,7 +1517,8 @@ provider_abs_search_controls_ui <- function(input = NULL) {
     seed_selectize_choices(selected_tables)
   )
 
-  tagList(
+  div(
+    class = "search-source-controls__row search-source-controls__row--three",
     div(
       class = "search-toolbar__group search-toolbar__group--select",
       div(

@@ -22,7 +22,7 @@ build_search_tab_ui <- function() {
         div(
           class = "search-toolbar__filters-grid",
           div(
-            class = "search-toolbar__group search-toolbar__group--segmented search-toolbar__group--wide",
+            class = "search-toolbar__group search-toolbar__group--segmented search-toolbar__group--source",
             div(
               class = "search-toolbar__group-label",
               "Source"
@@ -37,12 +37,10 @@ build_search_tab_ui <- function() {
                 justified = FALSE,
                 checkIcon = list(yes = icon("check"))
               )
-            ),
-            uiOutput("search_source_controls")
+            )
           ),
           div(
-            class = "search-toolbar__group search-toolbar__group--segmented",
-            style = "padding-bottom: 0;",
+            class = "search-toolbar__group search-toolbar__group--segmented search-toolbar__group--type",
             div(
               class = "search-toolbar__group-label",
               "Type"
@@ -60,8 +58,7 @@ build_search_tab_ui <- function() {
             )
           ),
           div(
-            class = "search-toolbar__group search-toolbar__group--segmented",
-            style = "padding-bottom: 0;",
+            class = "search-toolbar__group search-toolbar__group--segmented search-toolbar__group--location",
             div(
               class = "search-toolbar__group-label",
               "Location"
@@ -79,14 +76,15 @@ build_search_tab_ui <- function() {
             )
           ),
           div(
-            class = "search-toolbar__group search-toolbar__group--select",
+            class = "search-toolbar__group search-toolbar__group--select search-toolbar__group--frequency",
             div(
               class = "search-toolbar__group-label",
               "Frequency"
             ),
             uiOutput("search_frequency_filter")
           )
-        )
+        ),
+        uiOutput("search_source_controls")
       ),
       uiOutput("search_status")
     ),
